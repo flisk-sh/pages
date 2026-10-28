@@ -1,0 +1,8 @@
+name: Remove my space
+description: Take down a space you published. Done at once when the title names your own space.
+title: "Remove @<your login>/<name>"
+labels: [remove-request]
+body:
+  - type: markdown
+    attributes:
+      value: Put your space in the title, such as `Remove @sam/how-gpus-work`. It is removed as soon as the issue is opened, when you are its publisher. Its history stays in git.

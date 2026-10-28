@@ -1,0 +1,35 @@
+# "Remove @<login>/<slug>" opened by that publisher deletes the space's branch at once; a maintainer can do the same
+# for a reported space by adding the `remove` label. The deploy that follows takes the page down.
+name: Remove
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+  actions: write
+
+jobs:
+  remove:
+    name: Remove a space
+    if: github.event.action == 'opened' || github.event.label.name == 'remove'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/remove-issue.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.number }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}

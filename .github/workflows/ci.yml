@@ -1,11 +1,12 @@
-# Typecheck, lint and tests on every push and pull request, then the production image: built, started with no
-# settings, and asked for its pages and SEO files.
+# Typecheck, lint and tests on every push and pull request, then the static site built with no spaces and asked
+# for its pages and SEO files. Publish pull requests (spaces/** only) are handled by publish.yml instead.
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+    paths-ignore: ["spaces/**"]
 
 permissions:
   contents: read
@@ -29,27 +30,17 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.4.3
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
       - run: bun test
 
-  image:
-    name: Production image
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          persist-credentials: false
-      - name: Build
-        run: docker build -t web-ci .
-      - name: Start and answer
+      - name: Build the site
+        run: bun run build
+      - name: Look at what it wrote
         run: |
-          docker run -d --name web -p 18090:10000 web-ci
-          for i in $(seq 1 30); do curl -sf localhost:18090/ready && break; sleep 1; done
-          curl -sf localhost:18090/ | grep -q 'application/ld+json'
-          curl -sf localhost:18090/robots.txt | grep -q Sitemap
-          curl -sf localhost:18090/sitemap.xml | grep -q '<urlset'
-          curl -sf -o /dev/null localhost:18090/og.png
-          docker logs web
+          test -s _site/index.html && grep -q 'application/ld+json' _site/index.html
+          grep -q Sitemap _site/robots.txt
+          grep -q '<urlset' _site/sitemap.xml
+          test -s _site/og.png && test -s _site/404.html
+          test "$(cat _site/CNAME)" = pages.flisk.si

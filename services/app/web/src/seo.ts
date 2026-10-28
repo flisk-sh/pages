@@ -139,7 +139,7 @@ export const faqJsonLd = () => ({
 });
 
 /**
- * Every crawler may read everything except the API and MCP endpoints. The AI answer crawlers are named on purpose:
+ * Every crawler may read everything, spaces included. The AI answer crawlers are named on purpose:
  * some sites block them by default, and naming them states the choice. Delete the ones you do not want.
  */
 export const ANSWER_CRAWLERS = [
@@ -153,16 +153,18 @@ export const ANSWER_CRAWLERS = [
 ];
 
 export function robotsTxt(base: string): string {
-	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
-	const rules = `Allow: /\nDisallow: ${root}/api/\nDisallow: ${root}/mcp\n`;
+	const rules = "Allow: /\n";
 	return `${ANSWER_CRAWLERS.map((ua) => `User-agent: ${ua}`).join("\n")}\n${rules}\nUser-agent: *\n${rules}\nSitemap: ${base}/sitemap.xml\n`;
 }
 
-export function sitemapXml(base: string, paths: string[], lastmod: string) {
-	const urls = paths
+export function sitemapXml(
+	base: string,
+	entries: { path: string; lastmod: string }[],
+) {
+	const urls = entries
 		.map(
-			(p) =>
-				`<url><loc>${esc(`${base}/${p}`)}</loc><lastmod>${lastmod}</lastmod></url>`,
+			(e) =>
+				`<url><loc>${esc(`${base}/${e.path}`)}</loc><lastmod>${e.lastmod}</lastmod></url>`,
 		)
 		.join("");
 	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;

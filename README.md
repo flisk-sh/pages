@@ -1,85 +1,63 @@
-# Flisk launch template
+# Pages
 
-A small, free web tool you can put on Product Hunt this week: **one service, no database, no API keys**, with the
-SEO, icons and launch kit already done. Built and run locally with [Flisk](https://github.com/flisk-sh/flisk), hosted
-for free on Render.
+**Your agent builds a page. One command makes it a link.** Interactive pages (dashboards, explainers, comparisons,
+app mockups) published to `https://pages.flisk.si/@<github login>/<name>/`. Free and public, no keys, no database:
+every space is a git branch of this repository, and the site is static on GitHub Pages.
 
-The example tool is **Contrast**: put two colors in the address (`/1d1c1a/fbfaf7`) and get the WCAG contrast ratio,
-AA/AAA verdicts and the nearest color that passes. Replace it with your own; everything around it stays.
+## Publish
 
-[Citable](https://github.com/flisk-sh/citable) and [Helpdock](https://github.com/flisk-sh/helpdock) are built the
-same way.
+From Claude Code:
 
-## What is already done
+```bash
+claude plugin marketplace add flisk-sh/pages
+claude plugin install pages@flisk-pages
+```
+
+then ask: *publish ./my-page to pages*. Without an agent (git and `gh auth login` needed, node 18+ or bun):
+
+```bash
+git clone --depth 1 https://github.com/flisk-sh/pages && cd pages
+node bin/pages.mjs check ../my-page
+node bin/pages.mjs publish ../my-page --slug my-page --wait
+```
+
+Or by hand in the browser: [add a file](https://github.com/flisk-sh/pages/new/main?filename=spaces/YOUR-LOGIN/my-page/index.md)
+at `spaces/<your login>/<name>/index.md` and propose the change. GitHub makes the fork and the pull request for you.
+
+## How it works
+
+```
+your folder ──PR from your fork──▶ publish.yml ──check──▶ branch space/<login>/<name> ──▶ deploy.yml ──▶ GitHub Pages
+            (spaces/<login>/<name>/ only)    (reads files, runs nothing)  (one commit per version)   (every branch, checked again)
+```
 
 | | Where |
 | --- | --- |
-| Title, description, canonical, robots meta, theme color per scheme | `src/seo.ts` → `head()` |
-| Open Graph and X/Twitter card with a 1200×630 image | `head()`, `brand/og.svg` |
-| JSON-LD: WebSite, Organization, WebApplication, FAQPage, BreadcrumbList | `jsonLd()`, `faqJsonLd()` |
-| `robots.txt` that names the AI answer crawlers, keeps out the API, points at the sitemap | `robotsTxt()` |
-| `sitemap.xml`, `llms.txt`, `site.webmanifest`, `/.well-known/security.txt` | `src/seo.ts` |
-| favicon.ico (16/32/48), icon.svg, apple-touch-icon, 192/512 PNG, maskable icon | `brand/*.svg` → `bun run icons` → `src/assets.generated.ts` |
-| One address per result (other spellings 301), a noindex 404 page | `src/app.ts` |
-| A JSON API, an embeddable SVG badge and an MCP server (Streamable HTTP, no key) | `src/app.ts`, `src/mcp.ts` |
-| No JavaScript at all; a Content-Security-Policy that allows none | `src/guard.ts` |
-| Rate limits per client behind Render's proxy or Cloudflare | `src/guard.ts` |
-| Tests that fail when a page loses its title, canonical, card or JSON-LD, or an icon goes missing | `tests/seo.test.ts` |
-| CI: typecheck, lint, tests, and the production image started and asked for its SEO files | `.github/workflows/ci.yml` |
-| Free hosting: one Render web service | `render.yaml`, `Dockerfile`, [DEPLOY.md](DEPLOY.md) |
-| Product Hunt kit: ICE scoring, taglines, gallery, first comment, checklist | [LAUNCH.md](LAUNCH.md) |
+| The rules: hosts, password fields, forms, frames, wallets, sizes | `services/app/web/src/check.mjs` (no dependencies) |
+| The policy and the bar every page gets; Markdown rendering | `services/app/web/src/spaces.ts` |
+| Home, a publisher's page, about, 404, `spaces.json`, sitemap, `llms.txt` | `services/app/web/src/pages.ts`, `src/app.ts`, `src/seo.ts` |
+| Branches → `_site/` | `services/app/web/scripts/build.ts` |
+| Pull request → branch, issue → removal | `scripts/publish-pr.ts`, `scripts/remove-issue.ts`, `.github/workflows/` |
+| The CLI | `bin/pages.mjs` |
+| The Claude Code plugin: `pages-publish`, `pages-check` | `.claude-plugin/`, `skills/` |
+| Skill evals (`claude plugin eval . --scaffold --allow-tools Bash Edit Write`) | `evals/` |
 
-## Make it yours
+- **The same name again is a new version**: another commit on `space/<login>/<name>`, whose history is the version list.
+- **Remove**: open an issue titled `Remove @<login>/<name>` (or `node bin/pages.mjs remove <name>`). It goes at once
+  when you published it. Maintainers remove reported spaces with the `remove` label.
+- **Report**: every page has a Report link in its corner bar.
+- **Maintainers** can publish a space the check refused by adding the `publish` label to its pull request. The commit
+  records `Pages-Approved-By:`.
 
-Click **Use this template** on GitHub, clone your copy, then:
+## Develop
 
 ```bash
 cd services/app/web
 bun install
-bun run rename --name "Acme" --domain acme.example.com --repo you/acme
+bun test                     # the check, the pages, the SEO files, the workflow scripts, the eval fixtures
+git fetch origin '+refs/heads/space/*:refs/remotes/origin/space/*'
+bun run build                # _site/, as deployed
+bun run dev                  # preview on :4000 with the spaces the last build gathered
 ```
 
-1. `src/site.ts`: the tagline (60 characters at most), the description (110 to 160), the FAQ and the examples. Every
-   tag, JSON-LD node and SEO file is built from it.
-2. `src/contrast.ts`: replace it with your tool. Keep the shape: input from the address, a result object, one
-   function that the page, the API and the MCP tool all call. Then update `src/pages.ts`, the routes in
-   `src/app.ts` and the tool in `src/mcp.ts`.
-3. `brand/icon.svg`, `brand/icon-full.svg` (full-bleed, for the maskable and Apple icons) and `brand/og.svg`, then
-   `bun run icons`. It embeds them in `src/assets.generated.ts`, because Flisk's image ships `src/` only.
-4. `bun test`: the SEO tests tell you what you broke.
-
-If the tool fetches other sites, take the SSRF guard (`src/net.ts`) from
-[Citable](https://github.com/flisk-sh/citable/blob/main/services/app/web/src/net.ts) and use `Slots` and `TtlCache`
-from `src/guard.ts` to cap and cache the work.
-
-## Run it
-
-With Flisk (Docker, Tilt and the [Flisk CLI](https://github.com/flisk-sh/flisk)):
-
-```bash
-flisk up
-```
-
-It opens at http://api.flisk-template-launch.localhost/api/web/ (the name follows `.flisk/project.json`). The app
-never touches a database. Flisk still starts its shared Postgres container locally even though `.flisk/project.json`
-leaves it out; online there is none.
-
-Without Flisk:
-
-```bash
-cd services/app/web && bun install && bun run dev
-```
-
-## Settings
-
-All optional. `PORT`, `PUBLIC_URL` (the address people use, for canonical links and the card; set it online),
-`TRUST_PROXY` (`none`, `last-forwarded` on Render, `cloudflare`) and `CALLS_PER_MINUTE` (API and MCP, 120).
-
-## Checks
-
-```bash
-cd services/app/web
-bun run typecheck && bun run lint && bun test
-```
-
-MIT licensed.
+`flisk up` runs the same preview under [Flisk](https://github.com/flisk-sh/flisk). Launch plan: [LAUNCH.md](LAUNCH.md).

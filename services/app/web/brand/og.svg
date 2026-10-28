@@ -1,10 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Contrast: WCAG color contrast, as a link you can share"><title>Contrast</title>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Pages: your agent builds a page, one command makes it a link"><title>Pages</title>
   <rect width="1200" height="630" fill="#fbfaf7"/>
-  <g transform="translate(96 96) scale(2)"><rect width="64" height="64" rx="14" fill="#2d4cc8"/><circle cx="32" cy="32" r="18" fill="#fbfaf7"/><path d="M32 14a18 18 0 0 1 0 36z" fill="#1d1c1a"/></g>
-  <text x="250" y="178" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="60" font-weight="800" fill="#1d1c1a">Contrast</text>
-  <text x="96" y="340" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#1d1c1a" letter-spacing="-1.5">WCAG color contrast,</text>
-  <text x="96" y="420" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#1d1c1a" letter-spacing="-1.5">as a link you can share</text>
-  <text x="96" y="530" font-family="ui-monospace, Menlo, monospace" font-size="34" fill="#6b6862">your-tool.example.com/1d1c1a/fbfaf7</text>
-  <g transform="translate(940 96)"><rect width="164" height="164" rx="24" fill="#1d1c1a"/><text x="82" y="112" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="72" font-weight="800" fill="#fbfaf7">Aa</text></g>
-  <text x="1022" y="320" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="40" font-weight="800" fill="#1f7a4d">16.31:1</text>
+  <g transform="translate(96 96) scale(2)"><rect width="64" height="64" rx="14" fill="#2d4cc8"/><path d="M20 12h17l11 11v29a2 2 0 0 1-2 2H20a2 2 0 0 1-2-2V14a2 2 0 0 1 2-2z" fill="#fbfaf7"/><path d="M37 12v9a2 2 0 0 0 2 2h9z" fill="#c9d2f5"/><path d="M25 32h16M25 39h16M25 46h9" stroke="#2d4cc8" stroke-width="3.5" stroke-linecap="round"/></g>
+  <text x="250" y="178" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="60" font-weight="800" fill="#1d1c1a">Pages<tspan fill="#6b6862" font-weight="400">.flisk.si</tspan></text>
+  <text x="96" y="340" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#1d1c1a" letter-spacing="-1.5">Your agent builds a page.</text>
+  <text x="96" y="420" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="#1d1c1a" letter-spacing="-1.5">One command makes it a link.</text>
+  <text x="96" y="530" font-family="ui-monospace, Menlo, monospace" font-size="34" fill="#6b6862">pages.flisk.si/@you/how-gpus-work</text>
+  <text x="1104" y="530" text-anchor="end" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="28" fill="#2d4cc8" font-weight="700">free · public · a git branch each</text>
 </svg>

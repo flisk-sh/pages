@@ -1,0 +1,10 @@
+{
+  "name": "pages",
+  "version": "0.1.0",
+  "description": "Publish the pages your agent builds to pages.flisk.si/@you/name: free, public, one git branch per space. Check a page against the rules before it goes out.",
+  "author": { "name": "Flisk", "url": "https://flisk.sh" },
+  "homepage": "https://pages.flisk.si",
+  "repository": "https://github.com/flisk-sh/pages",
+  "license": "MIT",
+  "keywords": ["publish", "html", "github-pages", "share", "static-site"]
+}

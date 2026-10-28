@@ -1,56 +1,81 @@
-// The pages, rendered on the server with no JavaScript (the Content-Security-Policy allows none): home, a result,
-// about with the FAQ, and not found. Each one passes its own PageMeta to head(), which writes every SEO tag.
-import { type Result, summarize } from "./contrast";
+// The site's own pages, written once at build time with no JavaScript: home with the newest spaces, a publisher's
+// spaces, about with the FAQ, and not found. Each one passes its own PageMeta to head(), which writes every SEO tag.
+// GitHub Pages sends no headers, so the policy that allows no scripts is a <meta> at the top of the head.
+import { FRAME_HOSTS, LIMITS, SCRIPT_HOSTS } from "./check.mjs";
 import { esc, faqJsonLd, head, type PageMeta } from "./seo";
 import { SITE } from "./site";
+import { links, type Space, spacePath } from "./spaces";
+
+const POLICY =
+	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'";
 
 const STYLE = `
-:root{--bg:${SITE.themeColor.light};--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;--card:#fff;--pass:#1f7a4d;--fail:#b3261e;--accent:#2d4cc8}
-@media (prefers-color-scheme:dark){:root{--bg:${SITE.themeColor.dark};--fg:#efede8;--muted:#a19d95;--line:#2c2b28;--card:#1c1b19;--pass:#5fc28e;--fail:#f07a70;--accent:#8ea2ff}}
+:root{--bg:${SITE.themeColor.light};--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;--card:#fff;--accent:#2d4cc8}
+@media (prefers-color-scheme:dark){:root{--bg:${SITE.themeColor.dark};--fg:#efede8;--muted:#a19d95;--line:#2c2b28;--card:#1c1b19;--accent:#8ea2ff}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-main{max-width:760px;margin:0 auto;padding:40px 16px 80px}a{color:var(--accent)}
-h1{font-size:clamp(28px,6vw,44px);line-height:1.1;letter-spacing:-.02em;margin:0 0 12px}h2{font-size:20px;margin:36px 0 8px}
-.lede{color:var(--muted);font-size:18px;margin:0 0 28px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:28px;font-size:14px}.top>a{color:var(--fg);text-decoration:none;font-weight:700;display:flex;gap:8px;align-items:center}
-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}label{display:flex;gap:8px;align-items:center;font-weight:600}
-input[type=color]{width:52px;height:44px;padding:2px;border:1px solid var(--line);border-radius:10px;background:var(--card)}
-button{font:inherit;font-weight:600;padding:11px 18px;border:0;border-radius:10px;background:var(--fg);color:var(--bg);cursor:pointer}
-.chips{margin:16px 0 0;color:var(--muted);font-size:14px;display:flex;gap:10px;flex-wrap:wrap}
-.chip{display:inline-flex;gap:6px;align-items:center;text-decoration:none;color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--card)}
-.sw{width:14px;height:14px;border-radius:50%;border:1px solid var(--line);display:inline-block}
-.sample{border-radius:14px;padding:28px 24px;border:1px solid var(--line);margin:8px 0 20px}.sample p{margin:0}.sample .big{font-size:24px;font-weight:700}
-.ratio{font-size:clamp(40px,10vw,64px);font-weight:800;letter-spacing:-.03em;margin:0}
-ul.levels{list-style:none;padding:0;margin:16px 0}ul.levels li{display:flex;justify-content:space-between;border-bottom:1px solid var(--line);padding:10px 2px}
-.pass{color:var(--pass);font-weight:700}.fail{color:var(--fail);font-weight:700}
-pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;font-size:13px;white-space:pre-wrap;word-break:break-all}
+main{max-width:960px;margin:0 auto;padding:40px 16px 80px}a{color:var(--accent)}
+h1{font-size:clamp(30px,6.5vw,52px);line-height:1.05;letter-spacing:-.03em;margin:0 0 14px;max-width:16em}h2{font-size:20px;margin:44px 0 10px}
+.lede{color:var(--muted);font-size:18px;margin:0 0 28px;max-width:40em}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:36px;font-size:14px}.top>a{color:var(--fg);text-decoration:none;font-weight:700;display:flex;gap:8px;align-items:center}
+.top nav{display:flex;gap:16px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 12px}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:0;list-style:none;counter-reset:s}
+.steps li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;counter-increment:s}
+.steps li::before{content:counter(s);display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--fg);color:var(--bg);font-weight:700;font-size:13px;margin-right:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;padding:0;list-style:none}
+.card{display:flex;flex-direction:column;gap:6px;height:100%;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;text-decoration:none;color:var(--fg)}
+.card:hover{border-color:var(--accent)}.card b{font-size:17px;line-height:1.25}.card span{color:var(--muted);font-size:14px}.card small{color:var(--muted);margin-top:auto}
+.empty{color:var(--muted)}
 dt{font-weight:700;margin-top:16px}dd{margin:4px 0 0}
-footer{margin-top:48px;color:var(--muted);font-size:14px}
+footer{margin-top:56px;color:var(--muted);font-size:14px}
 `;
 
+const rootOf = (base: string) =>
+	new URL(`${base}/`).pathname.replace(/\/$/, "");
+
 function layout(base: string, meta: PageMeta, body: string): string {
-	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
+	const root = rootOf(base);
 	return `<!doctype html><html lang="${SITE.lang}"><head>
+<meta http-equiv="Content-Security-Policy" content="${POLICY}">
 ${head(base, meta)}
 <style>${STYLE}</style></head><body><main>
-<nav class="top" aria-label="Site"><a href="${root}/"><img src="${root}/icon.svg" alt="" width="24" height="24">${esc(SITE.name)}</a><a href="${root}/about">About</a></nav>
+<div class="top"><a href="${root}/"><img src="${root}/icon.svg" alt="" width="24" height="24">${esc(SITE.name)}<span style="color:var(--muted);font-weight:400">.flisk.si</span></a><nav aria-label="Site"><a href="${root}/about">About</a><a href="${SITE.repo}">GitHub</a></nav></div>
 ${body}
-<footer>${esc(SITE.name)}: no JavaScript, no cookies, nothing stored. <a href="${SITE.repo}">Open source</a>, made by <a href="${SITE.author.url}">${esc(SITE.author.name)}</a>.</footer>
+<footer>Every space is public, free and a git branch in <a href="${SITE.repo}">${SITE.repoSlug}</a>. No keys, no database, no tracking. Made by <a href="${SITE.author.url}">${esc(SITE.author.name)}</a>.</footer>
 </main></body></html>`;
 }
 
-const form = (root: string, fg = "1d1c1a", bg = "fbfaf7") =>
-	`<form action="${root}/check" method="get"><label>Text <input type="color" name="fg" value="#${fg}"></label><label>Background <input type="color" name="bg" value="#${bg}"></label><button type="submit">Check</button></form>`;
+const ago = (iso: string, now: Date) => {
+	const days = Math.floor((now.getTime() - Date.parse(iso)) / 86_400_000);
+	return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
+};
 
-const chips = (root: string) =>
-	`<p class="chips">${SITE.examples
+function cards(
+	base: string,
+	spaces: Space[],
+	now: Date,
+	withHandle = true,
+): string {
+	if (!spaces.length)
+		return '<p class="empty">No spaces yet. Be the first: the command is above.</p>';
+	const root = rootOf(base);
+	return `<ul class="grid">${spaces
 		.map(
-			([fg, bg]) =>
-				`<a class="chip" href="${root}/${fg}/${bg}"><span class="sw" style="background:#${fg}"></span><span class="sw" style="background:#${bg}"></span>#${fg} on #${bg}</a>`,
+			(s) =>
+				`<li><a class="card" href="${root}/${spacePath(s)}"><b>${esc(s.title)}</b>${s.description ? `<span>${esc(s.description)}</span>` : ""}<small>${withHandle ? `@${esc(s.handle)} · ` : ""}v${s.versions} · ${ago(s.updated, now)}</small></a></li>`,
 		)
-		.join("")}</p>`;
+		.join("")}</ul>`;
+}
 
-export function homePage(base: string): string {
-	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
+const PUBLISH = `claude plugin marketplace add ${SITE.repoSlug}
+claude plugin install pages@flisk-pages
+# then, in Claude Code:  publish ./my-page to pages`;
+
+export function homePage(
+	base: string,
+	spaces: Space[],
+	now = new Date(),
+): string {
 	return layout(
 		base,
 		{
@@ -60,42 +85,35 @@ export function homePage(base: string): string {
 		},
 		`<h1>${esc(SITE.tagline)}</h1>
 <p class="lede">${esc(SITE.description)}</p>
-${form(root)}
-${chips(root)}
-<h2>Or type it</h2>
-<pre>${esc(base)}/1d1c1a/fbfaf7</pre>`,
+<pre>${esc(PUBLISH)}</pre>
+<ol class="steps">
+<li><b>Your agent builds it.</b> Dashboards, explainers, comparisons, app mockups: one folder with an index.html, or an index.md.</li>
+<li><b>It opens a pull request.</b> From your fork, signed in with your own GitHub. A check reads every file; nothing runs.</li>
+<li><b>It is a link.</b> The space lands on its own branch and goes live at ${esc(new URL(base).host)}/@you/name. Publish again for a new version.</li>
+</ol>
+<h2>Newest spaces</h2>
+${cards(base, spaces.slice(0, 48), now)}`,
 	);
 }
 
-export function resultPage(base: string, r: Result): string {
-	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
-	const path = `${r.fg}/${r.bg}`;
-	const passes = r.levels.filter((l) => l.pass).length;
-	const meta: PageMeta = {
-		path,
-		title: `#${r.fg} on #${r.bg}: ${r.ratio.toFixed(2)}:1 contrast`,
-		description: summarize(r).slice(0, 160),
-		crumbs: [{ name: `#${r.fg} on #${r.bg}`, path }],
-	};
+export function handlePage(
+	base: string,
+	handle: string,
+	spaces: Space[],
+	now = new Date(),
+): string {
+	const path = `@${handle}/`;
 	return layout(
 		base,
-		meta,
-		`<h1 class="ratio">${r.ratio.toFixed(2)}:1</h1>
-<p class="lede">#${r.fg} text on #${r.bg}: passes ${passes} of ${r.levels.length} WCAG 2.2 checks.</p>
-<div class="sample" style="color:#${r.fg};background:#${r.bg}"><p class="big">Large text, 24px bold</p><p>Body text at 16px, the size most paragraphs use.</p></div>
-<ul class="levels">${r.levels
-			.map(
-				(l) =>
-					`<li><span>${esc(l.label)} (${l.min}:1)</span><span class="${l.pass ? "pass" : "fail"}">${l.pass ? "Pass" : "Fail"}</span></li>`,
-			)
-			.join("")}</ul>
-${r.suggestion ? `<p>Nearest text color that passes AA body text: <a href="${root}/${r.suggestion}/${r.bg}"><span class="sw" style="background:#${r.suggestion}"></span> #${r.suggestion}</a></p>` : ""}
-<h2>Try other colors</h2>
-${form(root, r.fg, r.bg)}
-<h2>Embed or call it</h2>
-<pre>![contrast](${esc(base)}/badge/${path}.svg)
-curl '${esc(base)}/api/contrast?fg=${r.fg}&amp;bg=${r.bg}'</pre>
-<p><img src="${root}/badge/${path}.svg" alt="Contrast badge for #${r.fg} on #${r.bg}" width="150" height="20"></p>`,
+		{
+			path,
+			title: `@${handle}'s spaces`,
+			description: `${spaces.length} public space${spaces.length === 1 ? "" : "s"} by @${handle} on ${SITE.name}: interactive pages published from an agent, each one a git branch.`,
+			crumbs: [{ name: `@${handle}`, path }],
+		},
+		`<h1>@${esc(handle)}</h1>
+<p class="lede">${spaces.length} public space${spaces.length === 1 ? "" : "s"}. <a href="https://github.com/${esc(handle)}">github.com/${esc(handle)}</a></p>
+${cards(base, spaces, now, false)}`,
 	);
 }
 
@@ -105,11 +123,7 @@ export function aboutPage(base: string): string {
 		{
 			path: "about",
 			title: "About and FAQ",
-			description:
-				`How ${SITE.name} works, what it stores and how to call it from code or an AI assistant. ${SITE.tagline}.`.slice(
-					0,
-					160,
-				),
+			description: `How ${SITE.name} publishes a page, what a space may contain, where versions live and how to take one down. Free, public, no keys.`,
 			jsonLd: [faqJsonLd()],
 			crumbs: [{ name: "About", path: "about" }],
 		},
@@ -117,28 +131,40 @@ export function aboutPage(base: string): string {
 <p class="lede">${esc(SITE.description)}</p>
 <h2>Questions</h2>
 <dl>${SITE.faq.map((f) => `<dt>${esc(f.q)}</dt><dd>${esc(f.a)}</dd>`).join("")}</dl>
-<h2>Use it from an AI assistant</h2>
-<pre>claude mcp add --transport http ${esc(SITE.name.toLowerCase())} ${esc(base)}/mcp</pre>`,
+<h2>The rules, exactly</h2>
+<p>At most ${LIMITS.files} files and ${LIMITS.totalBytes / 1048576} MB. Scripts from the space or ${SCRIPT_HOSTS.map(esc).join(", ")}. Frames from ${FRAME_HOSTS.map(esc).join(", ")}. The check is <a href="${SITE.repo}/blob/main/services/app/web/src/check.mjs">one file</a>; run it yourself with <code>node bin/pages.mjs check ./folder</code>.</p>`,
 	);
 }
 
 export function notFoundPage(base: string): string {
-	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
+	const root = rootOf(base);
 	return layout(
 		base,
 		{
 			path: "404",
 			title: "Page not found",
-			description: `This address is not a page on ${SITE.name}. A result address is two hex colors: /1d1c1a/fbfaf7.`,
+			description: `This address is not a space on ${SITE.name}. A space lives at /@<github login>/<name>/, for as long as its branch does.`,
 			noindex: true,
 		},
-		`<h1>Page not found</h1><p class="lede">A result address is two hex colors, text first: <a href="${root}/1d1c1a/fbfaf7">/1d1c1a/fbfaf7</a>.</p>${form(root)}`,
+		`<h1>Page not found</h1><p class="lede">A space lives at <code>/@&lt;github login&gt;/&lt;name&gt;/</code>. It may have been removed by its publisher. <a href="${root}/">See the newest spaces</a>.</p>`,
 	);
 }
 
-/** A shields-style badge, 150×20, with the ratio colored by the AA verdict. */
-export function badge(r: Result): string {
-	const pass = r.levels[0].pass;
-	const value = `${r.ratio.toFixed(2)}:1 ${pass ? "AA" : "fail"}`;
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="20" role="img" aria-label="contrast: ${value}"><title>contrast: ${value}</title><rect width="66" height="20" fill="#555"/><rect x="66" width="84" height="20" fill="${pass ? "#1f7a4d" : "#b3261e"}"/><g fill="#fff" font-family="Verdana,DejaVu Sans,sans-serif" font-size="11" text-anchor="middle"><text x="33" y="14">contrast</text><text x="108" y="14">${value}</text></g></svg>`;
+/** The public index of every space, for agents and scripts: /spaces.json. */
+export function spacesJson(base: string, spaces: Space[]): string {
+	return JSON.stringify(
+		spaces.map((s) => ({
+			url: `${base}/${spacePath(s)}`,
+			handle: s.handle,
+			slug: s.slug,
+			title: s.title,
+			description: s.description,
+			kind: s.kind,
+			versions: s.versions,
+			updated: s.updated,
+			...links(s),
+		})),
+		null,
+		2,
+	);
 }

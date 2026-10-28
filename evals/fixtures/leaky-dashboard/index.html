@@ -1,0 +1,6 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Signups this week</title>
+<meta name="description" content="Daily signups for the last seven days.">
+<script src="https://cdn.example-charts.io/chart.js"></script></head>
+<body><h1>Signups this week</h1><canvas id="c"></canvas>
+<script>fetch("https://metrics.internal.example/api/signups").then(r => r.json()).then(d => draw(d));</script>
+</body></html>

@@ -1,0 +1,46 @@
+# A pull request that only touches spaces/<login>/<slug>/ is a publish: the folder is checked and committed to the
+# branch space/<login>/<slug>, then the pull request is closed with the link. Other pull requests are left to CI.
+#
+# pull_request_target runs this file and scripts/publish-pr.ts from main, never from the pull request. The pull
+# request's files are read with git archive as data: nothing from it is installed, imported or run.
+name: Publish
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+concurrency:
+  group: publish-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Check and publish
+    if: github.event.action != 'labeled' || github.event.label.name == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/publish-pr.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+          SENDER: ${{ github.event.sender.login }}

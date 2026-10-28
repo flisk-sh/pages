@@ -1,19 +1,20 @@
 {
-	"name": "@launch/web",
+	"name": "@pages/web",
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
 		"dev": "bun run --watch src/index.ts",
-		"build": "tsc",
-		"start": "bun run dist/index.js",
+		"build": "bun scripts/build.ts",
+		"gather": "bun scripts/build.ts --gather-only",
+		"check": "bun src/check.mjs",
 		"test": "bun test",
 		"typecheck": "tsc --noEmit -p tsconfig.test.json",
 		"lint": "biome check .",
 		"lint:fix": "biome check . --write",
-		"icons": "bun scripts/icons.ts",
-		"rename": "bun scripts/rename.ts"
+		"icons": "bun scripts/icons.ts"
 	},
 	"dependencies": {
+		"@flisk-sh/md2html": "github:flisk-sh/md2html#v0.1.0",
 		"hono": "^4.0.0"
 	},
 	"devDependencies": {

@@ -1,0 +1,23 @@
+name: Report a space
+description: A page on pages.flisk.si that is phishing, malware, spam, abuse or someone else's work.
+labels: [report]
+body:
+  - type: input
+    id: space
+    attributes:
+      label: Which space
+      description: The address, such as https://pages.flisk.si/@someone/page/
+    validations:
+      required: true
+  - type: dropdown
+    id: why
+    attributes:
+      label: What is wrong
+      options: [Phishing or a scam, Malware, Spam, Harassment or abuse, Someone else's work, Something else]
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you saw. Do not paste anything private.

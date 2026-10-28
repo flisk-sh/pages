@@ -1,16 +1,17 @@
-// Routes. The tool's own pages are /<text color>/<background color>; everything else is the site around it: SEO
-// files, icons, the JSON API, the badge and MCP.
+// Routes. The same app is the local preview (`flisk up`, `bun run dev`) and the static site: scripts/build.ts asks
+// it for every page and writes the answers to files for GitHub Pages. Spaces are /@<handle>/<slug>/…, served from
+// the folders the build gathered from their branches.
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { extname, join, normalize } from "node:path";
 import { Hono } from "hono";
 import { ASSETS } from "./assets.generated";
-import { check } from "./contrast";
 import {
-	clientIp,
-	type ProxyMode,
-	RateLimiter,
-	securityHeaders,
-} from "./guard";
-import { handleMcp } from "./mcp";
-import { aboutPage, badge, homePage, notFoundPage, resultPage } from "./pages";
+	aboutPage,
+	handlePage,
+	homePage,
+	notFoundPage,
+	spacesJson,
+} from "./pages";
 import {
 	ICONS,
 	llmsTxt,
@@ -19,17 +20,44 @@ import {
 	sitemapXml,
 	webManifest,
 } from "./seo";
-import { SITE } from "./site";
+import { markdownPage, preparePage, type Space, spacePath } from "./spaces";
 
 export interface AppOptions {
-	/** The address people use, ending in a slash. Without it, each request's own address (see baseOf). */
+	/** The address people use, ending in a slash. Without it, each request's own address. */
 	publicUrl?: string;
-	proxy?: ProxyMode;
-	/** API and MCP calls per client per minute. */
-	callsPerMinute?: number;
-	/** The date sitemap.xml gives as lastmod: when this build started. */
+	/** The spaces to serve, from readSpaces(). */
+	spaces?: Space[];
+	/** The date sitemap.xml gives as lastmod for the site's own pages: when this build started. */
 	builtAt?: Date;
 }
+
+export const TYPES: Record<string, string> = {
+	".html": "text/html; charset=utf-8",
+	".htm": "text/html; charset=utf-8",
+	".md": "text/markdown; charset=utf-8",
+	".css": "text/css; charset=utf-8",
+	".js": "text/javascript; charset=utf-8",
+	".mjs": "text/javascript; charset=utf-8",
+	".json": "application/json",
+	".csv": "text/csv; charset=utf-8",
+	".tsv": "text/tab-separated-values; charset=utf-8",
+	".txt": "text/plain; charset=utf-8",
+	".xml": "application/xml",
+	".svg": "image/svg+xml",
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif": "image/gif",
+	".webp": "image/webp",
+	".avif": "image/avif",
+	".ico": "image/x-icon",
+	".woff": "font/woff",
+	".woff2": "font/woff2",
+	".mp3": "audio/mpeg",
+	".mp4": "video/mp4",
+	".webm": "video/webm",
+	".pdf": "application/pdf",
+};
 
 /** The icons and the social card from assets.generated.ts, decoded once. tests/seo.test.ts fails on a missing one. */
 function loadAssets(): Map<string, { body: Uint8Array; type: string }> {
@@ -45,17 +73,20 @@ function loadAssets(): Map<string, { body: Uint8Array; type: string }> {
 	return files;
 }
 
+/** Every handle with its spaces, in the order readSpaces() gave them (newest first). */
+export function byHandle(spaces: Space[]): Map<string, Space[]> {
+	const out = new Map<string, Space[]>();
+	for (const s of spaces) out.set(s.handle, [...(out.get(s.handle) ?? []), s]);
+	return out;
+}
+
 export function createApp(options: AppOptions = {}) {
-	const proxy = options.proxy ?? "none";
-	const limit = new RateLimiter(options.callsPerMinute ?? 120, 60 * 1000);
+	const spaces = options.spaces ?? [];
+	const handles = byHandle(spaces);
 	const lastmod = (options.builtAt ?? new Date()).toISOString().slice(0, 10);
 	const files = loadAssets();
 	const app = new Hono();
 
-	/**
-	 * The site address without the trailing slash: publicUrl when set (online), else this request's own origin and the
-	 * prefix a proxy stripped (X-Forwarded-Prefix, /api/web behind Flisk's local proxy).
-	 */
 	const baseOf = (c: {
 		req: { url: string; header: (name: string) => string | undefined };
 	}) => {
@@ -67,87 +98,97 @@ export function createApp(options: AppOptions = {}) {
 		const host = c.req.header("x-forwarded-host") ?? url.host;
 		return `${proto}://${host}${/^(\/[\w.-]+)+$/.test(prefix) ? prefix : ""}`;
 	};
-	const rootOf = (c: Parameters<typeof baseOf>[0]) =>
-		new URL(`${baseOf(c)}/`).pathname.replace(/\/$/, "");
-
-	const limited = (c: { req: { raw: Request }; env: unknown }) => {
-		const env = c.env as
-			| { requestIP?: (r: Request) => { address: string } | null }
-			| undefined;
-		return limit.hit(
-			clientIp(c.req.raw.headers, env?.requestIP?.(c.req.raw)?.address, proxy),
-		);
-	};
-
-	app.use("*", async (c, next) => {
-		await next();
-		for (const [k, v] of Object.entries(securityHeaders()))
-			if (!c.res.headers.has(k)) c.res.headers.set(k, v);
-	});
 
 	app.get("/health", (c) =>
-		c.json({ status: "ok", service: SITE.name.toLowerCase() }),
+		c.json({ status: "ok", service: "pages", spaces: spaces.length }),
 	);
 	app.get("/ready", (c) => c.json({ ready: true }));
 
-	// Pages
-	app.get("/", (c) => c.html(homePage(baseOf(c))));
+	// The site's own pages
+	app.get("/", (c) => c.html(homePage(baseOf(c), spaces)));
 	app.get("/about", (c) => c.html(aboutPage(baseOf(c))));
-	app.get("/check", (c) => {
-		const r = check(c.req.query("fg") ?? "", c.req.query("bg") ?? "");
-		return c.redirect(
-			r ? `${rootOf(c)}/${r.fg}/${r.bg}` : `${rootOf(c)}/`,
-			303,
-		);
-	});
-	app.get("/:fg{[0-9a-fA-F#%]+}/:bg{[0-9a-fA-F#%]+}", (c) => {
-		const r = check(
-			decodeURIComponent(c.req.param("fg")),
-			decodeURIComponent(c.req.param("bg")),
-		);
-		if (!r) return c.html(notFoundPage(baseOf(c)), 404);
-		// One address per result, so search engines and shared links agree: /FFF/000 → /ffffff/000000.
-		if (c.req.param("fg") !== r.fg || c.req.param("bg") !== r.bg)
-			return c.redirect(`${rootOf(c)}/${r.fg}/${r.bg}`, 301);
-		c.header("cache-control", "public, max-age=86400");
-		return c.html(resultPage(baseOf(c), r));
-	});
+	app.get("/404.html", (c) => c.html(notFoundPage(baseOf(c)), 404));
+	app.get("/spaces.json", (c) =>
+		c.body(spacesJson(baseOf(c), spaces), 200, {
+			"content-type": "application/json",
+		}),
+	);
 
-	// For search engines and AI assistants
-	app.get("/robots.txt", (c) => c.text(robotsTxt(baseOf(c))));
-	app.get("/sitemap.xml", (c) => {
-		const paths = [
-			"",
-			"about",
-			...SITE.examples.map(([fg, bg]) => `${fg}/${bg}`),
-		];
-		return c.body(sitemapXml(baseOf(c), paths, lastmod), 200, {
-			"content-type": "application/xml; charset=utf-8",
+	// A publisher's spaces, and the spaces themselves
+	app.get("/:at{@[a-z0-9-]+}", (c) => c.redirect(`${c.req.path}/`, 301));
+	app.get("/:at{@[a-z0-9-]+}/", (c) => {
+		const list = handles.get(c.req.param("at").slice(1));
+		return list
+			? c.html(handlePage(baseOf(c), list[0].handle, list))
+			: c.html(notFoundPage(baseOf(c)), 404);
+	});
+	app.get("/:at{@[a-z0-9-]+}/:slug/*", (c) => {
+		const handle = c.req.param("at").slice(1);
+		const s = handles.get(handle)?.find((x) => x.slug === c.req.param("slug"));
+		if (!s) return c.html(notFoundPage(baseOf(c)), 404);
+		const prefix = `/${spacePath(s)}`;
+		if (!c.req.path.startsWith(prefix)) return c.redirect(prefix, 301);
+		let rel =
+			decodeURIComponent(c.req.path.slice(prefix.length)) || "index.html";
+		if (rel.endsWith("/")) rel += "index.html";
+		const file = normalize(join(s.dir, rel));
+		const base = baseOf(c);
+		if (rel === "index.html" && s.kind === "md")
+			return c.html(
+				markdownPage(readFileSync(join(s.dir, "index.md"), "utf8"), base, s),
+			);
+		if (
+			!file.startsWith(s.dir) ||
+			!existsSync(file) ||
+			!statSync(file).isFile()
+		)
+			return c.html(notFoundPage(base), 404);
+		const ext = extname(file).toLowerCase();
+		if (ext === ".html" || ext === ".htm")
+			return c.html(preparePage(readFileSync(file, "utf8"), base, s, rel));
+		return c.body(readFileSync(file), 200, {
+			"content-type": TYPES[ext] ?? "application/octet-stream",
 		});
 	});
+
+	// For search, link previews and AI answers
+	app.get("/robots.txt", (c) => c.text(robotsTxt(baseOf(c))));
+	app.get("/sitemap.xml", (c) =>
+		c.body(
+			sitemapXml(baseOf(c), [
+				{ path: "", lastmod },
+				{ path: "about", lastmod },
+				...[...handles].map(([h, list]) => ({
+					path: `@${h}/`,
+					lastmod: list[0].updated.slice(0, 10),
+				})),
+				...spaces.map((s) => ({
+					path: spacePath(s),
+					lastmod: s.updated.slice(0, 10),
+				})),
+			]),
+			200,
+			{ "content-type": "application/xml; charset=utf-8" },
+		),
+	);
 	app.get("/llms.txt", (c) =>
 		c.text(
 			llmsTxt(baseOf(c), [
 				{
-					name: "Check two colors",
-					path: "1d1c1a/fbfaf7",
-					note: "put the text color, then the background, in the address",
-				},
-				{
-					name: "JSON API",
-					path: "api/contrast?fg=1d1c1a&bg=fbfaf7",
-					note: "the same result as JSON",
-				},
-				{
-					name: "MCP server",
-					path: "mcp",
-					note: "Streamable HTTP, one read-only tool, check_contrast",
-				},
-				{
 					name: "About and FAQ",
 					path: "about",
-					note: "what it does and stores",
+					note: "how publishing works and what a space may contain",
 				},
+				{
+					name: "All spaces as JSON",
+					path: "spaces.json",
+					note: "every space with its title, publisher and source",
+				},
+				...spaces.slice(0, 200).map((s) => ({
+					name: s.title,
+					path: spacePath(s),
+					note: `by @${s.handle}${s.description ? `: ${s.description}` : ""}`,
+				})),
 			]),
 		),
 	);
@@ -164,63 +205,6 @@ export function createApp(options: AppOptions = {}) {
 				"cache-control": "public, max-age=604800",
 			}),
 		);
-
-	// For code
-	app.get("/api/contrast", (c) => {
-		const wait = limited(c);
-		if (wait > 0)
-			return c.json({ error: "Too many requests." }, 429, {
-				"retry-after": String(wait),
-			});
-		const r = check(c.req.query("fg") ?? "", c.req.query("bg") ?? "");
-		return r
-			? c.json(r)
-			: c.json(
-					{ error: "fg and bg must be hex colors, like 1d1c1a or fff." },
-					400,
-				);
-	});
-	app.get("/badge/:fg/:file{[0-9a-fA-F]+\\.svg}", (c) => {
-		const r = check(
-			c.req.param("fg"),
-			c.req.param("file").replace(/\.svg$/, ""),
-		);
-		if (!r) return c.notFound();
-		return c.body(badge(r), 200, {
-			"content-type": "image/svg+xml",
-			"cache-control": "public, max-age=86400",
-		});
-	});
-	app.get("/mcp", (c) =>
-		c.text("Send MCP requests with POST.", 405, { allow: "POST" }),
-	);
-	app.post("/mcp", async (c) => {
-		const wait = limited(c);
-		if (wait > 0)
-			return c.json(
-				{
-					jsonrpc: "2.0",
-					id: null,
-					error: { code: -32000, message: "Too many requests." },
-				},
-				429,
-			);
-		let body: unknown;
-		try {
-			body = await c.req.json();
-		} catch {
-			return c.json(
-				{
-					jsonrpc: "2.0",
-					id: null,
-					error: { code: -32700, message: "Parse error" },
-				},
-				400,
-			);
-		}
-		const answer = await handleMcp(body);
-		return answer === undefined ? c.body(null, 202) : c.json(answer);
-	});
 
 	app.notFound((c) => c.html(notFoundPage(baseOf(c)), 404));
 	return app;

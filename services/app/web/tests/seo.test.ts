@@ -1,12 +1,23 @@
 import { describe, expect, it } from "bun:test";
+import { join } from "node:path";
 import { createApp } from "../src/app";
 import { ASSETS } from "../src/assets.generated";
 import { ICONS } from "../src/seo";
 import { SITE } from "../src/site";
+import { readSpaces } from "../src/spaces";
 
+const spaces = readSpaces(join(import.meta.dir, "fixtures", "spaces"), {
+	"sam/gpu-explainer": {
+		sha: "a1",
+		updated: "2026-10-27T10:00:00Z",
+		versions: 3,
+	},
+	"sam/notes": { sha: "b2", updated: "2026-10-26T10:00:00Z", versions: 1 },
+});
 const app = createApp({
 	publicUrl: "https://tool.test/",
 	builtAt: new Date("2026-10-28"),
+	spaces,
 });
 const page = async (path: string) => (await app.request(path)).text();
 const attr = (html: string, re: RegExp) => html.match(re)?.[1];
@@ -31,7 +42,7 @@ describe("site.ts", () => {
 	});
 });
 
-describe.each(["/", "/about", "/1d1c1a/fbfaf7"])("the head of %s", (path) => {
+describe.each(["/", "/about", "/@sam/"])("the head of %s", (path) => {
 	it("has one title, a description, a canonical link and a social card", async () => {
 		const html = await page(path);
 		expect(html.match(/<title>/g)).toHaveLength(1);
@@ -74,15 +85,14 @@ describe.each(["/", "/about", "/1d1c1a/fbfaf7"])("the head of %s", (path) => {
 });
 
 describe("files for crawlers", () => {
-	it("robots.txt names the AI answer crawlers, keeps out the API and points at the sitemap", async () => {
+	it("robots.txt names the AI answer crawlers and points at the sitemap", async () => {
 		const robots = await page("/robots.txt");
 		expect(robots).toContain("User-agent: OAI-SearchBot");
 		expect(robots).toContain("User-agent: Claude-SearchBot");
-		expect(robots).toContain("Disallow: /api/");
 		expect(robots).toContain("Sitemap: https://tool.test/sitemap.xml");
 	});
 
-	it("sitemap.xml lists the home page, about and the examples", async () => {
+	it("sitemap.xml lists the home page, about, each publisher and each space", async () => {
 		const res = await app.request("/sitemap.xml");
 		expect(res.headers.get("content-type")).toContain("application/xml");
 		const xml = await res.text();
@@ -90,7 +100,10 @@ describe("files for crawlers", () => {
 			"<loc>https://tool.test/</loc><lastmod>2026-10-28</lastmod>",
 		);
 		expect(xml).toContain("<loc>https://tool.test/about</loc>");
-		expect(xml.match(/<url>/g)).toHaveLength(2 + SITE.examples.length);
+		expect(xml).toContain(
+			"<loc>https://tool.test/@sam/gpu-explainer/</loc><lastmod>2026-10-27</lastmod>",
+		);
+		expect(xml.match(/<url>/g)).toHaveLength(2 + 1 + spaces.length);
 	});
 
 	it("llms.txt, the manifest and security.txt", async () => {

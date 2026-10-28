@@ -1,0 +1,15 @@
+{
+  "name": "flisk-pages",
+  "description": "Flisk's Pages plugin: publish agent-built pages to pages.flisk.si.",
+  "owner": {
+    "name": "Flisk",
+    "url": "https://flisk.sh"
+  },
+  "plugins": [
+    {
+      "name": "pages",
+      "source": "./",
+      "description": "Publish the pages your agent builds to pages.flisk.si/@you/name: free, public, one git branch per space."
+    }
+  ]
+}
