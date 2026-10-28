@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pages end-to-end test</title>
+<meta name="description" content="A throwaway space that checks publishing to pages.flisk.si works end to end. It is removed right after.">
+</head>
+<body style="font:16px/1.5 system-ui,sans-serif;max-width:640px;margin:40px auto;padding:0 16px">
+<h1>Pages end-to-end test</h1>
+<p>Data loaded from this space: <b id="n">…</b></p>
+<script>fetch("data.json").then((r) => r.json()).then((d) => { document.getElementById("n").textContent = d.ok; });</script>
+</body>
+</html>
