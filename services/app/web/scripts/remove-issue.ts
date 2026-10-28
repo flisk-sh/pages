@@ -1,7 +1,8 @@
 // Takes a space down, run by .github/workflows/remove.yml when an issue titled "Remove @<handle>/<slug>" is opened by
-// that publisher, or when a maintainer adds the `remove` label to one (for a report). Deletes the branch, starts the
-// deploy, and closes the issue. Needs GH_TOKEN, REPO, ISSUE, and SENDER (who opened or labeled it).
+// that publisher, or when a maintainer adds the `remove` label to one (for a report). Deletes the branch, has the
+// workflow's next job deploy (DEPLOY_HERE) or starts the deploy, and closes the issue. Needs GH_TOKEN, REPO, ISSUE, and SENDER (who opened or labeled it).
 import { execFileSync } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import { validId } from "../src/check.mjs";
 
 const env = (name: string) => {
@@ -95,7 +96,9 @@ async function main() {
 		run("gh", "issue", "close", issue, "-R", repo, "--reason", "not planned");
 		return;
 	}
-	run("gh", "workflow", "run", "deploy.yml", "-R", repo, "--ref", "main");
+	if (process.env.DEPLOY_HERE && process.env.GITHUB_OUTPUT)
+		appendFileSync(process.env.GITHUB_OUTPUT, "removed=true\n");
+	else run("gh", "workflow", "run", "deploy.yml", "-R", repo, "--ref", "main");
 	run(
 		"gh",
 		"issue",
