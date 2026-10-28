@@ -1,0 +1,26 @@
+{
+	"name": "@launch/web",
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "bun run --watch src/index.ts",
+		"build": "tsc",
+		"start": "bun run dist/index.js",
+		"test": "bun test",
+		"typecheck": "tsc --noEmit -p tsconfig.test.json",
+		"lint": "biome check .",
+		"lint:fix": "biome check . --write",
+		"icons": "bun scripts/icons.ts",
+		"rename": "bun scripts/rename.ts"
+	},
+	"dependencies": {
+		"hono": "^4.0.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.13",
+		"@resvg/resvg-js": "^2.6.2",
+		"@types/bun": "^1.4.2",
+		"@types/node": "^26.6.5",
+		"typescript": "^7.0.2"
+	}
+}

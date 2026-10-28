@@ -1,0 +1,21 @@
+# Render Blueprint on the free plan: render.com → New → Blueprint → flisk-sh/flisk-template-launch. No database and
+# no API keys to fill in. See DEPLOY.md.
+services:
+  - type: web
+    name: flisk-template-launch
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    autoDeploy: true
+    healthCheckPath: /ready
+    # Your own domain: uncomment and put it in PUBLIC_URL too (`bun run rename` does both). Without a payment method
+    # on file, Render allows two custom domains per workspace.
+    # domains:
+    #   - your-tool.example.com
+    envVars:
+      # The address people use. Without a custom domain, your service's https://<name>.onrender.com/.
+      - key: PUBLIC_URL
+        value: https://your-tool.example.com/
+      - key: TRUST_PROXY
+        value: last-forwarded
