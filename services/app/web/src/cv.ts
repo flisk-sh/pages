@@ -412,11 +412,27 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 			)
 			.map(chip)
 			.join("");
+	// Expert and use-often tools get a row each, the chip beside roadmap's one-line description of the tool, as in the
+	// portfolio's "toolkit, with the evidence"; the tools only tried stay chips.
+	const evidence = (l: number) =>
+		Object.keys(me)
+			.filter((id) => me[id] === l)
+			.sort(
+				(a, b) =>
+					famOrder.indexOf(BY[a]?.fam ?? "") -
+						famOrder.indexOf(BY[b]?.fam ?? "") ||
+					(BY[a]?.name ?? "").localeCompare(BY[b]?.name ?? ""),
+			)
+			.map(
+				(id) =>
+					`<div class="ev">${chip(id)}<p>${e(BY[id]?.tagline ?? "")}</p></div>`,
+			)
+			.join("");
 	const toolkit = [3, 2, 1]
 		.filter((l) => count(l))
 		.map(
 			(l) =>
-				`<div class="lvlhead"><i>${DOTS[l]}</i><h3>${LEVEL_TITLE[l]}</h3><small>${count(l)}</small></div><div class="chips">${wall(l)}</div>`,
+				`<div class="lvlhead"><i>${DOTS[l]}</i><h3>${LEVEL_TITLE[l]}</h3><small>${count(l)}</small></div>${l > 1 ? `<div class="evidence">${evidence(l)}</div>` : `<div class="chips">${wall(l)}</div>`}`,
 		)
 		.join("");
 
@@ -431,6 +447,7 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 <p class="what">${e(top.r.what)}</p>
 <div class="stats"><div><b>${rated}</b><span>tools rated</span></div><div><b>${count(3)}</b><span>expert</span></div><div><b>${count(2)}</b><span>use often</span></div><div><b>${families}/${fams.length}</b><span>families</span></div></div>
 <div class="btns"><a class="btn p" href="${e(links.portfolio)}">Interactive portfolio →</a><a class="btn" href="${e(links.radar)}">My tools on the radar</a>${links.github ? `<a class="btn" href="${e(links.github)}">GitHub</a>` : ""}</div>
+<div class="trust"><span><b>Self-reported</b> ratings</span><span><b>Scored</b> by a public checklist</span><span><b>No scripts</b>, no tracking</span></div>
 </div><div>${spider()}</div></div>
 ${
 	roleCards
