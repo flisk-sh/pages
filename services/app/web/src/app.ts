@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import { ASSETS } from "./assets.generated";
 import {
 	aboutPage,
+	DEMO,
 	handlePage,
 	homePage,
 	notFoundPage,
@@ -30,6 +31,9 @@ export interface AppOptions {
 	/** The date sitemap.xml gives as lastmod for the site's own pages: when this build started. */
 	builtAt?: Date;
 }
+
+/** The demo video and its poster and captions (see DEMO in pages.ts). */
+export const STATIC = join(import.meta.dir, "..", "static");
 
 export const TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -205,6 +209,19 @@ export function createApp(options: AppOptions = {}) {
 				"cache-control": "public, max-age=604800",
 			}),
 		);
+
+	// The demo video, its poster and captions, from static/
+	for (const name of Object.values(DEMO))
+		app.get(`/${name}`, (c) => {
+			const file = join(STATIC, name);
+			if (!existsSync(file)) return c.html(notFoundPage(baseOf(c)), 404);
+			return c.body(readFileSync(file), 200, {
+				"content-type": name.endsWith(".vtt")
+					? "text/vtt; charset=utf-8"
+					: (TYPES[extname(name)] ?? "application/octet-stream"),
+				"cache-control": "public, max-age=604800",
+			});
+		});
 
 	app.notFound((c) => c.html(notFoundPage(baseOf(c)), 404));
 	return app;

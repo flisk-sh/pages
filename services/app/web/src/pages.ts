@@ -7,7 +7,7 @@ import { SITE } from "./site";
 import { links, type Space, spacePath } from "./spaces";
 
 const POLICY =
-	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; media-src 'self'; base-uri 'none'; form-action 'none'";
 
 const STYLE = `
 :root{--bg:${SITE.themeColor.light};--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;--card:#fff;--accent:#2d4cc8}
@@ -19,6 +19,7 @@ h1{font-size:clamp(30px,6.5vw,52px);line-height:1.05;letter-spacing:-.03em;margi
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:36px;font-size:14px}.top>a{color:var(--fg);text-decoration:none;font-weight:700;display:flex;gap:8px;align-items:center}
 .top nav{display:flex;gap:16px}
 pre{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;overflow-x:auto;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 12px}
+.demo{margin:0 0 28px;border-radius:16px;overflow:hidden;border:1px solid var(--line);background:#000;aspect-ratio:16/9}.demo video{display:block;width:100%;height:100%}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;padding:0;list-style:none;counter-reset:s}
 .steps li{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px;counter-increment:s}
 .steps li::before{content:counter(s);display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--fg);color:var(--bg);font-weight:700;font-size:13px;margin-right:8px}
@@ -67,6 +68,13 @@ function cards(
 		.join("")}</ul>`;
 }
 
+/** The one-minute demo on the home page: static/, rendered by flisk-video-factory's render-pages. */
+export const DEMO = {
+	video: "demo.mp4",
+	poster: "demo.jpg",
+	captions: "demo.vtt",
+} as const;
+
 const PUBLISH = `claude plugin marketplace add ${SITE.repoSlug}
 claude plugin install pages@flisk-pages
 # then, in Claude Code:  publish ./my-page to pages`;
@@ -85,6 +93,7 @@ export function homePage(
 		},
 		`<h1>${esc(SITE.tagline)}</h1>
 <p class="lede">${esc(SITE.description)}</p>
+<figure class="demo"><video controls playsinline preload="none" poster="${rootOf(base)}/${DEMO.poster}" aria-label="One-minute demo: an agent builds a page and publishes it to ${esc(new URL(base).host)}"><source src="${rootOf(base)}/${DEMO.video}" type="video/mp4"><track kind="captions" src="${rootOf(base)}/${DEMO.captions}" srclang="en" label="English" default></video></figure>
 <pre>${esc(PUBLISH)}</pre>
 <ol class="steps">
 <li><b>Your agent builds it.</b> Dashboards, explainers, comparisons, app mockups: one folder with an index.html, or an index.md.</li>

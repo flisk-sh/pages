@@ -146,3 +146,25 @@ describe("the site around the spaces", () => {
 		);
 	});
 });
+
+describe("the demo video", () => {
+	it("is on the home page with its poster and captions, and the policy allows it", async () => {
+		const html = await (await get("/")).text();
+		expect(html).toContain('<source src="/demo.mp4" type="video/mp4">');
+		expect(html).toContain('poster="/demo.jpg"');
+		expect(html).toContain('src="/demo.vtt"');
+		expect(html).toContain("media-src 'self'");
+	});
+
+	it("serves the files with their types", async () => {
+		expect((await get("/demo.mp4")).headers.get("content-type")).toBe(
+			"video/mp4",
+		);
+		expect((await get("/demo.jpg")).headers.get("content-type")).toBe(
+			"image/jpeg",
+		);
+		expect((await get("/demo.vtt")).headers.get("content-type")).toContain(
+			"text/vtt",
+		);
+	});
+});

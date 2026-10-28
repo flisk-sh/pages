@@ -9,6 +9,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { createApp } from "../src/app";
 import { validId } from "../src/check.mjs";
+import { DEMO } from "../src/pages";
 import { ICONS } from "../src/seo";
 import { SITE } from "../src/site";
 import { readSpaces, type SpaceGit, spacePath } from "../src/spaces";
@@ -110,6 +111,7 @@ export async function build(meta: Record<string, SpaceGit>) {
 		["/site.webmanifest", "site.webmanifest"],
 		["/.well-known/security.txt", ".well-known/security.txt"],
 		...Object.values(ICONS).map((n): [string, string] => [`/${n}`, n]),
+		...Object.values(DEMO).map((n): [string, string] => [`/${n}`, n]),
 	];
 	for (const [path, file] of site) await write(path, file);
 	for (const handle of new Set(spaces.map((s) => s.handle)))
