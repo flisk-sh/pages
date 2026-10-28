@@ -1,0 +1,31 @@
+# The end-to-end cases (services/app/web/scripts/e2e.ts) against the live site, started by hand. It runs the one-click
+# cases only: the CLI cases open a pull request from a fork as a person, which the workflow's token cannot do. Run
+# those locally with `bun scripts/e2e.ts --only cli`.
+name: E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: One-click publish, update and delete
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun scripts/e2e.ts --only one-click
