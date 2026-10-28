@@ -1,0 +1,6 @@
+[
+  {"value": "8–24", "label": "cores in a desktop CPU, each very fast and very clever", "tone": "c"},
+  {"value": "16,384", "label": "cores in a high-end GPU, each simple and slow", "tone": "g"},
+  {"value": "1 → many", "label": "one instruction, applied to thousands of pixels or numbers at once (SIMT)", "tone": "a"},
+  {"value": "~1 TB/s", "label": "memory bandwidth, so all those cores are never starved of data", "tone": "g"}
+]

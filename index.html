@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How GPUs work</title>
+<meta name="description" content="Why a GPU with thousands of slow cores beats a CPU with a few fast ones on graphics and AI: an interactive explainer you can play with.">
+<style>
+:root{--bg:#0b0f14;--fg:#e8edf2;--muted:#8a96a3;--line:#1f2a36;--card:#111821;--cpu:#ff9f43;--gpu:#3ddc97;--accent:#6aa9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1060px;margin:0 auto;padding:56px 22px 96px}
+.kicker{color:var(--gpu);font-weight:700;letter-spacing:.08em;text-transform:uppercase;font-size:13px}
+h1{font-size:clamp(36px,6vw,64px);line-height:1.02;letter-spacing:-.035em;margin:10px 0 14px}
+.lede{color:var(--muted);font-size:20px;max-width:40em;margin:0 0 36px}
+.race{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.race{grid-template-columns:1fr}}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.chip h2{margin:0;font-size:18px;display:flex;justify-content:space-between;align-items:baseline}
+.chip h2 small{color:var(--muted);font-weight:500;font-size:13px}
+canvas{width:100%;height:auto;display:block;margin:14px 0 10px;border-radius:10px;background:#070a0e}
+.bar{height:10px;border-radius:99px;background:#1a2430;overflow:hidden}.bar i{display:block;height:100%;width:0}
+.cpu .bar i{background:var(--cpu)}.gpu .bar i{background:var(--gpu)}
+.stat{display:flex;justify-content:space-between;color:var(--muted);font-size:14px;margin-top:8px}.stat b{color:var(--fg)}
+.controls{display:flex;flex-wrap:wrap;gap:22px;align-items:center;margin:22px 0 8px;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px 20px}
+.controls label{display:flex;gap:10px;align-items:center;font-weight:600}
+input[type=range]{accent-color:var(--gpu);width:220px}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:11px 20px;background:var(--gpu);color:#04140c;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}
+.verdict{font-size:22px;font-weight:700;margin:18px 0 0;min-height:1.6em}
+.verdict .g{color:var(--gpu)}.verdict .c{color:var(--cpu)}
+h3{font-size:26px;letter-spacing:-.02em;margin:56px 0 10px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-top:16px}
+.fact{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+.fact b{display:block;font-size:30px;letter-spacing:-.02em}.fact span{color:var(--muted);font-size:15px}
+.fact.g b{color:var(--gpu)}.fact.c b{color:var(--cpu)}.fact.a b{color:var(--accent)}
+p.note{color:var(--muted);font-size:14px;margin-top:40px}
+</style>
+</head>
+<body>
+<main>
+<div class="kicker">Interactive explainer</div>
+<h1>How GPUs work</h1>
+<p class="lede">A CPU has a few very fast cores that each do one thing at a time. A GPU has thousands of slow ones doing the <em>same</em> thing to different data, all at once. Paint the same picture with both and watch.</p>
+
+<div class="race">
+  <section class="chip cpu"><h2>CPU <small>8 fast cores · one pixel each per step</small></h2><canvas id="cpu" width="480" height="300"></canvas><div class="bar"><i id="cpuBar"></i></div><div class="stat"><span>pixels done</span><b id="cpuN">0</b></div></section>
+  <section class="chip gpu"><h2>GPU <small>thousands of cores · a whole row per step</small></h2><canvas id="gpu" width="480" height="300"></canvas><div class="bar"><i id="gpuBar"></i></div><div class="stat"><span>pixels done</span><b id="gpuN">0</b></div></section>
+</div>
+
+<div class="controls">
+  <button id="go">Paint both</button>
+  <button class="ghost" id="reset">Reset</button>
+  <label>GPU cores <input id="cores" type="range" min="64" max="4096" step="64" value="2048"> <span id="coresV">2048</span></label>
+</div>
+<p class="verdict" id="verdict">Press <b>Paint both</b>.</p>
+
+<h3>Why it works</h3>
+<div class="facts" id="facts"></div>
+
+<h3>Where it does not</h3>
+<p class="lede" style="font-size:18px">When each step needs the answer of the one before (a chain of if-this-then-that), thousands of cores just wait in line. That is still a CPU's job. Graphics, matrix maths and neural networks are the opposite: millions of small, independent sums.</p>
+<p class="note">Numbers are illustrative. Made with an agent and published with <a href="https://pages.flisk.si/" style="color:var(--accent)">pages.flisk.si</a>.</p>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
