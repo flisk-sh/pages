@@ -1,4 +1,4 @@
-/* The developer CV page (src/cv.ts): roadmap.flisk.si's look, no scripts. */
+/* The developer CV page (src/cv.ts): roadmap.flisk.si's look (Roles cards, Journeys line, Skills cards), no scripts. */
 /* biome-ignore-all lint/style/noDescendingSpecificity: the rules are ordered by section, as in roadmap's style.css */
 :root {
 	--bg: #08080c;
@@ -14,6 +14,8 @@
 	--accent-text: #6ee7a0;
 	--tint: rgba(34, 197, 94, 0.12);
 	--blue: #38a7f0;
+	--blue-text: #7cc4f5;
+	--h0: rgba(255, 255, 255, 0.06);
 	--mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 	color-scheme: dark;
 }
@@ -30,6 +32,8 @@
 		--grid: rgba(0, 0, 0, 0.05);
 		--accent-text: #15803d;
 		--tint: rgba(34, 197, 94, 0.1);
+		--blue-text: #0b6fb3;
+		--h0: rgba(0, 0, 0, 0.06);
 		color-scheme: light;
 	}
 }
@@ -43,7 +47,7 @@ body {
 	margin: 0;
 	color: var(--fg);
 	font:
-		15px / 1.55 ui-sans-serif,
+		16px / 1.55 ui-sans-serif,
 		system-ui,
 		-apple-system,
 		"Segoe UI",
@@ -52,7 +56,12 @@ body {
 	background:
 		radial-gradient(
 			60rem 30rem at 85% -10%,
-			rgba(34, 197, 94, 0.08),
+			rgba(34, 197, 94, 0.09),
+			transparent 70%
+		),
+		radial-gradient(
+			50rem 30rem at -10% 40%,
+			rgba(56, 167, 240, 0.06),
 			transparent 70%
 		),
 		linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 44px 44px,
@@ -65,8 +74,8 @@ body {
 	padding: 0 20px;
 }
 .lbl {
-	font: 600 11.5px / 1.2 var(--mono);
-	letter-spacing: 0.12em;
+	font: 600 11.5px / 1.3 var(--mono);
+	letter-spacing: 0.14em;
 	text-transform: uppercase;
 	color: var(--faint);
 	margin: 0;
@@ -77,13 +86,16 @@ body {
 	margin-left: 8px;
 	letter-spacing: 0.04em;
 }
+
+/* Top bar */
 nav.top {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	gap: 16px;
 	padding: 18px 0;
 	border-bottom: 1px solid var(--line);
-	margin-bottom: 44px;
+	margin-bottom: 52px;
 	font-size: 14px;
 }
 nav.top .brand {
@@ -105,27 +117,31 @@ nav.top .brand i {
 	font: 800 13px var(--mono);
 	font-style: normal;
 }
-nav.top a {
-	color: var(--muted);
-	text-decoration: none;
-}
 nav.top .links {
 	display: flex;
 	gap: 18px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+nav.top .links a {
+	color: var(--muted);
+	text-decoration: none;
 }
 nav.top .links a:hover {
 	color: var(--fg);
 }
+
+/* Hero */
 .hero {
 	display: grid;
-	grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+	grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
 	gap: 40px;
 	align-items: center;
-	margin-bottom: 56px;
+	margin-bottom: 72px;
 }
 @media (max-width: 900px) {
 	.hero {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 .badge {
@@ -137,20 +153,32 @@ nav.top .links a:hover {
 	text-transform: uppercase;
 	border-radius: 6px;
 	padding: 6px 12px;
-	margin-bottom: 18px;
+	margin: 0 0 18px;
 }
 h1 {
-	font-size: clamp(44px, 7vw, 80px);
-	line-height: 0.95;
+	font-size: clamp(46px, 8vw, 88px);
+	line-height: 0.92;
 	letter-spacing: -0.045em;
-	margin: 0 0 16px;
-	font-weight: 800;
+	margin: 0 0 18px;
+	font-weight: 900;
+	overflow-wrap: anywhere;
+}
+h1 span {
+	background: linear-gradient(
+		100deg,
+		var(--fg) 30%,
+		var(--accent-text) 70%,
+		var(--blue-text)
+	);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
 }
 .role {
 	font-size: clamp(20px, 2.4vw, 26px);
 	font-weight: 700;
 	letter-spacing: -0.02em;
-	margin: 0 0 8px;
+	margin: 0 0 10px;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 12px;
@@ -164,19 +192,21 @@ h1 {
 	border-radius: 999px;
 	padding: 4px 10px;
 	letter-spacing: 0.04em;
+	white-space: nowrap;
 }
 .what {
 	color: var(--muted);
-	margin: 0 0 24px;
-	max-width: 36em;
+	margin: 0 0 26px;
+	max-width: 38em;
+	font-size: 17px;
 }
 .stats {
 	display: grid;
 	grid-template-columns: repeat(4, 1fr);
 	gap: 10px;
-	margin-bottom: 22px;
+	margin-bottom: 24px;
 }
-@media (max-width: 520px) {
+@media (max-width: 560px) {
 	.stats {
 		grid-template-columns: 1fr 1fr;
 	}
@@ -189,7 +219,7 @@ h1 {
 }
 .stats b {
 	display: block;
-	font: 700 30px / 1.1 var(--mono);
+	font: 700 clamp(22px, 2.6vw, 30px) / 1.1 var(--mono);
 	letter-spacing: -0.03em;
 }
 .stats span {
@@ -221,7 +251,7 @@ h1 {
 }
 .spider {
 	width: 100%;
-	max-width: 420px;
+	max-width: 440px;
 	display: block;
 	margin: 0 auto;
 	overflow: visible;
@@ -242,24 +272,28 @@ h1 {
 .spider text {
 	font: 700 11px var(--mono);
 }
+
+/* Sections */
 section {
-	margin: 0 0 64px;
+	margin: 0 0 80px;
 }
 .sh {
 	display: flex;
 	align-items: baseline;
 	gap: 16px;
 	flex-wrap: wrap;
-	margin-bottom: 20px;
+	margin-bottom: 22px;
 }
 .sh h2 {
-	font-size: clamp(24px, 3vw, 32px);
-	letter-spacing: -0.03em;
+	font-size: clamp(26px, 3.2vw, 36px);
+	letter-spacing: -0.035em;
 	margin: 0;
+	font-weight: 800;
 }
 .sh p {
 	margin: 0;
 	color: var(--muted);
+	max-width: 46em;
 }
 .panel {
 	background: var(--panel);
@@ -267,22 +301,31 @@ section {
 	border-radius: 20px;
 	padding: clamp(18px, 3vw, 28px);
 }
+
+/* Chips and logo marks, as on roadmap. A chip never gets wider than its card: a long name ends in an ellipsis. */
 .chips {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
 }
 .chip {
+	--c: #888;
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
+	max-width: 100%;
 	padding: 4px 12px 4px 4px;
 	border-radius: 999px;
 	border: 2px solid color-mix(in srgb, var(--c) 85%, transparent);
 	background: color-mix(in srgb, var(--c) 10%, var(--panel));
-	font-size: 14px;
+	font-size: 14.5px;
 	font-weight: 550;
 	white-space: nowrap;
+}
+.chip > span:not(.mk) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
 }
 .chip.l3 {
 	box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent);
@@ -302,6 +345,7 @@ section {
 	opacity: 0.55;
 }
 .chip i {
+	flex: none;
 	font: normal 9px var(--mono);
 	letter-spacing: 1px;
 	color: var(--c);
@@ -330,8 +374,9 @@ section {
 	object-fit: cover;
 }
 .mk.sym {
-	font: 800 10px var(--mono);
-	color: #0a0a0a;
+	font: 800 10.5px var(--mono);
+	color: #0b0b10;
+	letter-spacing: -0.02em;
 }
 .mk.big {
 	width: 46px;
@@ -352,103 +397,120 @@ section {
 	font-size: 14px;
 	color: var(--c);
 }
-.rolegrid {
+
+/* Role cards, as on roadmap's Roles view */
+.roles {
 	display: grid;
-	grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	gap: 16px;
 }
-@media (max-width: 900px) {
-	.rolegrid {
-		grid-template-columns: 1fr;
+@media (max-width: 1000px) {
+	.roles {
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 .rolecard {
 	background: var(--panel);
 	border: 1px solid var(--line);
-	border-radius: 20px;
+	border-radius: 22px;
 	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.rolecard.best {
+	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	box-shadow: 0 0 0 4px var(--tint);
 }
 .rhead {
 	display: flex;
 	justify-content: space-between;
-	gap: 16px;
+	gap: 12px;
 	align-items: flex-start;
 }
-.rhead h3 {
-	font-size: 28px;
-	letter-spacing: -0.03em;
-	margin: 6px 0 4px;
+.rhead > div:first-child {
+	min-width: 0;
 }
-.rhead .what {
-	margin: 0;
+.rolecard h3 {
+	margin: 4px 0;
+	font-size: 22px;
+	letter-spacing: -0.02em;
+	font-weight: 800;
+	overflow-wrap: anywhere;
+}
+.rwhat {
+	color: var(--muted);
+	margin: 0 0 14px;
+	font-size: 15.5px;
 }
 .pctbig {
 	text-align: right;
+	flex: none;
 }
 .pctbig b {
-	display: block;
-	font: 800 48px / 1 var(--mono);
+	font: 800 36px / 1 var(--mono);
 	color: var(--accent-text);
 	letter-spacing: -0.04em;
 }
-.pctbig small {
-	font-size: 22px;
+.pctbig b small {
+	font-size: 16px;
 }
 .pctbig span {
-	font: 600 11px var(--mono);
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
+	display: block;
+	font: 600 10.5px var(--mono);
 	color: var(--faint);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 }
 .fbar {
 	display: flex;
 	gap: 4px;
 	height: 8px;
-	margin: 18px 0 20px;
+	margin: 2px 0 16px;
 }
 .fbar i {
 	border-radius: 99px;
 }
-.rrow {
+.rgroup {
 	display: grid;
-	grid-template-columns: 150px minmax(0, 1fr);
-	gap: 12px;
-	align-items: start;
-	padding: 8px 0;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 8px;
+	margin-top: 14px;
 }
-@media (max-width: 640px) {
-	.rrow {
-		grid-template-columns: 1fr;
-	}
+.rgroup .lbl {
+	font-size: 11px;
 }
-.rrow .lbl {
-	padding-top: 9px;
-}
-.lbl.core {
+.rgroup .lbl.core {
 	color: var(--accent-text);
+}
+.rgroup .lbl b {
+	color: var(--faint);
+}
+.rolecard .chip {
+	font-size: 13.5px;
+}
+.panel.more {
+	margin-top: 16px;
 }
 .others {
 	list-style: none;
-	margin: 14px 0 0;
+	margin: 18px 0 0;
 	padding: 0;
 	display: grid;
-	gap: 14px;
+	grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+	gap: 10px 22px;
 }
 .others li {
 	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 6px 12px;
-	font-weight: 600;
-}
-.others b {
-	font: 700 14px var(--mono);
-	color: var(--muted);
+	grid-template-columns: minmax(0, 1fr) 90px 40px;
+	gap: 10px;
+	align-items: center;
+	font-size: 14px;
 }
 .pbar {
-	grid-column: 1 / -1;
-	height: 7px;
+	height: 6px;
 	border-radius: 99px;
-	background: var(--line);
+	background: var(--h0);
 	overflow: hidden;
 }
 .pbar i {
@@ -457,57 +519,68 @@ section {
 	background: var(--accent);
 	border-radius: 99px;
 }
-.track {
-	position: relative;
+.others b {
+	font: 700 12.5px var(--mono);
+	text-align: right;
 }
+
+/* The journey line, as on roadmap's Journeys view */
 .track .head {
 	display: flex;
 	align-items: center;
-	gap: 14px;
+	gap: 16px;
 	flex-wrap: wrap;
-	margin-bottom: 22px;
+	margin-bottom: 26px;
+}
+.track .head .badge {
+	margin: 0;
 }
 .track .head p {
 	margin: 0;
 	color: var(--muted);
+	font-size: 17px;
 }
-ol.steps {
+.steps {
 	list-style: none;
 	margin: 0;
 	padding: 0;
-	position: relative;
-}
-ol.steps::before {
-	content: "";
-	position: absolute;
-	left: 31px;
-	top: 20px;
-	bottom: 20px;
-	width: 6px;
-	border-radius: 9px;
-	background: linear-gradient(
-		var(--blue),
-		color-mix(in srgb, var(--blue) 30%, transparent)
-	);
 }
 .step {
 	display: grid;
-	grid-template-columns: 68px minmax(0, 1fr);
-	gap: 18px;
-	margin-bottom: 16px;
+	grid-template-columns: 84px minmax(0, 1fr);
 	position: relative;
+	padding-bottom: 22px;
+}
+.step::before {
+	content: "";
+	position: absolute;
+	left: 39px;
+	top: 50px;
+	bottom: -6px;
+	width: 8px;
+	border-radius: 8px;
+	background: var(--blue);
+	box-shadow: 0 0 18px rgba(56, 167, 240, 0.35);
+}
+.step:last-child::before {
+	display: none;
 }
 .num {
-	width: 58px;
-	height: 58px;
-	margin: 12px 0 0 5px;
+	width: 72px;
+	height: 72px;
 	border-radius: 50%;
-	border: 6px solid var(--blue);
+	border: 8px solid var(--blue);
 	background: var(--bg);
 	display: grid;
 	place-items: center;
-	font: 800 22px var(--mono);
+	font:
+		800 26px ui-sans-serif,
+		system-ui,
+		sans-serif;
+	position: relative;
 	z-index: 1;
+	margin-left: 7px;
+	box-shadow: 0 0 22px rgba(56, 167, 240, 0.3);
 }
 .step.done .num {
 	background: var(--blue);
@@ -516,31 +589,83 @@ ol.steps::before {
 .step.todo .num {
 	border-color: var(--line2);
 	color: var(--faint);
+	box-shadow: none;
 }
-.step .card {
+.card {
 	background: var(--panel);
 	border: 1px solid var(--line);
-	border-radius: 18px;
-	padding: 18px 22px;
+	border-radius: 22px;
+	padding: clamp(18px, 2.6vw, 28px) clamp(18px, 2.8vw, 32px);
+	min-width: 0;
 }
 .step.todo .card {
-	opacity: 0.6;
+	opacity: 0.72;
 }
-.lvl {
-	color: var(--blue);
+.card .lvl {
+	color: var(--blue-text);
+	font-size: 13px;
+	letter-spacing: 0.22em;
 }
-.step h4 {
-	font-size: 24px;
-	letter-spacing: -0.025em;
+.card h3 {
+	font-size: clamp(22px, 2.6vw, 30px);
+	letter-spacing: -0.03em;
 	margin: 6px 0 2px;
+	font-weight: 800;
 }
-.goal {
+.card .goal {
 	color: var(--muted);
-	margin: 0 0 8px;
+	margin: 0 0 14px;
+	font-size: 17px;
 }
+.rrow {
+	display: grid;
+	grid-template-columns: 150px minmax(0, 1fr);
+	gap: 12px;
+	align-items: start;
+	margin-top: 10px;
+}
+.rrow .lbl {
+	text-transform: none;
+	letter-spacing: 0.06em;
+	font-size: 13px;
+	padding-top: 9px;
+}
+@media (max-width: 640px) {
+	.step {
+		grid-template-columns: 46px minmax(0, 1fr);
+	}
+	.num {
+		width: 40px;
+		height: 40px;
+		border-width: 5px;
+		font-size: 16px;
+		margin-left: 0;
+	}
+	.step::before {
+		left: 17px;
+		top: 34px;
+		width: 6px;
+	}
+	.rrow {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+	.rrow .lbl {
+		padding-top: 0;
+	}
+}
+.note {
+	border-left: 4px solid var(--blue);
+	padding: 2px 0 2px 16px;
+	margin: 18px 0 0;
+	color: var(--muted);
+	font-size: 16px;
+}
+
+/* Expert tools, as roadmap's tool cards */
 .tgrid {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
 	gap: 14px;
 }
 .tcard {
@@ -548,6 +673,7 @@ ol.steps::before {
 	border: 1px solid var(--line);
 	border-radius: 18px;
 	padding: 18px;
+	min-width: 0;
 }
 .thead {
 	display: grid;
@@ -559,6 +685,7 @@ ol.steps::before {
 	display: block;
 	font-size: 19px;
 	letter-spacing: -0.02em;
+	overflow-wrap: anywhere;
 }
 .thead span {
 	font-size: 13px;
@@ -587,7 +714,7 @@ ol.steps::before {
 	color: #1d0505;
 }
 .tag {
-	margin: 12px 0 12px;
+	margin: 12px 0;
 	font-size: 14.5px;
 }
 .sc {
@@ -602,39 +729,127 @@ ol.steps::before {
 	font: 700 14px var(--mono);
 	color: var(--fg);
 }
+.sc .pbar {
+	grid-column: 1 / -1;
+}
 .tmeta {
 	margin: 6px 0 0;
 	font: 500 12.5px var(--mono);
 	color: var(--faint);
 }
-.wall h3 {
+
+/* Skill cards, as on roadmap's Skills view */
+.skills {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+	gap: 14px;
+}
+.skill {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	padding: 18px 18px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.skill .top {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 10px;
+}
+.skill code {
+	font: 700 15px var(--mono);
+	color: var(--fg);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.skill .src {
+	font: 500 12px var(--mono);
+	color: var(--faint);
+	text-decoration: none;
+	overflow-wrap: anywhere;
+}
+.skill .src:hover {
+	color: var(--fg);
+}
+.skill p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 14.5px;
+	flex: 1;
+}
+.stag {
+	flex: none;
+	font: 700 10.5px var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	border-radius: 6px;
+	padding: 3px 7px;
+	white-space: nowrap;
+	color: var(--faint);
+	border: 1px solid var(--line2);
+}
+.stag.good {
+	background: var(--tint);
+	color: var(--accent-text);
+	border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.stag.mid {
+	background: rgba(245, 165, 36, 0.12);
+	color: #f5a524;
+	border-color: rgba(245, 165, 36, 0.4);
+}
+.stag.bad {
+	background: rgba(239, 68, 68, 0.12);
+	color: #ef4444;
+	border-color: rgba(239, 68, 68, 0.4);
+}
+.fits {
+	font: 600 12px var(--mono);
+	color: var(--faint);
+}
+.fits b {
+	color: var(--accent-text);
+}
+
+/* The toolkit wall, by level */
+.lvlhead {
 	display: flex;
 	align-items: center;
-	gap: 12px;
-	font-size: 18px;
-	margin: 0 0 12px;
+	gap: 10px;
+	margin: 26px 0 12px;
 }
-.wall h3 i {
-	font: normal 11px var(--mono);
+.lvlhead:first-child {
+	margin-top: 0;
+}
+.lvlhead i {
+	font: normal 12px var(--mono);
 	color: var(--accent-text);
 	letter-spacing: 2px;
 }
-.wall h3 small {
-	font: 500 13px var(--mono);
+.lvlhead h3 {
+	margin: 0;
+	font-size: 17px;
+}
+.lvlhead small {
 	color: var(--faint);
+	font: 600 12px var(--mono);
 }
-.wall + .wall {
-	margin-top: 26px;
-}
+
 footer {
 	border-top: 1px solid var(--line);
-	padding: 24px 0 48px;
+	padding: 26px 0 70px;
 	color: var(--faint);
 	font-size: 13.5px;
-	display: flex;
-	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 12px;
+	display: grid;
+	gap: 10px;
+}
+footer p {
+	margin: 0;
+	max-width: 62em;
 }
 footer a {
 	color: var(--muted);

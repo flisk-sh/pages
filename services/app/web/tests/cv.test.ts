@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkSpace } from "../src/check.mjs";
@@ -46,17 +46,43 @@ const data: RoadmapData = {
 	},
 	journeys: {
 		levels: [
-			{ id: "pkg", name: "Package Wrangler", goal: "Pin dependencies." },
+			{ id: "pkg", n: 1, name: "Package Wrangler", goal: "Pin dependencies." },
 		],
 		tracks: [
 			{
 				id: "backend",
 				name: "Backend",
 				blurb: "APIs.",
-				stops: { pkg: { main: ["bun"], side: ["uv"] } },
+				stops: {
+					pkg: { main: ["bun"], side: ["uv"], tip: "Commit the <lockfile>." },
+				},
 			},
 		],
 	},
+	skills: [
+		{
+			id: "a-bun-install",
+			name: "bun-install",
+			source: "acme/skills",
+			path: "skills/bun-install/SKILL.md",
+			what: "Install with Bun.",
+			result: { score: 100 },
+		},
+		{
+			id: "a-helm-lint",
+			name: "helm-lint",
+			source: "acme/skills",
+			what: "Lint <b>charts</b>.",
+			result: { score: 60 },
+		},
+		{
+			id: "a-uv-tips",
+			name: "uv-tips",
+			source: "acme/skills",
+			what: "Tips for uv.",
+			result: { score: 100 },
+		},
+	],
 	github: { bun: { stars: 80000, release: "2026-10-20T00:00:00Z" } },
 	logos: ["bun.svg", "helm.png"],
 };
@@ -94,6 +120,44 @@ describe("the developer CV", () => {
 		expect(html).toContain("1/2 known");
 		expect(html).toContain("★ 80k");
 		expect(html).toContain("released 8 days ago");
+	});
+
+	it("shows three roadmap-style role cards with stacked chip rows", () => {
+		expect(html).toContain('class="rolecard best"');
+		expect(html).toContain("Best fit");
+		expect(html).toContain("Second fit");
+		expect(html).toContain("Must have<b>2/2</b>");
+		expect(html).toContain("Every day<b>0/1</b>");
+		expect(html).not.toContain("Third fit");
+	});
+
+	it("draws the journey line with a numbered ring, branches and a tip", () => {
+		expect(html).toContain('<li class="step done"><span class="num">1</span>');
+		expect(html).toContain("On the line");
+		expect(html).toContain("Branches");
+		expect(html).toContain('<p class="note">Commit the &lt;lockfile&gt;.</p>');
+	});
+
+	it("matches agent skills to rated tools at use often or above, and says so", () => {
+		expect(html).toContain("<code>bun-install</code>");
+		expect(html).toContain("100/100");
+		expect(html).toContain("Matches <b>Bun</b> (expert)");
+		expect(html).toContain(
+			"github.com/acme/skills/blob/HEAD/skills/bun-install/SKILL.md",
+		);
+		expect(html).toContain("this page doesn't say I use them");
+		expect(html).toContain("Matches <b>Helm</b> (use often)");
+		expect(html).toContain("Lint &lt;b&gt;charts&lt;/b&gt;.");
+		expect(html).not.toContain("uv-tips"); // uv is not rated
+	});
+
+	it("groups the toolkit by level and keeps chips inside their card", () => {
+		expect(html).toContain("<h3>Expert</h3>");
+		expect(html).toContain("<h3>Use often</h3>");
+		expect(html).not.toContain("<h3>Have used</h3>");
+		const css = readFileSync(join(import.meta.dir, "../src/cv.css"), "utf8");
+		expect(css).toMatch(/\.chip \{[^}]*max-width: 100%/);
+		expect(css).toContain("text-overflow: ellipsis");
 	});
 
 	it("lists only the logos it uses and has no scripts", () => {
