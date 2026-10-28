@@ -6,7 +6,7 @@
 // Runs from a checkout of main, so this file and the check are ours, not the pull request's. Needs GH_TOKEN, REPO,
 // PR (the number), and EVENT_LABEL (the label just added, when the event is "labeled").
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkSpace, formatReport, validId } from "../src/check.mjs";
@@ -237,8 +237,11 @@ async function main() {
 		);
 		git("push", "origin", `${commit}:refs/heads/${branch}`);
 		const versions = git("rev-list", "--count", commit) || "1";
-		// A push made with the workflow's token starts no other workflow, so the deploy is started by name.
-		gh("workflow", "run", "deploy.yml", "-R", repo, "--ref", "main");
+		// A push made with the workflow's token starts no other workflow. publish.yml deploys in its next job when
+		// told so (DEPLOY_HERE); otherwise the deploy is started by name.
+		if (process.env.DEPLOY_HERE && process.env.GITHUB_OUTPUT)
+			appendFileSync(process.env.GITHUB_OUTPUT, "published=true\n");
+		else gh("workflow", "run", "deploy.yml", "-R", repo, "--ref", "main");
 		comment(
 			pr,
 			`✓ Published version ${versions}. It is live in a minute or two at **${url}**\n\nSource: https://github.com/${repo}/tree/${branch} · versions: https://github.com/${repo}/commits/${branch}${result.warnings.length ? `\n\nWorth fixing:\n\n\`\`\`\n${formatReport({ ...result, errors: [] })}\n\`\`\`` : ""}${approvedBy ? `\n\nApproved by @${approvedBy}.` : ""}`,

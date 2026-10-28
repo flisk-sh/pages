@@ -15,6 +15,8 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: publish-${{ github.event.pull_request.number }}
@@ -26,6 +28,8 @@ jobs:
     if: github.event.action != 'labeled' || github.event.label.name == 'publish'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      published: ${{ steps.publish.outputs.published }}
     defaults:
       run:
         working-directory: services/app/web
@@ -37,10 +41,49 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile
-      - run: bun scripts/publish-pr.ts
+      - id: publish
+        run: bun scripts/publish-pr.ts
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           EVENT_LABEL: ${{ github.event.label.name }}
           SENDER: ${{ github.event.sender.login }}
+          # The deploy job below rebuilds the site, so the script starts no other run.
+          DEPLOY_HERE: "1"
+
+  # The same build and deploy as deploy.yml, here so a published space is live without a second run starting.
+  # It runs only when the publish job committed a new version; main's code only, nothing from the pull request.
+  deploy:
+    name: Build and deploy
+    needs: publish
+    if: needs.publish.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Fetch the space branches
+        run: git fetch --no-tags origin '+refs/heads/space/*:refs/remotes/origin/space/*'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: services/app/web/_site
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
