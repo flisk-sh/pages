@@ -1,0 +1,13 @@
+{
+	"name": "@flisk-sh/pages",
+	"version": "0.2.0",
+	"description": "Publish a page to pages.flisk.si/@you/name in one command: free, public, one git branch per space. Markdown publishes with no account.",
+	"type": "module",
+	"bin": { "pages": "pages.mjs" },
+	"files": ["pages.mjs", "lib.mjs", "check.mjs"],
+	"engines": { "node": ">=18" },
+	"homepage": "https://pages.flisk.si",
+	"repository": { "type": "git", "url": "git+https://github.com/flisk-sh/pages.git", "directory": "bin" },
+	"license": "MIT",
+	"keywords": ["publish", "html", "markdown", "share", "static-site", "claude-code", "agent"]
+}

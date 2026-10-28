@@ -12,6 +12,8 @@ The check is the one the publish workflow runs: `bin/pages.mjs` in this plugin, 
 node "<this skill's base directory>/../../bin/pages.mjs" check ./my-page
 ```
 
+The path is a folder, or a single `.html` or `.md` file, checked as the space's index.
+
 It prints one line per finding, `✗` for a problem that stops a publish and `!` for one worth fixing, each ending in
 its rule, then `✓ ready to publish` or the count of problems. Exit code 0 means it would pass.
 

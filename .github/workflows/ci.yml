@@ -37,6 +37,15 @@ jobs:
       - name: Publish worker tests
         run: bun test
         working-directory: services/app/publish
+      - name: The CLI as npm packs it runs on node alone
+        working-directory: .
+        run: |
+          cp services/app/web/src/check.mjs bin/check.mjs
+          dir=$(mktemp -d)
+          (cd bin && npm pack --pack-destination "$dir")
+          tar -xzf "$dir"/*.tgz -C "$dir"
+          node "$dir/package/pages.mjs" check evals/fixtures/gpu-demo
+          rm bin/check.mjs
 
       - name: Build the site
         run: bun run build
