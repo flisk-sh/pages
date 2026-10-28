@@ -74,6 +74,18 @@ describe("anonymous publishes", () => {
 		expect(invalid({ ...ok, markdown: " " })).toBe("no markdown");
 	});
 
+	it("takes a CV request as ratings and a name, never markup", async () => {
+		const { invalid } = await import("../scripts/publish-anon");
+		const cv = {
+			...ok,
+			markdown: undefined,
+			cv: { me: "bun3,helm2", name: "Sam" },
+		};
+		expect(invalid(cv)).toBe("");
+		expect(invalid({ ...cv, cv: { me: "<script>" } })).toBe("bad ratings");
+		expect(invalid({ ...cv, cv: { me: "bun4" } })).toBe("bad ratings");
+	});
+
 	it("reads the edit hash from a commit message", async () => {
 		const { hashIn } = await import("../scripts/publish-anon");
 		expect(

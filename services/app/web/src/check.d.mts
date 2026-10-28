@@ -19,7 +19,7 @@ export const CONNECT_HOSTS: string[];
 export const FRAME_HOSTS: string[];
 export const EXTENSIONS: Set<string>;
 export function validId(handle: string, slug: string): boolean;
-export function csp(): string;
+export function csp(options?: { scripts?: boolean }): string;
 export function tags(html: string, name: string): Record<string, string>[];
 export function hostOf(url: string): string | null;
 export function checkSpace(dir: string): CheckResult;

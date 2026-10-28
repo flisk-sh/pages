@@ -139,7 +139,8 @@ export function preparePage(
 		// Always first: browsers look for the charset in the first 1024 bytes, and the policy alone is longer than
 		// that. A second charset the page wrote later is ignored.
 		'<meta charset="utf-8">',
-		`<meta http-equiv="Content-Security-Policy" content="${csp()}">`,
+		// One-click spaces come from a visitor with no account: they never run scripts.
+		`<meta http-equiv="Content-Security-Policy" content="${csp({ scripts: s.handle !== "anon" })}">`,
 		'<meta name="referrer" content="strict-origin-when-cross-origin">',
 		/<link[^>]+rel=["']?canonical/i.test(html)
 			? ""

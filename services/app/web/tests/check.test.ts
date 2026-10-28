@@ -243,4 +243,9 @@ describe("helpers", () => {
 		expect(policy).toMatch(/connect-src 'self' https:\/\/cdnjs/);
 		expect(policy).not.toMatch(/connect-src[^;]*https:(?!\/\/)/);
 	});
+
+	it("one-click spaces get a policy that runs nothing", () => {
+		expect(csp({ scripts: false })).toContain("script-src 'none'");
+		expect(csp({ scripts: false })).not.toMatch(/script-src[^;]*https:/);
+	});
 });

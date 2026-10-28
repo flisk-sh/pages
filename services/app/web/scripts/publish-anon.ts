@@ -1,7 +1,8 @@
 // The anonymous publish, run by .github/workflows/publish-anon.yml for each repository_dispatch that
 // publish.flisk.si sends. The payload is read from GITHUB_EVENT_PATH, never interpolated into a shell:
-//   {op: "publish" | "update" | "delete", id, hash, markdown?, source?}
-// A space is the branch space/anon/<id> with one file, index.md. Its commits carry `Pages-Edit-Hash: <sha256 of the
+//   {op: "publish" | "update" | "delete", id, hash, markdown?, cv?: {me, name}, source?}
+// A space is the branch space/anon/<id>: an index.md, or a developer CV that src/cv.ts builds here from roadmap's
+// ratings string and roadmap's own data, so no visitor's markup is ever published. Its commits carry `Pages-Edit-Hash: <sha256 of the
 // visitor's key>`; update and delete go through only when the hash matches the one on the branch.
 import { execFileSync } from "node:child_process";
 import {
@@ -14,12 +15,22 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { checkSpace, formatReport } from "../src/check.mjs";
+import {
+	cleanName,
+	cvPage,
+	ME_PATTERN,
+	parseMe,
+	type RoadmapData,
+} from "../src/cv";
+
+const ROADMAP = "https://roadmap.flisk.si";
 
 export interface Payload {
 	op: string;
 	id: string;
 	hash: string;
 	markdown?: string;
+	cv?: { me: string; name?: string };
 	source?: string;
 }
 
@@ -29,10 +40,15 @@ export function invalid(p: Partial<Payload>): string {
 		return "unknown op";
 	if (!/^[a-z0-9]{10}$/.test(p.id ?? "")) return "bad id";
 	if (!/^[a-f0-9]{64}$/.test(p.hash ?? "")) return "bad hash";
-	if (
-		p.op !== "delete" &&
-		(typeof p.markdown !== "string" || !p.markdown.trim())
-	)
+	if (p.op === "delete") return "";
+	if (p.cv !== undefined) {
+		if (typeof p.cv?.me !== "string" || !ME_PATTERN.test(p.cv.me))
+			return "bad ratings";
+		if (p.cv.name !== undefined && typeof p.cv.name !== "string")
+			return "bad name";
+		return "";
+	}
+	if (typeof p.markdown !== "string" || !p.markdown.trim())
 		return "no markdown";
 	return "";
 }
@@ -52,7 +68,34 @@ const run = (args: string[], env: Record<string, string> = {}) =>
 		env: { ...process.env, ...env },
 	}).trim();
 
-function main() {
+/** The CV page and its logos, from roadmap's live data. */
+async function writeCv(dir: string, cv: { me: string; name?: string }) {
+	const get = async (path: string) => {
+		const res = await fetch(`${ROADMAP}${path}`);
+		if (!res.ok) throw new Error(`${path} answered ${res.status}`);
+		return res;
+	};
+	const data = (await (await get("/assets/data.json")).json()) as RoadmapData;
+	const q = new URLSearchParams({ me: cv.me });
+	const name = cleanName(cv.name ?? "");
+	if (name) q.set("name", name);
+	const { html, logos } = cvPage(data, parseMe(cv.me), name, {
+		portfolio: `${ROADMAP}/portfolio/?${q}`,
+		radar: `${ROADMAP}/radar/?${q}`,
+	});
+	writeFileSync(join(dir, "index.html"), html);
+	mkdirSync(join(dir, "logos"));
+	for (const file of logos)
+		if (/^[a-z0-9-]+\.(svg|png)$/.test(file))
+			writeFileSync(
+				join(dir, "logos", file),
+				new Uint8Array(
+					await (await get(`/assets/logos/${file}`)).arrayBuffer(),
+				),
+			);
+}
+
+async function main() {
 	const event = JSON.parse(
 		readFileSync(process.env.GITHUB_EVENT_PATH as string, "utf8"),
 	);
@@ -87,7 +130,8 @@ function main() {
 		try {
 			const dir = join(work, "space");
 			mkdirSync(dir);
-			writeFileSync(join(dir, "index.md"), p.markdown as string);
+			if (p.cv) await writeCv(dir, p.cv);
+			else writeFileSync(join(dir, "index.md"), p.markdown as string);
 			const result = checkSpace(dir);
 			console.log(formatReport(result));
 			if (!result.ok) throw new Error("refused: the check failed");
@@ -136,4 +180,4 @@ function main() {
 	);
 }
 
-if (import.meta.main) main();
+if (import.meta.main) await main();

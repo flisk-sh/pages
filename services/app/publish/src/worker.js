@@ -1,7 +1,9 @@
 // publish.flisk.si: one-click publishing to pages.flisk.si with no account and no key for the visitor.
 //
-//   POST   /v1/spaces        {markdown, source?}  → 202 {id, url, token, manage}   a new space at /@anon/<id>/
-//   PUT    /v1/spaces/<id>   {markdown}  Bearer <token>  → 202 {id, url}           a new version
+//   POST   /v1/spaces        {markdown | cv, source?}  → 202 {id, url, token, manage}   a new space at /@anon/<id>/
+//   PUT    /v1/spaces/<id>   {markdown | cv}  Bearer <token>  → 202 {id, url}           a new version
+// cv is {me: "bun3,helm2", name?}: roadmap's ratings. The workflow builds the developer CV page from them and
+// roadmap's own data, so a visitor only ever sends Markdown or ratings, never markup of their own.
 //   DELETE /v1/spaces/<id>   Bearer <token>  → 202 {id}                            take it down
 //   GET    /manage/<id>#<token>   a page with the link and a delete button (the token stays in the fragment)
 //
@@ -43,6 +45,22 @@ export function checkMarkdown(markdown) {
 	if (/<\s*(script|iframe|form|object|embed)\b/i.test(markdown)) return "markdown may not contain scripts, frames or forms";
 	if (/<input[^>]+type\s*=\s*["']?password/i.test(markdown)) return "markdown may not contain a password field";
 	return "";
+}
+
+// The same rules as ME_PATTERN and cleanName in services/app/web/src/cv.ts.
+const ME = /^[a-z0-9-]+[1-3](?:,[a-z0-9-]+[1-3]){0,399}$/;
+
+/** What a visitor sends: {markdown} or {cv: {me, name?}}. Returns [payload fields, problem]. */
+export function readContent(body) {
+	if (body && body.cv !== undefined) {
+		const cv = body.cv;
+		if (!cv || typeof cv.me !== "string" || !ME.test(cv.me)) return [null, "cv.me must be ratings such as bun3,helm2"];
+		if (cv.name !== undefined && typeof cv.name !== "string") return [null, "cv.name must be text"];
+		const name = String(cv.name ?? "").replace(/[<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 60);
+		return [{ cv: name ? { me: cv.me, name } : { me: cv.me } }, ""];
+	}
+	const problem = checkMarkdown(body?.markdown);
+	return problem ? [null, problem] : [{ markdown: body.markdown }, ""];
 }
 
 const json = (body, status, headers = {}) =>
@@ -157,13 +175,13 @@ export async function handle(request, env, fetcher = fetch) {
 	const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
 	if (request.method === "POST" && url.pathname === "/v1/spaces") {
 		const body = await readJson(request);
-		const problem = checkMarkdown(body?.markdown);
+		const [content, problem] = readContent(body);
 		if (problem) return json({ error: problem }, 400, headers);
 		if (await overLimit(env, origin, ip)) return json({ error: "Too many publishes from here; try again in an hour." }, 429, headers);
 		const id = newId();
 		const token = newToken();
 		const source = typeof body.source === "string" ? body.source.slice(0, 200) : "";
-		if (!(await dispatch(env, { op: "publish", id, hash: await sha256(token), markdown: body.markdown, source }, fetcher)))
+		if (!(await dispatch(env, { op: "publish", id, hash: await sha256(token), ...content, source }, fetcher)))
 			return json({ error: "Could not reach GitHub; try again." }, 502, headers);
 		return json(
 			{ id, url: `${env.PAGES_ORIGIN}/@anon/${id}/`, token, manage: `${env.PUBLISH_ORIGIN}/manage/${id}#${token}`, live_in_seconds: 120 },
@@ -178,16 +196,15 @@ export async function handle(request, env, fetcher = fetch) {
 		const token = bearer(request);
 		if (!ID.test(id) || !TOKEN.test(token)) return json({ error: "unknown space or key" }, 404, headers);
 		if (await overLimit(env, origin, ip)) return json({ error: "Too many changes from here; try again in an hour." }, 429, headers);
-		let markdown;
+		let content = {};
 		if (request.method === "PUT") {
-			const body = await readJson(request);
-			const problem = checkMarkdown(body?.markdown);
+			const [c, problem] = readContent(await readJson(request));
 			if (problem) return json({ error: problem }, 400, headers);
-			markdown = body.markdown;
+			content = c;
 		}
 		const op = request.method === "PUT" ? "update" : "delete";
 		// The workflow compares this hash with the one on the branch; a wrong key changes nothing.
-		if (!(await dispatch(env, { op, id, hash: await sha256(token), ...(markdown ? { markdown } : {}) }, fetcher)))
+		if (!(await dispatch(env, { op, id, hash: await sha256(token), ...content }, fetcher)))
 			return json({ error: "Could not reach GitHub; try again." }, 502, headers);
 		return json({ id, url: `${env.PAGES_ORIGIN}/@anon/${id}/` }, 202, headers);
 	}

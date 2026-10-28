@@ -62,12 +62,17 @@ export function validId(handle, slug) {
 	return HANDLE.test(handle) && SLUG.test(slug);
 }
 
-/** The policy written into the <head> of every published page. Images may come from any https host. */
-export function csp() {
+/**
+ * The policy written into the <head> of every published page. Images may come from any https host. With
+ * `{ scripts: false }` (the one-click @anon spaces, which are Markdown or a generated CV) nothing may run at all.
+ */
+export function csp({ scripts = true } = {}) {
 	const hosts = (list) => list.map((h) => `https://${h}`).join(" ");
 	return [
 		"default-src 'self'",
-		`script-src 'self' 'unsafe-inline' ${hosts(SCRIPT_HOSTS)}`,
+		scripts
+			? `script-src 'self' 'unsafe-inline' ${hosts(SCRIPT_HOSTS)}`
+			: "script-src 'none'",
 		`style-src 'self' 'unsafe-inline' ${hosts(STYLE_HOSTS)}`,
 		`font-src 'self' data: ${hosts(FONT_HOSTS)}`,
 		"img-src 'self' data: blob: https:",

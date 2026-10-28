@@ -74,6 +74,26 @@ describe("publishing", () => {
 	});
 });
 
+describe("a CV request", () => {
+	it("sends only the ratings and a cleaned name to GitHub", async () => {
+		const gh = github();
+		const res = await handle(req("POST", "/v1/spaces", { cv: { me: "bun3,helm2", name: " Sam  <b>Doe</b> " } }), env, gh.fetcher);
+		expect(res.status).toBe(202);
+		const p = gh.sent[0].body.client_payload;
+		expect(p.cv).toEqual({ me: "bun3,helm2", name: "Sam bDoe/b" });
+		expect(p.markdown).toBeUndefined();
+	});
+
+	it.each([
+		["no ratings", { cv: {} }],
+		["markup in the ratings", { cv: { me: "<script>" } }],
+		["a level above 3", { cv: { me: "bun4" } }],
+		["a name that is not text", { cv: { me: "bun3", name: 7 } }],
+	])("refuses %s", async (_, body) => {
+		expect((await handle(req("POST", "/v1/spaces", body), env, github().fetcher)).status).toBe(400);
+	});
+});
+
 describe("updating and deleting", () => {
 	const id = "abcdefghjk";
 	const token = "a".repeat(48);
