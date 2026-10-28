@@ -1,0 +1,38 @@
+# One-click publishing from publish.flisk.si (services/app/publish): no account, no key for the visitor. The worker
+# sends a repository_dispatch; this checks the Markdown like every other publish and commits space/anon/<id>.
+# scripts/publish-anon.ts reads the payload from the event file; nothing from it is put into a shell command.
+name: Publish (anonymous)
+run-name: anon ${{ github.event.client_payload.op }} ${{ github.event.client_payload.id }}
+
+on:
+  repository_dispatch:
+    types: [pages-anon]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: anon-${{ github.event.client_payload.id }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Check and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bun scripts/publish-anon.ts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}

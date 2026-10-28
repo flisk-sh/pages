@@ -1,0 +1,11 @@
+{
+	"name": "@pages/publish",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "bun test",
+		"dev": "bunx wrangler@4 dev",
+		"deploy": "bunx wrangler@4 deploy"
+	}
+}

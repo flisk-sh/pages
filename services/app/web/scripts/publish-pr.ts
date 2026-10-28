@@ -58,6 +58,12 @@ export function targetOf(files: string[]): Target | null | { error: string } {
 		return {
 			error: `\`spaces/${handle}/${slug}/\` is not a space folder: use \`spaces/<your login, lowercase>/<name>/\`, where the name is lowercase letters, digits and dashes.`,
 		};
+	// space/anon/* holds the one-click spaces from publish.flisk.si (scripts/publish-anon.ts).
+	if (handle === "anon")
+		return {
+			error:
+				"`spaces/anon/` is reserved for one-click spaces from publish.flisk.si. Publish under your own login.",
+		};
 	return { handle, slug };
 }
 

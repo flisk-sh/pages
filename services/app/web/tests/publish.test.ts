@@ -35,6 +35,7 @@ describe("which pull requests are a publish", () => {
 			"not a space folder",
 		],
 		["a bad slug", ["spaces/sam/My_Page/index.html"], "not a space folder"],
+		["the reserved anon handle", ["spaces/anon/x1/index.md"], "reserved"],
 	])("%s is refused with a reason", (_, files, reason) => {
 		const t = targetOf(files as string[]);
 		expect(t && "error" in t ? t.error : "").toContain(reason as string);
@@ -52,5 +53,34 @@ describe("which issues name a space", () => {
 			slug: "notes",
 		});
 		expect(spaceIn("Remove my page please")).toBeNull();
+	});
+});
+
+describe("anonymous publishes", () => {
+	const ok = {
+		op: "publish",
+		id: "abcdefghjk",
+		hash: "a".repeat(64),
+		markdown: "# Me",
+	};
+
+	it("accepts a well-formed payload and refuses the rest", async () => {
+		const { invalid } = await import("../scripts/publish-anon");
+		expect(invalid(ok)).toBe("");
+		expect(invalid({ ...ok, op: "delete", markdown: undefined })).toBe("");
+		expect(invalid({ ...ok, op: "rm" })).toBe("unknown op");
+		expect(invalid({ ...ok, id: "../main" })).toBe("bad id");
+		expect(invalid({ ...ok, hash: "short" })).toBe("bad hash");
+		expect(invalid({ ...ok, markdown: " " })).toBe("no markdown");
+	});
+
+	it("reads the edit hash from a commit message", async () => {
+		const { hashIn } = await import("../scripts/publish-anon");
+		expect(
+			hashIn(
+				`Publish @anon/x\n\nSource: roadmap\nPages-Edit-Hash: ${"b".repeat(64)}`,
+			),
+		).toBe("b".repeat(64));
+		expect(hashIn("Publish @sam/x from #3")).toBe("");
 	});
 });

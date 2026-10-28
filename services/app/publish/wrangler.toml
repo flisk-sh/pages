@@ -1,0 +1,17 @@
+name = "pages-publish"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+routes = [{ pattern = "publish.flisk.si", custom_domain = true }]
+
+[vars]
+PAGES_REPO = "flisk-sh/pages"
+PAGES_ORIGIN = "https://pages.flisk.si"
+PUBLISH_ORIGIN = "https://publish.flisk.si"
+ALLOWED_ORIGINS = "https://roadmap.flisk.si,https://pages.flisk.si"
+MAX_PER_IP_HOUR = "5"
+MAX_PER_IP_DAY = "20"
+MAX_PER_HOUR = "120"
+
+# Secret (set once): bunx wrangler@4 secret put GITHUB_TOKEN
+#   a fine-grained token for flisk-sh/pages only, "Contents: read and write" (repository_dispatch needs it)

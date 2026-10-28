@@ -34,6 +34,9 @@ jobs:
       - run: bun run typecheck
       - run: bun run lint
       - run: bun test
+      - name: Publish worker tests
+        run: bun test
+        working-directory: services/app/publish
 
       - name: Build the site
         run: bun run build
