@@ -1,0 +1,46 @@
+# The CLI on npm as @flisk-sh/pages, so `npx -y @flisk-sh/pages publish page.html` works with nothing installed.
+# Push a tag cli-v<version> that matches bin/package.json, or run it by hand. The package is bin/ plus a copy of the
+# check (services/app/web/src/check.mjs), the same file the publish workflow runs. Needs the NPM_TOKEN secret: an npm
+# automation token with publish rights on the @flisk-sh scope.
+name: Release | CLI
+
+on:
+  push:
+    tags: ["cli-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: release-cli
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Version matches the tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: test "cli-v$(node -p 'require("./bin/package.json").version')" = "$GITHUB_REF_NAME"
+      - name: Copy the check in
+        run: cp services/app/web/src/check.mjs bin/check.mjs
+      - name: The packed CLI runs on its own
+        run: |
+          dir=$(mktemp -d)
+          (cd bin && npm pack --pack-destination "$dir")
+          tar -xzf "$dir"/*.tgz -C "$dir"
+          node "$dir/package/pages.mjs" check evals/fixtures/gpu-demo
+      - run: npm publish ./bin --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

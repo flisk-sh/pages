@@ -1,27 +1,33 @@
 ---
 name: pages-publish
-description: Publish a folder (an index.html with its files, or an index.md) to a public link on pages.flisk.si/@<github login>/<name>, or publish a new version of one, or take one down. Use when the user asks to publish, share, host or put online a page, dashboard, explainer, report or prototype the agent built, to "make it a link", or mentions pages.flisk.si. Not for deploying apps with a server, or for private pages.
+description: Publish a page (a folder with an index.html or index.md, or a single .html or .md file) to a public link on pages.flisk.si/@<github login>/<name>, or publish a new version of one, or take one down. Use when the user asks to publish, share, host or put online a page, dashboard, explainer, report or prototype the agent built, to "make it a link", or mentions pages.flisk.si. Not for deploying apps with a server, or for private pages.
 ---
 
 # Publish to pages.flisk.si
 
-A space is one folder that becomes `https://pages.flisk.si/@<login>/<slug>/`, where `<login>` is the user's GitHub
-login lowercased. It is **public**: the page and its source on GitHub. Each publish is a pull request from the user's
-own fork, so it needs `git` and the GitHub CLI signed in (`gh auth status`). Nothing else is installed: the CLI is
-`bin/pages.mjs` in this plugin, two folders up from this file, and runs on `node` (18+) or `bun`.
+A space is one page that becomes `https://pages.flisk.si/@<login>/<slug>/`, where `<login>` is the user's GitHub
+login lowercased. It is **public**: the page and its source on GitHub. The CLI is `bin/pages.mjs` in this plugin, two
+folders up from this file, and runs on `node` (18+) or `bun` (`bun "$PAGES" …`) with nothing installed.
+
+- **Signed in to the GitHub CLI** (`gh auth status`): each publish is a pull request from the user's own fork, live at
+  `/@<login>/<slug>/`. Any page: HTML or Markdown, one file or a folder.
+- **Not signed in**: a Markdown page (one `.md` file, or a folder holding only `index.md`) is published anonymously
+  at `/@anon/<id>/`, with a random name. Publishing the same path again adds a version; `remove <path>` takes it
+  down. HTML needs the GitHub CLI: tell the user to run `gh auth login`, or offer the page as Markdown.
 
 ```bash
 PAGES="<this skill's base directory>/../../bin/pages.mjs"
 node "$PAGES" check ./my-page                              # the publish check, nothing sent
-node "$PAGES" publish ./my-page --slug my-page --wait      # pull request, then the link
-node "$PAGES" remove my-page                               # take it down
+node "$PAGES" publish ./my-page --slug my-page --wait      # the link, once it answers
+node "$PAGES" publish ./notes.md --wait                    # one file is fine; not signed in, it goes to /@anon/
+node "$PAGES" remove my-page                               # take it down (or: remove ./notes.md for an anonymous one)
 ```
 
 ## Steps
 
-1. **Find the folder.** It must have `index.html` or `index.md` at its top. A single HTML file: put it in a folder of
-   its own as `index.html`. Give the page a `<title>` and a `<meta name="description">`; the gallery and link previews
-   use them.
+1. **Find the page.** A folder with `index.html` or `index.md` at its top, or a single `.html` or `.md` file, which
+   becomes the index. Give the page a `<title>` and a `<meta name="description">`; the gallery and link previews use
+   them.
 2. **Pick the slug**: lowercase letters, digits and dashes, from what the page is (`gpu-explainer`, not `index`).
    The same slug again publishes a **new version** of that space; a new slug makes a new space. When the user names an
    existing space, reuse its slug.
@@ -30,9 +36,10 @@ node "$PAGES" remove my-page                               # take it down
 4. **Say it will be public** and confirm, unless the user already asked to publish it: the page and its files become
    public on pages.flisk.si and in the github.com/flisk-sh/pages repository. Do not publish anything holding secrets,
    API keys, personal data or private documents.
-5. **Run `publish … --wait`.** It forks flisk-sh/pages (once), opens a pull request, and waits for the workflow's
-   answer. Give the user the link it prints, `https://pages.flisk.si/@<login>/<slug>/`, which works a minute or two
-   after `✓ Published`. If the workflow answers `✗`, fix what it lists, then publish again.
+5. **Run `publish … --wait`.** Signed in, it forks flisk-sh/pages (once), opens a pull request, waits for the
+   workflow's answer, then for the link to answer. Not signed in, it sends the Markdown to publish.flisk.si and prints
+   the link and a manage link. Give the user the link it prints and, for an anonymous space, the manage link. If it
+   answers `✗`, fix what it lists, then publish again.
 
 ## Making a page pass
 

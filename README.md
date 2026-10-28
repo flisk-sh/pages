@@ -6,20 +6,35 @@ every space is a git branch of this repository, and the site is static on GitHub
 
 ## Publish
 
-From Claude Code:
+One command, nothing to install (node 18+, or `bunx` in place of `npx`):
+
+```bash
+npx -y @flisk-sh/pages publish page.html --wait     # or a folder with an index.html or index.md
+```
+
+A page is a folder with an `index.html` or `index.md`, or a single `.html` or `.md` file, which becomes the index.
+Signed in to the GitHub CLI (`gh auth login`), it goes live at `/@<your login>/<name>/` through a pull request from
+your fork. Not signed in, a Markdown page (one `.md` file) is published anonymously at `/@anon/<id>/`; its key is
+kept in `~/.config/pages/anon.json`, so the same command adds a version and `pages remove <path>` takes it down. HTML
+needs the GitHub CLI. `--wait` waits until the link answers.
+
+From Claude Code, the plugin adds the `pages-publish` and `pages-check` skills:
 
 ```bash
 claude plugin marketplace add flisk-sh/pages
 claude plugin install pages@flisk-pages
 ```
 
-then ask: *publish ./my-page to pages*. Without an agent (git and `gh auth login` needed, node 18+ or bun):
+then ask: *publish ./my-page to pages*. From a checkout, `node bin/pages.mjs` is the same CLI:
 
 ```bash
 git clone --depth 1 https://github.com/flisk-sh/pages && cd pages
 node bin/pages.mjs check ../my-page
 node bin/pages.mjs publish ../my-page --slug my-page --wait
 ```
+
+The npm package is released by `.github/workflows/release-cli.yml` when a `cli-v<version>` tag matching
+`bin/package.json` is pushed.
 
 Or by hand in the browser: [add a file](https://github.com/flisk-sh/pages/new/main?filename=spaces/YOUR-LOGIN/my-page/index.md)
 at `spaces/<your login>/<name>/index.md` and propose the change. GitHub makes the fork and the pull request for you.
@@ -38,7 +53,7 @@ your folder ──PR from your fork──▶ publish.yml ──check──▶ br
 | Home, a publisher's page, about, 404, `spaces.json`, sitemap, `llms.txt` | `services/app/web/src/pages.ts`, `src/app.ts`, `src/seo.ts` |
 | Branches → `_site/` | `services/app/web/scripts/build.ts` |
 | Pull request → branch, issue → removal | `scripts/publish-pr.ts`, `scripts/remove-issue.ts`, `.github/workflows/` |
-| The CLI | `bin/pages.mjs` |
+| The CLI (npm: `@flisk-sh/pages`) | `bin/pages.mjs`, `bin/lib.mjs`, `bin/package.json` |
 | The Claude Code plugin: `pages-publish`, `pages-check` | `.claude-plugin/`, `skills/` |
 | Skill evals (`claude plugin eval . --scaffold --allow-tools Bash Edit Write`) | `evals/` |
 
