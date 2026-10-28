@@ -815,6 +815,56 @@ section {
 	color: var(--accent-text);
 }
 
+/* How much to trust the page, as AI-Atlas puts it: what it is made from */
+.trust {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 14px;
+}
+.trust span {
+	font: 600 12px var(--mono);
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	padding: 6px 10px;
+	color: var(--muted);
+	background: var(--panel);
+}
+.trust b {
+	color: var(--fg);
+}
+
+/* The toolkit, with a line on each tool */
+.evidence {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 28px;
+}
+@media (max-width: 900px) {
+	.evidence {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.ev {
+	display: grid;
+	grid-template-columns: minmax(0, 210px) minmax(0, 1fr);
+	gap: 12px;
+	align-items: center;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--line);
+}
+.ev p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 14px;
+}
+@media (max-width: 520px) {
+	.ev {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+}
+
 /* The toolkit wall, by level */
 .lvlhead {
 	display: flex;

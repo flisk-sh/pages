@@ -160,6 +160,13 @@ describe("the developer CV", () => {
 		expect(css).toContain("text-overflow: ellipsis");
 	});
 
+	it("gives expert and use-often tools a row with the tool's line, and says what the page is made from", () => {
+		expect(html).toContain('<div class="ev">');
+		expect(html).toContain("<p>Fast JS</p>");
+		expect(html).toContain("Self-reported");
+		expect(html).toContain("No scripts");
+	});
+
 	it("lists only the logos it uses and has no scripts", () => {
 		expect(logos.sort()).toEqual(["bun.svg", "helm.png"]);
 		expect(html).not.toMatch(/<script/i);
