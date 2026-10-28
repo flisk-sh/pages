@@ -25,8 +25,16 @@ export const SCRIPT_HOSTS = [
 	"cdn.tailwindcss.com",
 	"giscus.app",
 ];
-export const STYLE_HOSTS = [...SCRIPT_HOSTS, "fonts.googleapis.com", "api.fontshare.com"];
-export const FONT_HOSTS = [...STYLE_HOSTS, "fonts.gstatic.com", "cdn.fontshare.com"];
+export const STYLE_HOSTS = [
+	...SCRIPT_HOSTS,
+	"fonts.googleapis.com",
+	"api.fontshare.com",
+];
+export const FONT_HOSTS = [
+	...STYLE_HOSTS,
+	"fonts.gstatic.com",
+	"cdn.fontshare.com",
+];
 /** Hosts a page may fetch from: the CDNs (for data files and modules) and public GitHub content. */
 export const CONNECT_HOSTS = [
 	...SCRIPT_HOSTS,
