@@ -1,0 +1,2964 @@
+<!doctype html>
+<html lang="en">
+<head><script>(function(){var p=new URLSearchParams(location.search);if(!p.get("me")){p.set("name","Oleksandr Dykyi");p.set("me","argo-cd1,aws-cdk2,aws-sam2,backstage3,bun3,cdktf1,circleci1,claude-code2,cline2,cloudflare-tunnel2,cloudformation3,codex3,colima1,composer1,create-t3-app1,create-vite1,cursor3,deno1,dependabot3,devin3,docker-compose3,docker-desktop2,docker-engine2,docker-mcp-toolkit1,esbuild1,flisk3,gemini-cli2,github-actions3,github-copilot3,gitlab-ci2,helm2,homebrew1,hono2,jenkins1,k3s1,k9s3,kiro1,kubectl2,kubernetes3,kubernetes-dashboard1,langchain1,lima2,mcp-registry3,minikube1,model-context-protocol2,neon1,nestjs2,netlify-cli2,nextjs1,ngrok1,nodemon3,npm3,nvm3,nx1,ollama1,opencode3,opentelemetry1,orbstack2,pact1,playwright-mcp1,pm21,pnpm2,podman3,podman-desktop1,portainer1,prisma3,react-router2,replit1,sentry1,sequelize2,serverless-framework3,signoz1,skills-sh2,supabase-cli1,swc1,terraform3,terragrunt3,tilt3,turbopack1,typeorm2,vercel-cli1,vite1,webpack2,windsurf3,wrangler2,yarn3,yeoman3");history.replaceState(null,"",location.pathname+"?"+p.toString()+location.hash);}})();</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Skills | DevEx Roadmap</title>
+  <meta name="description" content="Free AI agent skills from GitHub, tested by a small, cheap model (Haiku). Further right means Haiku used it right more often.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Agent Skills | DevEx Roadmap">
+  <meta property="og:description" content="Free AI agent skills from GitHub, tested by a small, cheap model (Haiku). Further right means Haiku used it right more often.">
+  <meta property="og:url" content="https://roadmap.flisk.si/skills/">
+  <meta property="og:image" content="https://roadmap.flisk.si/assets/og.png">
+  <meta property="og:image:width" content="800">
+  <meta property="og:image:height" content="420">
+  <meta property="og:image:alt" content="The DevEx Roadmap: 372 developer tools on an adoption radar">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  
+
+  <script>
+    // Dark first. A saved choice wins; storage can be blocked, so fail quietly.
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
+
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css"><link rel="stylesheet" href="me-overlay.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="https://roadmap.flisk.si/">
+        <img src="assets/favicon.svg" alt="" width="20" height="20">
+        <span>DevEx Roadmap</span>
+      </a>
+      <span class="hook">372 dev tools · 44 roles · 400 agent skills · scored by a checklist, not opinions</span>
+      <nav class="nav" aria-label="Primary">
+        <a href="https://roadmap.flisk.si/findings/">Findings</a>
+        <a class="nav-extra" href="https://roadmap.flisk.si/about/">How it works</a>
+        <a class="nav-extra" href="https://cmd.flisk.sh" rel="noopener">Commands</a>
+        <a href="https://github.com/flisk-sh/roadmap" rel="noopener">GitHub</a>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme">Theme</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <div id="app" data-view="skills" data-sub="" data-base="/@odykyi/portfolio" data-repo="https://github.com/flisk-sh/roadmap" data-v="1793197345">
+
+  <div class="topbar">
+    <nav class="views" aria-label="Views">
+      <a class="view-tab view-tab-compass" data-view="compass" href="compass.html">
+        <span class="view-icon view-icon-compass" aria-hidden="true"></span>Compass
+      </a>
+      <a class="view-tab view-tab-radar" data-view="radar" href="radar.html">
+        <span class="view-icon view-icon-radar" aria-hidden="true"></span>Adoption Radar
+      </a>
+      <a class="view-tab view-tab-lab" data-view="lab" href="lab.html">
+        <span class="view-icon view-icon-lab" aria-hidden="true"></span>Lab
+      </a>
+      <a class="view-tab view-tab-journeys" data-view="journeys" href="journeys.html">
+        <span class="view-icon view-icon-journeys" aria-hidden="true"></span>Journeys
+      </a>
+      <a class="view-tab view-tab-roles" data-view="roles" href="roles.html">
+        <span class="view-icon view-icon-roles" aria-hidden="true"></span>Roles
+      </a>
+      <a class="view-tab view-tab-skills" data-view="skills" href="skills.html" aria-current="page">
+        <span class="view-icon view-icon-skills" aria-hidden="true"></span>Skills
+      </a>
+      <a class="view-tab view-tab-portfolio" data-view="portfolio" href="./">
+        <span class="view-icon view-icon-portfolio" aria-hidden="true"></span>Portfolio
+      </a>
+      <a class="view-tab view-tab-ask" data-view="ask" href="https://roadmap.flisk.si/ask/">
+        <span class="view-icon view-icon-ask" aria-hidden="true"></span>Ask
+      </a>
+    </nav>
+    <div class="toolbar js-only" hidden>
+      <input id="q" type="search" placeholder="Find a skill…" aria-label="Find" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  <h1 class="sr-only" id="view-title">Agent Skills</h1>
+  <p class="sr-only" id="view-blurb">Free AI agent skills from GitHub, tested by a small, cheap model (Haiku). Further right means Haiku used it right more often.</p>
+  <nav class="subtabs" id="subtabs" aria-label="Sub-tabs">
+    <a class="subtab" data-sub="" href="skills.html" aria-current="page"><span class="sw sw-all" aria-hidden="true"></span>All</a>
+    <a class="subtab" data-sub="plan" href="https://roadmap.flisk.si/skills/plan/">Plan and design <small>29</small></a>
+    <a class="subtab" data-sub="code" href="https://roadmap.flisk.si/skills/code/">Write code <small>44</small></a>
+    <a class="subtab" data-sub="test" href="https://roadmap.flisk.si/skills/test/">Test <small>34</small></a>
+    <a class="subtab" data-sub="debug" href="https://roadmap.flisk.si/skills/debug/">Debug <small>22</small></a>
+    <a class="subtab" data-sub="review" href="https://roadmap.flisk.si/skills/review/">Review <small>25</small></a>
+    <a class="subtab" data-sub="git" href="https://roadmap.flisk.si/skills/git/">Git and PRs <small>36</small></a>
+    <a class="subtab" data-sub="frontend" href="https://roadmap.flisk.si/skills/frontend/">Frontend and design <small>27</small></a>
+    <a class="subtab" data-sub="ops" href="https://roadmap.flisk.si/skills/ops/">Ops and infra <small>62</small></a>
+    <a class="subtab" data-sub="security" href="https://roadmap.flisk.si/skills/security/">Security <small>35</small></a>
+    <a class="subtab" data-sub="docs" href="https://roadmap.flisk.si/skills/docs/">Docs and writing <small>23</small></a>
+    <a class="subtab" data-sub="data" href="https://roadmap.flisk.si/skills/data/">Data and AI <small>33</small></a>
+    <a class="subtab" data-sub="meta" href="https://roadmap.flisk.si/skills/meta/">Agent workflow <small>30</small></a>
+    <span class="view-count"><strong>400</strong> skills</span>
+  </nav>
+
+  <section class="stage-wrap" aria-label="Agent Skills">
+    <div id="stage" class="stage stage-skills" role="img" aria-label="Agent Skills. The same data is in the table below."></div>
+  </section>
+
+  <section class="explain">
+    <h2>How a skill is tested</h2>
+    <p>A skill is a file that teaches an AI coding agent how to do one job. We test each one with a small, cheap model (Haiku), because if a small model gets it right, a big one will too.</p>
+    <ol class="criteria">
+      <li><strong>Picked right.</strong> Haiku sees the list of skills, like a real agent does, and gets 3 requests: 2 where this skill should be used and 1 that only sounds similar. It scores a point for each request it sends the right way.</li>
+      <li><strong>Followed right.</strong> Haiku reads the whole skill and a real request, then says its first step. A second Haiku call checks that step against the one the skill asks for.</li>
+    </ol>
+    <p>Score: 1 point per request picked right (3) plus 2 points for following right, out of 5, shown out of 100. Further right is better. Green is 80 and up, amber 50 to 79, red below 50. Pick a kind of skill to see them as a leaderboard, best first. Haiku only sees skills from the same repo when it picks, as if you had installed that one collection. The test questions were written from each skill's own text by a stronger model, so a skill is never graded on something it does not claim to do. Last run: claude-haiku-4-5-20251001, 2026-10-28.</p>
+  </section>
+  <details class="all-list">
+    <summary>The same skills as a table</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Skill</th><th scope="col">From</th><th scope="col">What it does</th><th scope="col">Score</th><th scope="col">Picked right</th><th scope="col">Followed right</th></tr></thead>
+        <tbody>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/claude-api/SKILL.md" rel="noopener">claude-api</a></th>
+            <td>anthropics/skills</td><td>Gives the agent up-to-date facts to build apps on the Claude API: models, streaming, tools, caching.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/doc-coauthoring/SKILL.md" rel="noopener">doc-coauthoring</a></th>
+            <td>anthropics/skills</td><td>Write a spec, RFC or design doc in three steps: gather context, shape it, test it on a fresh reader.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/frontend-design/SKILL.md" rel="noopener">frontend-design</a></th>
+            <td>anthropics/skills</td><td>Build UI with a clear look of its own: pick a direction, type and palette, avoid template defaults.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/mcp-builder/SKILL.md" rel="noopener">mcp-builder</a></th>
+            <td>anthropics/skills</td><td>Build a good MCP server (Python or TypeScript) so an LLM can use an outside API through well-made tools.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/skill-creator/SKILL.md" rel="noopener">skill-creator</a></th>
+            <td>anthropics/skills</td><td>Make a new skill, test it with sample prompts, and tune its description so it fires at the right time.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/web-artifacts-builder/SKILL.md" rel="noopener">web-artifacts-builder</a></th>
+            <td>anthropics/skills</td><td>Build a bigger React + Tailwind + shadcn artifact and bundle it into one HTML file.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/anthropics/skills/blob/HEAD/skills/webapp-testing/SKILL.md" rel="noopener">webapp-testing</a></th>
+            <td>anthropics/skills</td><td>Drive a local web app with Playwright scripts: check flows, take screenshots, read browser logs.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/brainstorming/SKILL.md" rel="noopener">brainstorming</a></th>
+            <td>obra/superpowers</td><td>Find out what you really want before building: ask, compare approaches, write and approve a design doc.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/diagnosing-superpowers/SKILL.md" rel="noopener">diagnosing-superpowers</a></th>
+            <td>obra/superpowers</td><td>Read the session transcripts to show why an agent session went wrong, with file and line proof.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/dispatching-parallel-agents/SKILL.md" rel="noopener">dispatching-parallel-agents</a></th>
+            <td>obra/superpowers</td><td>Give each independent problem to its own sub-agent and run them side by side.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/executing-plans/SKILL.md" rel="noopener">executing-plans</a></th>
+            <td>obra/superpowers</td><td>Carry out a written plan yourself, task by task, with test proof and a ledger, then one final review.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/finishing-a-development-branch/SKILL.md" rel="noopener">finishing-a-development-branch</a></th>
+            <td>obra/superpowers</td><td>When work is done and green, pick merge, PR or discard, then clean up the branch and worktree.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/receiving-code-review/SKILL.md" rel="noopener">receiving-code-review</a></th>
+            <td>obra/superpowers</td><td>Handle review comments with checks, not blind yes: understand, verify, then fix or push back.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/requesting-code-review/SKILL.md" rel="noopener">requesting-code-review</a></th>
+            <td>obra/superpowers</td><td>Hand your finished work to a fresh reviewer sub-agent with the right context before it merges.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/subagent-driven-development/SKILL.md" rel="noopener">subagent-driven-development</a></th>
+            <td>obra/superpowers</td><td>Run a plan with a fresh sub-agent per task, a review after each, and a broad review at the end.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/systematic-debugging/SKILL.md" rel="noopener">systematic-debugging</a></th>
+            <td>obra/superpowers</td><td>Find the root cause before any fix, in four phases: investigate, compare, hypothesise, then fix.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/test-driven-development/SKILL.md" rel="noopener">test-driven-development</a></th>
+            <td>obra/superpowers</td><td>Write the failing test first, watch it fail, write the least code to pass, then clean up.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/using-git-worktrees/SKILL.md" rel="noopener">using-git-worktrees</a></th>
+            <td>obra/superpowers</td><td>Work in an isolated git worktree so your current branch stays untouched.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/using-superpowers/SKILL.md" rel="noopener">using-superpowers</a></th>
+            <td>obra/superpowers</td><td>Session starter: check for a fitting skill and use it before answering or acting.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/verification-before-completion/SKILL.md" rel="noopener">verification-before-completion</a></th>
+            <td>obra/superpowers</td><td>No saying done until you ran the check and read the output: tests, lint, build.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/writing-plans/SKILL.md" rel="noopener">writing-plans</a></th>
+            <td>obra/superpowers</td><td>Turn a spec into a step-by-step plan with exact files, tests and commands for a new engineer.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/obra/superpowers/blob/HEAD/skills/writing-skills/SKILL.md" rel="noopener">writing-skills</a></th>
+            <td>obra/superpowers</td><td>Make or edit a skill like TDD: test the agent without it first, write it, then close loopholes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/autoplan/SKILL.md" rel="noopener">autoplan</a></th>
+            <td>garrytan/gstack</td><td>Run the CEO, design, eng and DX plan reviews in a row, auto-deciding with 6 rules and one final gate.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/benchmark/SKILL.md" rel="noopener">benchmark</a></th>
+            <td>garrytan/gstack</td><td>Measure page speed in a real browser, save a baseline, and flag slowdowns after changes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/benchmark-models/SKILL.md" rel="noopener">benchmark-models</a></th>
+            <td>garrytan/gstack</td><td>Compare how different AI models do on the same skill or prompt, with a guided run.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/browse/SKILL.md" rel="noopener">browse</a></th>
+            <td>garrytan/gstack</td><td>Let the agent drive a real browser: open pages, click flows, take screenshots, read console errors.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/canary/SKILL.md" rel="noopener">canary</a></th>
+            <td>garrytan/gstack</td><td>Watch production after a deploy: screenshots, console errors and baseline compare for several minutes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/captain/SKILL.md" rel="noopener">captain</a></th>
+            <td>garrytan/gstack</td><td>Run a crew of coding agents from one controller; workers report READY, only the controller merges.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/careful/SKILL.md" rel="noopener">careful</a></th>
+            <td>garrytan/gstack</td><td>Warn before risky shell commands like rm -rf, DROP TABLE and force-push, so you can stop them.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/codex/SKILL.md" rel="noopener">codex</a></th>
+            <td>garrytan/gstack</td><td>Ask the OpenAI Codex CLI for an independent second opinion on your code or plan.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/context-restore/SKILL.md" rel="noopener">context-restore</a></th>
+            <td>garrytan/gstack</td><td>Load your last saved working context so you can pick up where you stopped, even on another branch.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/context-save/SKILL.md" rel="noopener">context-save</a></th>
+            <td>garrytan/gstack</td><td>Save what you are doing, decisions made and what is left, so a later session can resume.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/cso/SKILL.md" rel="noopener">cso</a></th>
+            <td>garrytan/gstack</td><td>Security audit in chief-security-officer mode: attack surface, OWASP, supply chain, with evidence.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/deslop-shared-libs/SKILL.md" rel="noopener">deslop-shared-libs</a></th>
+            <td>garrytan/gstack</td><td>Scan recent work for copied code worth moving into a shared library; read-only, up to three picks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/design-consultation/SKILL.md" rel="noopener">design-consultation</a></th>
+            <td>garrytan/gstack</td><td>Talk through your product and build a full design system: type, colour, layout, motion, DESIGN.md.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/design-html/SKILL.md" rel="noopener">design-html</a></th>
+            <td>garrytan/gstack</td><td>Turn an approved design into real HTML/CSS where text reflows and sizes itself correctly.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/design-motion/SKILL.md" rel="noopener">design-motion</a></th>
+            <td>garrytan/gstack</td><td>Animate a finished design into a seamless looping MP4 and GIF to show it working.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/design-review/SKILL.md" rel="noopener">design-review</a></th>
+            <td>garrytan/gstack</td><td>Review a live site like a designer: spacing, hierarchy, AI-slop looks, then fix and verify.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/design-shotgun/SKILL.md" rel="noopener">design-shotgun</a></th>
+            <td>garrytan/gstack</td><td>Generate several design variants, show them side by side, collect feedback and iterate.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/devex-review/SKILL.md" rel="noopener">devex-review</a></th>
+            <td>garrytan/gstack</td><td>Test the real developer experience of a live product: docs, quickstart and CLI, with timings.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/diagram/SKILL.md" rel="noopener">diagram</a></th>
+            <td>garrytan/gstack</td><td>Turn a text description into a diagram: mermaid source, editable Excalidraw file, SVG and PNG.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/document-generate/SKILL.md" rel="noopener">document-generate</a></th>
+            <td>garrytan/gstack</td><td>Write missing docs from scratch for a feature, module or project, using the Diataxis four-part layout.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/document-release/SKILL.md" rel="noopener">document-release</a></th>
+            <td>garrytan/gstack</td><td>After you commit, before merge, check that docs still match the code and fix them.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/eval-plan/SKILL.md" rel="noopener">eval-plan</a></th>
+            <td>garrytan/gstack</td><td>Plan a paid AI eval: write bars and stop rules, dry-run free, run a 3-item priced pilot first.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/freeze/SKILL.md" rel="noopener">freeze</a></th>
+            <td>garrytan/gstack</td><td>Block edits outside one folder for the session, so the agent cannot touch other code.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/guard/SKILL.md" rel="noopener">guard</a></th>
+            <td>garrytan/gstack</td><td>Full safety mode: warn on destructive commands and lock edits to one directory, in one go.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/health/SKILL.md" rel="noopener">health</a></th>
+            <td>garrytan/gstack</td><td>Score code quality from types, lint, tests, dead code and scripts, and track the trend.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/investigate/SKILL.md" rel="noopener">investigate</a></th>
+            <td>garrytan/gstack</td><td>Find the root cause of a bug first, then fix it: symptoms, code trace, recent changes, reproduce.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ios-clean/SKILL.md" rel="noopener">ios-clean</a></th>
+            <td>garrytan/gstack</td><td>Remove the DebugBridge package and its #if DEBUG code from an iOS app.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ios-design-review/SKILL.md" rel="noopener">ios-design-review</a></th>
+            <td>garrytan/gstack</td><td>Design audit of an iOS app on a real device, scored 0-10 on hierarchy, spacing and accessibility.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ios-fix/SKILL.md" rel="noopener">ios-fix</a></th>
+            <td>garrytan/gstack</td><td>Fix iOS bugs on a real device, but only after a state snapshot reproduces the bug as a test fixture.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ios-qa/SKILL.md" rel="noopener">ios-qa</a></th>
+            <td>garrytan/gstack</td><td>QA a SwiftUI app live on a USB iPhone: find, fix and verify bugs through a debug bridge.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ios-sync/SKILL.md" rel="noopener">ios-sync</a></th>
+            <td>garrytan/gstack</td><td>Regenerate the iOS debug bridge after you add observable state or upgrade gstack.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/land-and-deploy/SKILL.md" rel="noopener">land-and-deploy</a></th>
+            <td>garrytan/gstack</td><td>Take the PR from /ship, merge it with your OK, watch the deploy and verify production.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/landing-report/SKILL.md" rel="noopener">landing-report</a></th>
+            <td>garrytan/gstack</td><td>Read-only dashboard of the ship queue: which branches are waiting and what to land next.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/learn/SKILL.md" rel="noopener">learn</a></th>
+            <td>garrytan/gstack</td><td>Show, search or record what the agent learned about this project, without changing code.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/modernize/SKILL.md" rel="noopener">modernize</a></th>
+            <td>garrytan/gstack</td><td>Take an old PR and decide MODERNIZE, REWORK or CLOSE; rebase and prove intent survived.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/office-hours/SKILL.md" rel="noopener">office-hours</a></th>
+            <td>garrytan/gstack</td><td>Founder-style questioning to pin down the real problem and write a design doc, no code yet.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/open-gstack-browser/SKILL.md" rel="noopener">open-gstack-browser</a></th>
+            <td>garrytan/gstack</td><td>Open an AI-driven Chromium window with a sidebar, where you can watch each agent action live.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/openclaw/skills/gstack-openclaw-investigate/SKILL.md" rel="noopener">gstack-openclaw-investigate</a></th>
+            <td>garrytan/gstack</td><td>Root-cause debugging for the OpenClaw agent: no fix before you know why it broke.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/plan-ceo-review/SKILL.md" rel="noopener">plan-ceo-review</a></th>
+            <td>garrytan/gstack</td><td>Review a plan like a founder: expand, hold or cut scope, and test edge cases and failure paths.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/plan-design-review/SKILL.md" rel="noopener">plan-design-review</a></th>
+            <td>garrytan/gstack</td><td>Review a plan's UI and design choices before building, interactively, with scores.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/plan-devex-review/SKILL.md" rel="noopener">plan-devex-review</a></th>
+            <td>garrytan/gstack</td><td>Review a plan for developer experience: SDK, CLI help, getting started, onboarding.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/plan-eng-review/SKILL.md" rel="noopener">plan-eng-review</a></th>
+            <td>garrytan/gstack</td><td>Review a plan like an eng manager: scope, architecture, tests, edge cases, with a test diagram.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/plan-tune/SKILL.md" rel="noopener">plan-tune</a></th>
+            <td>garrytan/gstack</td><td>See and tune how often gstack asks you questions, and view your inferred developer profile.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/qa/SKILL.md" rel="noopener">qa</a></th>
+            <td>garrytan/gstack</td><td>Test the app (browser, API, CLI, jobs, webhooks), fix the bugs found, and verify the fixes.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/qa-only/SKILL.md" rel="noopener">qa-only</a></th>
+            <td>garrytan/gstack</td><td>Same QA, report only: reproducible bugs with evidence, and no code or test changes.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/retro/SKILL.md" rel="noopener">retro</a></th>
+            <td>garrytan/gstack</td><td>Weekly engineering retro from commit history: work patterns, quality and per-person notes.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/review/SKILL.md" rel="noopener">review</a></th>
+            <td>garrytan/gstack</td><td>Pre-merge review of your branch diff for structural bugs that tests miss.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/scrape/SKILL.md" rel="noopener">scrape</a></th>
+            <td>garrytan/gstack</td><td>Pull data from a web page through your signed-in browser and return it as one JSON document.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/setup-browser-cookies/SKILL.md" rel="noopener">setup-browser-cookies</a></th>
+            <td>garrytan/gstack</td><td>Import your real browser cookies into the headless browser so it can test pages behind login.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/setup-deploy/SKILL.md" rel="noopener">setup-deploy</a></th>
+            <td>garrytan/gstack</td><td>Detect your deploy platform, prod URL and health checks, and save them to CLAUDE.md for /land-and-deploy.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/setup-gbrain/SKILL.md" rel="noopener">setup-gbrain</a></th>
+            <td>garrytan/gstack</td><td>Install gbrain, a persistent knowledge base, and wire it to your coding agent as CLI and MCP.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ship/SKILL.md" rel="noopener">ship</a></th>
+            <td>garrytan/gstack</td><td>One flow: merge base, run tests, review diff, bump version, update changelog, commit, push, open PR.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/skillify/SKILL.md" rel="noopener">skillify</a></th>
+            <td>garrytan/gstack</td><td>Turn the last successful scrape into a saved browser skill that reruns in about 200ms.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/spec/SKILL.md" rel="noopener">spec</a></th>
+            <td>garrytan/gstack</td><td>Interrogate a vague request in five phases until it becomes a precise, backlog-ready spec issue.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/sync-gbrain/SKILL.md" rel="noopener">sync-gbrain</a></th>
+            <td>garrytan/gstack</td><td>Refresh gbrain with this repo's code and update CLAUDE.md so the agent searches the brain.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/test-audit/SKILL.md" rel="noopener">test-audit</a></th>
+            <td>garrytan/gstack</td><td>Find low-value or duplicate tests across the repo, prove it, and retire them in approved batches.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/ubicloud/SKILL.md" rel="noopener">ubicloud</a></th>
+            <td>garrytan/gstack</td><td>Run a heavy test suite, build or eval on a short-lived 16-vCPU cloud VM with a timer and cleanup.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/unfreeze/SKILL.md" rel="noopener">unfreeze</a></th>
+            <td>garrytan/gstack</td><td>Remove the /freeze edit lock so the agent can edit all directories again.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/garrytan/gstack/blob/HEAD/write-skill/SKILL.md" rel="noopener">write-skill</a></th>
+            <td>garrytan/gstack</td><td>Write or trim a skill without bloat: edit ladder, size checks and drift checks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/ask-matt/SKILL.md" rel="noopener">ask-matt</a></th>
+            <td>mattpocock/skills</td><td>Router: tells you which skill or flow to use, from idea to ship, for your situation.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/code-review/SKILL.md" rel="noopener">code-review</a></th>
+            <td>mattpocock/skills</td><td>Review changes since a commit two ways at once: coding standards and does it match the spec.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/codebase-design/SKILL.md" rel="noopener">codebase-design</a></th>
+            <td>mattpocock/skills</td><td>Shared words and rules for deep modules: small interface, lots of behaviour, clean seams.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/diagnosing-bugs/SKILL.md" rel="noopener">diagnosing-bugs</a></th>
+            <td>mattpocock/skills</td><td>Debug hard bugs and slowdowns by building a tight pass/fail feedback loop first.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/domain-modeling/SKILL.md" rel="noopener">domain-modeling</a></th>
+            <td>mattpocock/skills</td><td>Build and sharpen the project's domain language: write GLOSSARY.md and decision records (ADRs).</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/grill-with-docs/SKILL.md" rel="noopener">grill-with-docs</a></th>
+            <td>mattpocock/skills</td><td>Get grilled on your plan, while the agent writes the glossary and ADRs as you go.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/implement-spec/SKILL.md" rel="noopener">implement-spec</a></th>
+            <td>mattpocock/skills</td><td>Implement a whole spec and its tickets on one integration branch, with sub-agents on the ready tickets.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/implement/SKILL.md" rel="noopener">implement</a></th>
+            <td>mattpocock/skills</td><td>Build one ticket or spec with TDD, typecheck often, then run code review and commit.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/improve-codebase-architecture/SKILL.md" rel="noopener">improve-codebase-architecture</a></th>
+            <td>mattpocock/skills</td><td>Find shallow modules worth deepening, show them in an HTML report, then talk through the one you pick.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/pr/SKILL.md" rel="noopener">pr</a></th>
+            <td>mattpocock/skills</td><td>Template for a PR body: summary diagram, before/after evidence, how risky the merge is.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/prototype/SKILL.md" rel="noopener">prototype</a></th>
+            <td>mattpocock/skills</td><td>Make throwaway code that answers a design question: a state-logic page or several UI variants.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/research/SKILL.md" rel="noopener">research</a></th>
+            <td>mattpocock/skills</td><td>Send a background agent to read primary sources and save the findings, with citations, as Markdown.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/retro/SKILL.md" rel="noopener">retro</a></th>
+            <td>mattpocock/skills</td><td>Review a coding session and suggest fixes to the agent's setup: navigation, checks, standards, AGENTS.md.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/setup-matt-pocock-skills/SKILL.md" rel="noopener">setup-matt-pocock-skills</a></th>
+            <td>mattpocock/skills</td><td>One-time repo setup for these skills: issue tracker, triage labels, where glossary and ADRs live.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/tdd/SKILL.md" rel="noopener">tdd</a></th>
+            <td>mattpocock/skills</td><td>Red-green TDD with tests at agreed seams that check behaviour through public interfaces.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/to-spec/SKILL.md" rel="noopener">to-spec</a></th>
+            <td>mattpocock/skills</td><td>Turn the current chat into a spec and publish it to the issue tracker, no more interview.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/to-tickets/SKILL.md" rel="noopener">to-tickets</a></th>
+            <td>mattpocock/skills</td><td>Split a plan or spec into thin vertical tickets, each saying which tickets block it.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/triage/SKILL.md" rel="noopener">triage</a></th>
+            <td>mattpocock/skills</td><td>Move issues and outside PRs through triage states, check them, and write briefs agents can follow.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/wayfinder/SKILL.md" rel="noopener">wayfinder</a></th>
+            <td>mattpocock/skills</td><td>Plan a job too big for one session as a map of decision tickets, settled one by one.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/engineering/wizard/SKILL.md" rel="noopener">wizard</a></th>
+            <td>mattpocock/skills</td><td>Make a bash wizard that walks a human through manual steps: cloud setup, secrets, a cutover.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/misc/git-guardrails-claude-code/SKILL.md" rel="noopener">git-guardrails-claude-code</a></th>
+            <td>mattpocock/skills</td><td>Add a Claude Code hook that blocks git push, reset --hard, clean -f, branch -D and similar.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/misc/migrate-to-shoehorn/SKILL.md" rel="noopener">migrate-to-shoehorn</a></th>
+            <td>mattpocock/skills</td><td>Swap `as` type casts in tests for @total-typescript/shoehorn so partial test data stays type-safe.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/misc/setup-pre-commit/SKILL.md" rel="noopener">setup-pre-commit</a></th>
+            <td>mattpocock/skills</td><td>Set up Husky pre-commit with lint-staged Prettier, typecheck and tests.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/in-progress/setup-ts-deep-modules/SKILL.md" rel="noopener">setup-ts-deep-modules</a></th>
+            <td>mattpocock/skills</td><td>Wire dependency-cruiser into a TypeScript repo so each package hides its insides behind entry points.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/productivity/grill-me/SKILL.md" rel="noopener">grill-me</a></th>
+            <td>mattpocock/skills</td><td>Get interviewed hard about your plan or design until everything is clear.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/productivity/grilling/SKILL.md" rel="noopener">grilling</a></th>
+            <td>mattpocock/skills</td><td>Question the user round by round down a decision tree, with a suggested answer for each question.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/productivity/handoff/SKILL.md" rel="noopener">handoff</a></th>
+            <td>mattpocock/skills</td><td>Compact this chat into a handoff doc another agent can pick up, with secrets removed.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/mattpocock/skills/blob/HEAD/skills/productivity/writing-for-agents/SKILL.md" rel="noopener">writing-for-agents</a></th>
+            <td>mattpocock/skills</td><td>Style guide for docs agents read: skills, AGENTS.md and CLAUDE.md, with context pointers.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/gh-pr-review-buttons/SKILL.md" rel="noopener">gh-pr-review-buttons</a></th>
+            <td>odykyi/gh-skills</td><td>Add 'Review this PR in' Grok, Claude and Codex buttons to PR descriptions through a GitHub Action.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/gh-prioritizer/SKILL.md" rel="noopener">gh-prioritizer</a></th>
+            <td>odykyi/gh-skills</td><td>Set priorities on PRs and issues in a GitHub Project from labels, size and impact.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/gh-project-orchestrator/SKILL.md" rel="noopener">gh-project-orchestrator</a></th>
+            <td>odykyi/gh-skills</td><td>Create and manage GitHub Projects (V2) and link issues and PRs to track a big integration.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-commenter/SKILL.md" rel="noopener">pr-commenter</a></th>
+            <td>odykyi/gh-skills</td><td>Post line comments, general comments and thread replies on PRs, and resolve threads.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-feedback-handler/SKILL.md" rel="noopener">pr-feedback-handler</a></th>
+            <td>odykyi/gh-skills</td><td>Go through PR review comments and either fix each one or reply with the reason you won't.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-initiative-driver/SKILL.md" rel="noopener">pr-initiative-driver</a></th>
+            <td>odykyi/gh-skills</td><td>Loop over sub-sessions and PRs: decide, nudge each, merge only ready PRs, verify done claims.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-labeler/SKILL.md" rel="noopener">pr-labeler</a></th>
+            <td>odykyi/gh-skills</td><td>Auto-label PRs from the branch name, changed files and diff size; check label hygiene in bulk.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-manager/SKILL.md" rel="noopener">pr-manager</a></th>
+            <td>odykyi/gh-skills</td><td>Run 20+ PRs in parallel with strict done rules, using opener, reviewer, feedback and merger helpers.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-merger/SKILL.md" rel="noopener">pr-merger</a></th>
+            <td>odykyi/gh-skills</td><td>Merge approved PRs safely: verify CI, handle conflicts, clean up worktree and branch.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-opener/SKILL.md" rel="noopener">pr-opener</a></th>
+            <td>odykyi/gh-skills</td><td>Open a PR that has a linked issue, a clear description and what to verify.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-queue-digest/SKILL.md" rel="noopener">pr-queue-digest</a></th>
+            <td>odykyi/gh-skills</td><td>Read-only one-screen digest of open PRs: blocked, waiting on review, green and ready, no issue.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-reviewer/SKILL.md" rel="noopener">pr-reviewer</a></th>
+            <td>odykyi/gh-skills</td><td>Review a PR for quality, security and performance, and post structured findings through gh.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-workflow-orchestrator/SKILL.md" rel="noopener">pr-workflow-orchestrator</a></th>
+            <td>odykyi/gh-skills</td><td>Take one task end to end: worktree, PR, handle feedback, merge; never leave a PR unattended.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/odykyi/gh-skills/blob/HEAD/skills/pr-worktree/SKILL.md" rel="noopener">pr-worktree</a></th>
+            <td>odykyi/gh-skills</td><td>Use git worktrees only (never checkout) to give each PR its own folder and clean it up after.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/react-best-practices/SKILL.md" rel="noopener">vercel-react-best-practices</a></th>
+            <td>vercel-labs/agent-skills</td><td>70 rules from Vercel to make React and Next.js apps fast. Fixes waterfalls and big bundles.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/composition-patterns/SKILL.md" rel="noopener">vercel-composition-patterns</a></th>
+            <td>vercel-labs/agent-skills</td><td>Fix React components that have too many boolean props. Use compound components and context instead.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/react-view-transitions/SKILL.md" rel="noopener">vercel-react-view-transitions</a></th>
+            <td>vercel-labs/agent-skills</td><td>Add smooth page and element animations with the React View Transition API.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/deploy-to-vercel/SKILL.md" rel="noopener">deploy-to-vercel</a></th>
+            <td>vercel-labs/agent-skills</td><td>Deploy any project to Vercel as a preview, and get it linked for git-push deploys.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/vercel-cli-with-tokens/SKILL.md" rel="noopener">vercel-cli-with-tokens</a></th>
+            <td>vercel-labs/agent-skills</td><td>Use the Vercel CLI with an access token instead of interactive login. Good for agents and CI.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/vercel-optimize/SKILL.md" rel="noopener">vercel-optimize</a></th>
+            <td>vercel-labs/agent-skills</td><td>Cut Vercel cost and speed problems. Starts from real metrics, then looks only at code that metrics flag.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-skills/blob/HEAD/skills/web-design-guidelines/SKILL.md" rel="noopener">web-design-guidelines</a></th>
+            <td>vercel-labs/agent-skills</td><td>Check UI code against Vercel's Web Interface Guidelines. Reports file:line findings.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-browser/blob/HEAD/skills/agent-browser/SKILL.md" rel="noopener">agent-browser</a></th>
+            <td>vercel-labs/agent-browser</td><td>Drive a real Chrome from the CLI to click, fill forms, snapshot pages and test web apps.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/vercel-labs/agent-browser/blob/HEAD/skill-data/dogfood/SKILL.md" rel="noopener">dogfood</a></th>
+            <td>vercel-labs/agent-browser</td><td>Explore a web app like a user, find bugs and UX issues, and write a report with repro evidence.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/semgrep-rule-creator/skills/semgrep-rule-creator/SKILL.md" rel="noopener">semgrep-rule-creator</a></th>
+            <td>trailofbits/skills</td><td>Write Semgrep rules that catch a bug pattern across your code, with tests for hits and misses.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/differential-review/skills/differential-review/SKILL.md" rel="noopener">differential-review</a></th>
+            <td>trailofbits/skills</td><td>Security review of a PR or diff. Uses git history and caller count, and writes a markdown report.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/variant-analysis/skills/variant-analysis/SKILL.md" rel="noopener">variant-analysis</a></th>
+            <td>trailofbits/skills</td><td>After finding one bug, hunt for every other place the same root cause hides in the codebase.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/supply-chain-risk-auditor/skills/supply-chain-risk-auditor/SKILL.md" rel="noopener">supply-chain-risk-auditor</a></th>
+            <td>trailofbits/skills</td><td>Audit dependencies for advisories, dead upstreams, single maintainers and install scripts.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/property-based-testing/skills/property-based-testing/SKILL.md" rel="noopener">property-based-testing</a></th>
+            <td>trailofbits/skills</td><td>Write property-based tests (Hypothesis, fast-check, proptest) that check rules over all inputs.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/mutation-testing/skills/mutation-testing/SKILL.md" rel="noopener">mutation-testing</a></th>
+            <td>trailofbits/skills</td><td>Set up mewt or muton mutation runs and study surviving mutants to find test gaps and bugs.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/static-analysis/skills/codeql/SKILL.md" rel="noopener">codeql</a></th>
+            <td>trailofbits/skills</td><td>Scan a repo with CodeQL data-flow and taint analysis, with checks that the database is good.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/static-analysis/skills/semgrep/SKILL.md" rel="noopener">semgrep</a></th>
+            <td>trailofbits/skills</td><td>Run a Semgrep scan with auto-picked rulesets, an approval gate and merged SARIF output.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/static-analysis/skills/sarif-parsing/SKILL.md" rel="noopener">sarif-parsing</a></th>
+            <td>trailofbits/skills</td><td>Read, dedupe and summarize SARIF files from CodeQL, Semgrep and other scanners.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/agentic-actions-auditor/skills/agentic-actions-auditor/SKILL.md" rel="noopener">agentic-actions-auditor</a></th>
+            <td>trailofbits/skills</td><td>Audit GitHub Actions workflows that run AI agents for prompt injection and unsafe inputs.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/fp-check/skills/fp-check/SKILL.md" rel="noopener">fp-check</a></th>
+            <td>trailofbits/skills</td><td>Check if a suspected security bug is real. Gives true or false positive with evidence.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/sharp-edges/skills/sharp-edges/SKILL.md" rel="noopener">sharp-edges</a></th>
+            <td>trailofbits/skills</td><td>Spot error-prone APIs, risky config options and footgun designs that invite security mistakes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/review-walkthrough/skills/review-walkthrough/SKILL.md" rel="noopener">review-walkthrough</a></th>
+            <td>trailofbits/skills</td><td>Turn the current branch into an HTML walkthrough, split in logical steps with review findings.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/patching-bugs/skills/reproduce-bug/SKILL.md" rel="noopener">reproduce-bug</a></th>
+            <td>trailofbits/skills</td><td>Reproduce a reported runtime or compiler bug on a local checkout and save raw evidence.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/devcontainer-setup/skills/devcontainer-setup/SKILL.md" rel="noopener">devcontainer-setup</a></th>
+            <td>trailofbits/skills</td><td>Create a devcontainer with Claude Code and language tooling, for a safe sandboxed dev setup.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/modern-python/skills/modern-python/SKILL.md" rel="noopener">modern-python</a></th>
+            <td>trailofbits/skills</td><td>Set up Python projects with uv, ruff and ty. Move off pip, Poetry, mypy and black.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/gh-cli/skills/gh-cli/SKILL.md" rel="noopener">gh-cli</a></th>
+            <td>trailofbits/skills</td><td>Use the authenticated gh CLI for GitHub URLs, PRs and issues, not curl or web fetch.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/trailofbits/skills/blob/HEAD/plugins/open-sourcing/skills/open-sourcing/SKILL.md" rel="noopener">open-sourcing</a></th>
+            <td>trailofbits/skills</td><td>Get a repo ready to go public. Secrets audit, license, docs, packaging and release automation.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/code-review/SKILL.md" rel="noopener">code-review</a></th>
+            <td>getsentry/skills</td><td>Review pull requests the Sentry way. Checks security, performance, tests and design.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/find-bugs/SKILL.md" rel="noopener">find-bugs</a></th>
+            <td>getsentry/skills</td><td>Hunt bugs, security holes and quality issues in the changes on the current branch.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/commit/SKILL.md" rel="noopener">commit</a></th>
+            <td>getsentry/skills</td><td>Write Sentry-style conventional commit messages with issue references.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/create-branch/SKILL.md" rel="noopener">create-branch</a></th>
+            <td>getsentry/skills</td><td>Make a git branch with Sentry naming rules from your description or current diff.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/iterate-pr/SKILL.md" rel="noopener">iterate-pr</a></th>
+            <td>getsentry/skills</td><td>Loop on a PR until CI is green and the important review comments are fixed.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/pr-writer/SKILL.md" rel="noopener">pr-writer</a></th>
+            <td>getsentry/skills</td><td>Write the PR title and body as a cover note for reviewers, not a changelog.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/security-review/SKILL.md" rel="noopener">security-review</a></th>
+            <td>getsentry/skills</td><td>Review code for OWASP-style holes like injection, XSS, auth and authorization flaws.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/gha-security-review/SKILL.md" rel="noopener">gha-security-review</a></th>
+            <td>getsentry/skills</td><td>Review GitHub Actions workflows for exploit paths like injection and token theft.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/django-access-review/SKILL.md" rel="noopener">django-access-review</a></th>
+            <td>getsentry/skills</td><td>Review Django views and DRF viewsets for broken access control and IDOR.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/django-perf-review/SKILL.md" rel="noopener">django-perf-review</a></th>
+            <td>getsentry/skills</td><td>Review Django code for N+1 queries and other slow ORM patterns.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/code-simplifier/SKILL.md" rel="noopener">code-simplifier</a></th>
+            <td>getsentry/skills</td><td>Clean up recently changed code for clarity and consistency without changing what it does.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/agents-md/SKILL.md" rel="noopener">agents-md</a></th>
+            <td>getsentry/skills</td><td>Write and keep short AGENTS.md and CLAUDE.md files that tell coding agents how your repo works.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/doc-coauthoring/SKILL.md" rel="noopener">doc-coauthoring</a></th>
+            <td>getsentry/skills</td><td>Walk through writing a spec, proposal or decision doc in stages with the user.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/getsentry/skills/blob/HEAD/skills/document-api-endpoint/SKILL.md" rel="noopener">document-api-endpoint</a></th>
+            <td>getsentry/skills</td><td>Document and type a Sentry API endpoint with schema decorators and response types.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-test/SKILL.md" rel="noopener">terraform-test</a></th>
+            <td>hashicorp/agent-skills</td><td>Write and run Terraform tests (.tftest.hcl) with run blocks, assertions and mock providers.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-style-guide/SKILL.md" rel="noopener">terraform-style-guide</a></th>
+            <td>hashicorp/agent-skills</td><td>Write or review Terraform HCL following HashiCorp's own style rules.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/refactor-module/SKILL.md" rel="noopener">refactor-module</a></th>
+            <td>hashicorp/agent-skills</td><td>Break one huge Terraform config into clean reusable modules.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-stacks/SKILL.md" rel="noopener">terraform-stacks</a></th>
+            <td>hashicorp/agent-skills</td><td>Write and check Terraform Stacks files (.tfcomponent.hcl, .tfdeploy.hcl) for multi-env deploys.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/run-acceptance-tests/SKILL.md" rel="noopener">run-acceptance-tests</a></th>
+            <td>hashicorp/agent-skills</td><td>Run acceptance tests for a Terraform provider and debug missing env vars and failures.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/provider-test-patterns/SKILL.md" rel="noopener">provider-test-patterns</a></th>
+            <td>hashicorp/agent-skills</td><td>Write Terraform provider acceptance tests with terraform-plugin-testing and state checks.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-policy/SKILL.md" rel="noopener">terraform-policy</a></th>
+            <td>hashicorp/agent-skills</td><td>Write, test and convert Terraform Policy files (.policy.hcl), including Sentinel to tfpolicy.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-search-import/SKILL.md" rel="noopener">terraform-search-import</a></th>
+            <td>hashicorp/agent-skills</td><td>Find existing cloud resources with Terraform Search and bulk import them into Terraform.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/packer/skills/aws-ami-builder/SKILL.md" rel="noopener">aws-ami-builder</a></th>
+            <td>hashicorp/agent-skills</td><td>Build custom AWS AMIs with Packer's amazon-ebs builder.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/cloudflare/SKILL.md" rel="noopener">cloudflare</a></th>
+            <td>cloudflare/skills</td><td>Pick the right Cloudflare products for an app, API, agent or storage need, then build with them.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/wrangler/SKILL.md" rel="noopener">wrangler</a></th>
+            <td>cloudflare/skills</td><td>Run and fix Wrangler CLI commands for dev, deploy and resources in projects with a wrangler config.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/workers-best-practices/SKILL.md" rel="noopener">workers-best-practices</a></th>
+            <td>cloudflare/skills</td><td>Write and review Cloudflare Workers code for production, using fresh docs instead of memory.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/workers-profiling/SKILL.md" rel="noopener">workers-profiling</a></th>
+            <td>cloudflare/skills</td><td>Profile CPU and memory of deployed Workers and Durable Objects to find what to optimize.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/web-perf/SKILL.md" rel="noopener">web-perf</a></th>
+            <td>cloudflare/skills</td><td>Audit a site's loading speed, Core Web Vitals and Lighthouse score, then fix the causes.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/cloudflare/skills/blob/HEAD/skills/durable-objects/SKILL.md" rel="noopener">durable-objects</a></th>
+            <td>cloudflare/skills</td><td>Build, debug or review Cloudflare Durable Objects for state and coordination.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/supabase/agent-skills/blob/HEAD/skills/supabase/SKILL.md" rel="noopener">supabase</a></th>
+            <td>supabase/agent-skills</td><td>Do any Supabase task (DB, Auth, Edge Functions, Storage, Realtime) with docs checked first.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/supabase/agent-skills/blob/HEAD/skills/supabase-postgres-best-practices/SKILL.md" rel="noopener">supabase-postgres-best-practices</a></th>
+            <td>supabase/agent-skills</td><td>Postgres rules for schema, indexes, queries and RLS, loaded before you touch the database.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/stripe/ai/blob/HEAD/skills/stripe-best-practices/SKILL.md" rel="noopener">stripe-best-practices</a></th>
+            <td>stripe/ai</td><td>Make good Stripe integration choices. API picks, sandboxes, Connect setup, latest SDK versions.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/stripe/ai/blob/HEAD/skills/upgrade-stripe/SKILL.md" rel="noopener">upgrade-stripe</a></th>
+            <td>stripe/ai</td><td>Upgrade Stripe API version, webhooks and SDKs step by step.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/stripe/ai/blob/HEAD/skills/stripe-projects/SKILL.md" rel="noopener">stripe-projects</a></th>
+            <td>stripe/ai</td><td>Provision a database, auth, hosting or cache for a project through Stripe Projects.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/gh-fix-ci/SKILL.md" rel="noopener">gh-fix-ci</a></th>
+            <td>openai/skills</td><td>Read failing GitHub Actions checks on a PR, find the cause, and fix it after you approve.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/gh-address-comments/SKILL.md" rel="noopener">gh-address-comments</a></th>
+            <td>openai/skills</td><td>Find the open PR for your branch and work through its review comments with gh.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/yeet/SKILL.md" rel="noopener">yeet</a></th>
+            <td>openai/skills</td><td>Stage, commit, push and open a GitHub PR in one go. Only when you ask for it.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/security-best-practices/SKILL.md" rel="noopener">security-best-practices</a></th>
+            <td>openai/skills</td><td>Language and framework specific security review with fixes, when you ask for a secure-by-default pass.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/security-threat-model/SKILL.md" rel="noopener">security-threat-model</a></th>
+            <td>openai/skills</td><td>Write a threat model for a repo. Trust boundaries, assets, attacker paths and mitigations.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/playwright/SKILL.md" rel="noopener">playwright</a></th>
+            <td>openai/skills</td><td>Automate a real browser from the terminal with playwright-cli to click, snapshot and debug UI flows.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/netlify-deploy/SKILL.md" rel="noopener">netlify-deploy</a></th>
+            <td>openai/skills</td><td>Deploy web projects to Netlify with the CLI, preview or production.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/sentry/SKILL.md" rel="noopener">sentry</a></th>
+            <td>openai/skills</td><td>Read Sentry issues and recent production errors with the sentry CLI, read-only.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/openai/skills/blob/HEAD/skills/.curated/cli-creator/SKILL.md" rel="noopener">cli-creator</a></th>
+            <td>openai/skills</td><td>Build a composable CLI from API docs, OpenAPI, curl examples or a script.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/neondatabase/agent-skills/blob/HEAD/skills/neon-postgres/SKILL.md" rel="noopener">neon-postgres</a></th>
+            <td>neondatabase/agent-skills</td><td>Work with Neon Postgres. Connections, migrations, branching, autoscaling and slow query checks.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/neondatabase/agent-skills/blob/HEAD/skills/neon-postgres-branches/SKILL.md" rel="noopener">neon-postgres-branches</a></th>
+            <td>neondatabase/agent-skills</td><td>Pick and create the right Neon branch for testing migrations or safe dev data.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/neondatabase/agent-skills/blob/HEAD/skills/neon-postgres-egress-optimizer/SKILL.md" rel="noopener">neon-postgres-egress-optimizer</a></th>
+            <td>neondatabase/agent-skills</td><td>Find and cut big Postgres network egress, the cause of high database bills.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/expo/skills/blob/HEAD/plugins/expo/skills/eas-update/SKILL.md" rel="noopener">eas-update</a></th>
+            <td>expo/skills</td><td>Set up and publish over-the-air updates with EAS Update and expo-updates.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/expo/skills/blob/HEAD/plugins/expo/skills/eas-workflows/SKILL.md" rel="noopener">eas-workflows</a></th>
+            <td>expo/skills</td><td>Write EAS workflow YAML for Expo CI/CD build and deploy pipelines.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/expo/skills/blob/HEAD/plugins/expo/skills/expo-upgrade/SKILL.md" rel="noopener">expo-upgrade</a></th>
+            <td>expo/skills</td><td>Upgrade the Expo SDK version and fix dependency issues that follow.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/expo/skills/blob/HEAD/plugins/expo/skills/expo-dev-client/SKILL.md" rel="noopener">expo-dev-client</a></th>
+            <td>expo/skills</td><td>Build and share Expo development clients locally or through TestFlight for internal testing.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/expo/skills/blob/HEAD/plugins/expo/skills/eas-observe/SKILL.md" rel="noopener">eas-observe</a></th>
+            <td>expo/skills</td><td>Add expo-observe to track startup, navigation speed, JS errors and native crashes in production.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/callstackincubator/agent-skills/blob/HEAD/skills/react-native-best-practices/SKILL.md" rel="noopener">react-native-best-practices</a></th>
+            <td>callstackincubator/agent-skills</td><td>Fix React Native speed issues. FPS, startup, bundle size, memory leaks and re-renders.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/callstackincubator/agent-skills/blob/HEAD/skills/github-actions/SKILL.md" rel="noopener">github-actions</a></th>
+            <td>callstackincubator/agent-skills</td><td>GitHub Actions for React Native iOS simulator and Android emulator builds with downloadable artifacts.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/callstackincubator/agent-skills/blob/HEAD/skills/upgrading-react-native/SKILL.md" rel="noopener">upgrading-react-native</a></th>
+            <td>callstackincubator/agent-skills</td><td>Upgrade a React Native app using template diffs, native config changes and breaking-change fixes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/callstackincubator/agent-skills/blob/HEAD/plugins/vendored/.agents/skills/react-native-testing/SKILL.md" rel="noopener">react-native-testing</a></th>
+            <td>callstackincubator/agent-skills</td><td>Write and fix React Native component tests with React Native Testing Library v13 and v14.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/callstackincubator/agent-skills/blob/HEAD/skills/writing-user-docs/SKILL.md" rel="noopener">writing-user-docs</a></th>
+            <td>callstackincubator/agent-skills</td><td>House style for user-facing docs. Voice, scope, structure and what to cut.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/firebase/agent-skills/blob/HEAD/skills/firebase-security-rules-auditor/SKILL.md" rel="noopener">firebase-security-rules-auditor</a></th>
+            <td>firebase/agent-skills</td><td>Audit Firestore and Storage rules for privilege escalation, update bypass and missing checks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/firebase/agent-skills/blob/HEAD/skills/firestore-rules-creation/SKILL.md" rel="noopener">firestore-rules-creation</a></th>
+            <td>firebase/agent-skills</td><td>Design and harden production Cloud Firestore security rules from your codebase.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/firebase/agent-skills/blob/HEAD/skills/firebase-crashlytics/SKILL.md" rel="noopener">firebase-crashlytics</a></th>
+            <td>firebase/agent-skills</td><td>Set up Crashlytics crash reporting and read crash data for Android and iOS apps.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/firebase/agent-skills/blob/HEAD/skills/firebase-hosting-basics/SKILL.md" rel="noopener">firebase-hosting-basics</a></th>
+            <td>firebase/agent-skills</td><td>Deploy static sites and SPAs to Firebase Hosting and set redirects, rewrites and headers.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/langchain-ai/langchain-skills/blob/HEAD/config/skills/eval-engineering/SKILL.md" rel="noopener">eval-engineering</a></th>
+            <td>langchain-ai/langchain-skills</td><td>Build evals for an agent repo. Inspect traces, write task specs and audit Harbor tasks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/langchain-ai/langchain-skills/blob/HEAD/config/skills/langchain-fundamentals/SKILL.md" rel="noopener">langchain-fundamentals</a></th>
+            <td>langchain-ai/langchain-skills</td><td>Build LangChain agents with create_agent, tools and middleware.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/langchain-ai/langchain-skills/blob/HEAD/config/skills/langgraph-human-in-the-loop/SKILL.md" rel="noopener">langgraph-human-in-the-loop</a></th>
+            <td>langchain-ai/langchain-skills</td><td>Pause a LangGraph run for human approval with interrupt and resume, and handle errors.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/prisma/skills/blob/HEAD/prisma-cli/SKILL.md" rel="noopener">prisma-cli</a></th>
+            <td>prisma/skills</td><td>Prisma ORM 7 CLI reference for init, generate, migrate, db and studio commands.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/prisma/skills/blob/HEAD/prisma-client-api/SKILL.md" rel="noopener">prisma-client-api</a></th>
+            <td>prisma/skills</td><td>Prisma Client query reference. CRUD, filters, operators and relations.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/prisma/skills/blob/HEAD/prisma-upgrade-v7/SKILL.md" rel="noopener">prisma-upgrade-v7</a></th>
+            <td>prisma/skills</td><td>Migrate from Prisma ORM 6 to 7 and fix every breaking change.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/prisma/skills/blob/HEAD/prisma-orm-setup/SKILL.md" rel="noopener">prisma-orm-setup</a></th>
+            <td>prisma/skills</td><td>Set up Prisma ORM in an app or repair a broken database connection.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/better-auth/skills/blob/HEAD/better-auth/best-practices/SKILL.md" rel="noopener">better-auth-best-practices</a></th>
+            <td>better-auth/skills</td><td>Set up Better Auth server and client, DB adapters, sessions and plugins in TypeScript apps.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/better-auth/skills/blob/HEAD/security/SKILL.md" rel="noopener">better-auth-security-best-practices</a></th>
+            <td>better-auth/skills</td><td>Harden Better Auth. Rate limits, secrets, CSRF, trusted origins, cookies and audit logs.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/microsoft/azure-skills/blob/HEAD/.github/plugins/azure-skills/skills/azure-diagnostics/SKILL.md" rel="noopener">azure-diagnostics</a></th>
+            <td>microsoft/azure-skills</td><td>Debug Azure production issues with AppLens, Azure Monitor and resource health.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/microsoft/azure-skills/blob/HEAD/.github/plugins/azure-skills/skills/azure-deploy/SKILL.md" rel="noopener">azure-deploy</a></th>
+            <td>microsoft/azure-skills</td><td>Run azd, terraform or az deployments for an app that already has a validated plan.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/microsoft/azure-skills/blob/HEAD/.github/plugins/azure-skills/skills/appinsights-instrumentation/SKILL.md" rel="noopener">appinsights-instrumentation</a></th>
+            <td>microsoft/azure-skills</td><td>Guide for adding Azure Application Insights telemetry to a web app.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/microsoft/skills/blob/HEAD/.github/skills/mcp-builder/SKILL.md" rel="noopener">mcp-builder</a></th>
+            <td>microsoft/skills</td><td>Build good MCP servers that let LLMs use an external API through well-made tools.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/microsoft/skills/blob/HEAD/.github/skills/github-issue-creator/SKILL.md" rel="noopener">github-issue-creator</a></th>
+            <td>microsoft/skills</td><td>Turn raw notes, error logs or screenshots into a clean GitHub issue.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/google-gemini/gemini-skills/blob/HEAD/skills/gemini-api-dev/SKILL.md" rel="noopener">gemini-api-dev</a></th>
+            <td>google-gemini/gemini-skills</td><td>Write code that calls the Gemini API. Text, chat, multimodal, streaming and more, with current rules.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/google/agents-cli/blob/HEAD/skills/google-agents-cli-eval/SKILL.md" rel="noopener">google-agents-cli-eval</a></th>
+            <td>google/agents-cli</td><td>Run and analyze evals for an ADK agent with agents-cli. Datasets, failures and comparisons.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/google/agents-cli/blob/HEAD/skills/google-agents-cli-deploy/SKILL.md" rel="noopener">google-agents-cli-deploy</a></th>
+            <td>google/agents-cli</td><td>Deploy an ADK agent to Agent Runtime, Cloud Run or GKE, with CI/CD and secrets.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/shadcn-ui/ui/blob/HEAD/skills/shadcn/SKILL.md" rel="noopener">shadcn</a></th>
+            <td>shadcn-ui/ui</td><td>Add, search, fix and compose shadcn/ui components with project-aware rules.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/huggingface/skills/blob/HEAD/skills/hf-cli/SKILL.md" rel="noopener">hf-cli</a></th>
+            <td>huggingface/skills</td><td>Use the hf CLI to download, upload and manage models, datasets, Spaces and jobs on the Hub.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/huggingface/skills/blob/HEAD/skills/huggingface-trackio/SKILL.md" rel="noopener">huggingface-trackio</a></th>
+            <td>huggingface/skills</td><td>Track ML training runs with Trackio. Log metrics, fire alerts and read results from the CLI.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/python-development/skills/python-testing-patterns/SKILL.md" rel="noopener">python-testing-patterns</a></th>
+            <td>wshobson/agents</td><td>Write good pytest tests with fixtures, mocks, parametrize and coverage.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/javascript-typescript/skills/javascript-testing-patterns/SKILL.md" rel="noopener">javascript-testing-patterns</a></th>
+            <td>wshobson/agents</td><td>Set up Jest or Vitest tests with mocks, fixtures and Testing Library.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/e2e-testing-patterns/SKILL.md" rel="noopener">e2e-testing-patterns</a></th>
+            <td>wshobson/agents</td><td>Build stable Playwright or Cypress E2E tests and fix flaky ones.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/shell-scripting/skills/bats-testing-patterns/SKILL.md" rel="noopener">bats-testing-patterns</a></th>
+            <td>wshobson/agents</td><td>Test shell scripts with Bats, helpers, fixtures and CI wiring.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/debugging-strategies/SKILL.md" rel="noopener">debugging-strategies</a></th>
+            <td>wshobson/agents</td><td>Debug step by step: reproduce, gather facts, guess cause, test the guess.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/agent-teams/skills/parallel-debugging/SKILL.md" rel="noopener">parallel-debugging</a></th>
+            <td>wshobson/agents</td><td>Test many bug theories in parallel, collect evidence, pick the real root cause.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/code-review-excellence/SKILL.md" rel="noopener">code-review-excellence</a></th>
+            <td>wshobson/agents</td><td>Review PRs with clear, kind feedback: context, big picture, then line by line.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/agent-teams/skills/multi-reviewer-patterns/SKILL.md" rel="noopener">multi-reviewer-patterns</a></th>
+            <td>wshobson/agents</td><td>Run several review angles at once, merge duplicate findings, set severity.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/error-handling-patterns/SKILL.md" rel="noopener">error-handling-patterns</a></th>
+            <td>wshobson/agents</td><td>Handle errors well: exceptions, Result types, retries, graceful fallback.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/git-advanced-workflows/SKILL.md" rel="noopener">git-advanced-workflows</a></th>
+            <td>wshobson/agents</td><td>Use rebase, cherry-pick, bisect, worktrees and reflog to fix history.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/documentation-generation/skills/architecture-decision-records/SKILL.md" rel="noopener">architecture-decision-records</a></th>
+            <td>wshobson/agents</td><td>Write and keep ADRs that say why a technical choice was made.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/documentation-generation/skills/changelog-automation/SKILL.md" rel="noopener">changelog-automation</a></th>
+            <td>wshobson/agents</td><td>Make changelogs and release notes from commits in Keep a Changelog style.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/documentation-generation/skills/openapi-spec-generation/SKILL.md" rel="noopener">openapi-spec-generation</a></th>
+            <td>wshobson/agents</td><td>Write and check OpenAPI 3.1 specs from code or design-first.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/backend-development/skills/api-design-principles/SKILL.md" rel="noopener">api-design-principles</a></th>
+            <td>wshobson/agents</td><td>Design REST or GraphQL APIs: resources, verbs, versions, pagination, errors.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/cicd-automation/skills/github-actions-templates/SKILL.md" rel="noopener">github-actions-templates</a></th>
+            <td>wshobson/agents</td><td>Build GitHub Actions workflows for test, build, push image and deploy.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/cicd-automation/skills/deployment-pipeline-design/SKILL.md" rel="noopener">deployment-pipeline-design</a></th>
+            <td>wshobson/agents</td><td>Design multi-stage CI/CD with gates, canary rollout and rollback.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/cicd-automation/skills/secrets-management/SKILL.md" rel="noopener">secrets-management</a></th>
+            <td>wshobson/agents</td><td>Keep CI/CD secrets safe with Vault, cloud secret managers and rotation.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/security-scanning/skills/stride-analysis-patterns/SKILL.md" rel="noopener">stride-analysis-patterns</a></th>
+            <td>wshobson/agents</td><td>Threat model with STRIDE: spoofing, tampering, repudiation, leaks, DoS, privilege.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/security-scanning/skills/sast-configuration/SKILL.md" rel="noopener">sast-configuration</a></th>
+            <td>wshobson/agents</td><td>Set up Semgrep, CodeQL or SonarQube static security scans in CI.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/shell-scripting/skills/bash-defensive-patterns/SKILL.md" rel="noopener">bash-defensive-patterns</a></th>
+            <td>wshobson/agents</td><td>Write safer bash: strict mode, traps, quoting, cleanup, argument checks.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/database-design/skills/postgresql-table-design/SKILL.md" rel="noopener">postgresql-table-design</a></th>
+            <td>wshobson/agents</td><td>Design Postgres tables: types, keys, constraints, indexes, partitions.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/sql-optimization-patterns/SKILL.md" rel="noopener">sql-optimization-patterns</a></th>
+            <td>wshobson/agents</td><td>Make slow SQL fast: read EXPLAIN plans, add right indexes, rewrite queries.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/framework-migration/skills/dependency-upgrade/SKILL.md" rel="noopener">dependency-upgrade</a></th>
+            <td>wshobson/agents</td><td>Upgrade major dependencies in stages: audit, compat check, test each step.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/incident-response/skills/postmortem-writing/SKILL.md" rel="noopener">postmortem-writing</a></th>
+            <td>wshobson/agents</td><td>Write blameless postmortems with timeline, root cause and action items.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/accessibility-compliance/skills/wcag-audit-patterns/SKILL.md" rel="noopener">wcag-audit-patterns</a></th>
+            <td>wshobson/agents</td><td>Audit sites for WCAG 2.2 with auto tools, manual checks and fixes.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/python-development/skills/python-performance-optimization/SKILL.md" rel="noopener">python-performance-optimization</a></th>
+            <td>wshobson/agents</td><td>Profile Python with cProfile and memory tools, then fix the real hotspots.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/observability-monitoring/skills/distributed-tracing/SKILL.md" rel="noopener">distributed-tracing</a></th>
+            <td>wshobson/agents</td><td>Add tracing with Jaeger or Tempo to follow requests across services.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/kubernetes-operations/skills/k8s-security-policies/SKILL.md" rel="noopener">k8s-security-policies</a></th>
+            <td>wshobson/agents</td><td>Lock down Kubernetes with NetworkPolicy, pod security and RBAC.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/llm-application-dev/skills/llm-evaluation/SKILL.md" rel="noopener">llm-evaluation</a></th>
+            <td>wshobson/agents</td><td>Test LLM apps with metrics, human review and LLM-as-judge.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/developer-essentials/skills/auth-implementation-patterns/SKILL.md" rel="noopener">auth-implementation-patterns</a></th>
+            <td>wshobson/agents</td><td>Build login right: JWT, OAuth2, sessions and RBAC done safely.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/wshobson/agents/blob/HEAD/plugins/frontend-mobile-development/skills/tailwind-design-system/SKILL.md" rel="noopener">tailwind-design-system</a></th>
+            <td>wshobson/agents</td><td>Build a design system with Tailwind v4: tokens, components, responsive.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/focused-fix/SKILL.md" rel="noopener">focused-fix</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Fix one broken feature end to end: scope it, trace deps, diagnose, fix, verify.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering-team/skills/adversarial-reviewer/SKILL.md" rel="noopener">adversarial-reviewer</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Hard code review with three hostile personas to beat agreeable self-review.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/pr-review-expert/SKILL.md" rel="noopener">pr-review-expert</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Review a PR for blast radius, security, test gaps and breaking changes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering-team/skills/red-green-proof/SKILL.md" rel="noopener">red-green-proof</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Prove a bug: failing test first, fix, then revert the fix and see red again.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/dependency-auditor/SKILL.md" rel="noopener">dependency-auditor</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Audit packages for CVEs, license clashes and risky upgrades across languages.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/env-secrets-manager/SKILL.md" rel="noopener">env-secrets-manager</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Check .env files for leaked secrets, drift and rotation readiness.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/docker-development/skills/docker-development/SKILL.md" rel="noopener">docker-development</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Shrink and harden Dockerfiles, build multi-stage images, write compose files.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/ci-cd-pipeline-builder/SKILL.md" rel="noopener">ci-cd-pipeline-builder</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Detect the stack and generate a lean CI/CD pipeline with safe deploy stages.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/git-worktree-manager/SKILL.md" rel="noopener">git-worktree-manager</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Run parallel branches in git worktrees with own ports, env and safe cleanup.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/performance-profiler/SKILL.md" rel="noopener">performance-profiler</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Find CPU, memory and IO bottlenecks in Node, Python or Go; run load tests.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/api-test-suite-builder/SKILL.md" rel="noopener">api-test-suite-builder</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Scan routes and generate REST integration and contract tests.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/migration-architect/SKILL.md" rel="noopener">migration-architect</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Plan zero-downtime migrations with compat checks and rollback plans.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/runbook-generator/SKILL.md" rel="noopener">runbook-generator</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Make ops runbooks for deploy, incident, maintenance and rollback.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering-team/a11y-audit/skills/a11y-audit/SKILL.md" rel="noopener">a11y-audit</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Scan, fix and verify WCAG 2.2 A and AA problems in React, Vue and HTML.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering-team/skills/security-pen-testing/SKILL.md" rel="noopener">security-pen-testing</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Do an OWASP Top 10 audit: static scan, deps, secrets, API and auth tests.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/tech-debt-tracker/SKILL.md" rel="noopener">tech-debt-tracker</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Scan for tech debt, score it, track trends, plan cleanup.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/spec-driven-workflow/SKILL.md" rel="noopener">spec-driven-workflow</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Write the spec and acceptance rules first, make tests from it, then code.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/ship-gate/SKILL.md" rel="noopener">ship-gate</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Pre-deploy audit that blocks deploy until critical issues pass.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/skill-security-auditor/SKILL.md" rel="noopener">skill-security-auditor</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Scan an agent skill for bad scripts and prompt injection before installing.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/api-design-reviewer/SKILL.md" rel="noopener">api-design-reviewer</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Lint REST APIs for naming, versions and breaking changes; score the design.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/alirezarezvani/claude-skills/blob/HEAD/engineering/skills/observability-designer/SKILL.md" rel="noopener">observability-designer</a></th>
+            <td>alirezarezvani/claude-skills</td><td>Plan metrics, logs, traces, SLOs and alerts for a service.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/debugging-wizard/SKILL.md" rel="noopener">debugging-wizard</a></th>
+            <td>Jeffallan/claude-skills</td><td>Find bugs from stack traces and logs with a hypothesis-first method.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/test-master/SKILL.md" rel="noopener">test-master</a></th>
+            <td>Jeffallan/claude-skills</td><td>Make test plans, mocks and coverage checks across unit, e2e and perf tests.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/code-reviewer/SKILL.md" rel="noopener">code-reviewer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Review diffs for bugs, security, N+1 queries and smells; give a report.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/security-reviewer/SKILL.md" rel="noopener">security-reviewer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Audit code or infra for vulnerabilities and write a report with fixes.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/secure-code-guardian/SKILL.md" rel="noopener">secure-code-guardian</a></th>
+            <td>Jeffallan/claude-skills</td><td>Write secure code: safe auth, input checks, hashing, OWASP Top 10 fixes.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/playwright-expert/SKILL.md" rel="noopener">playwright-expert</a></th>
+            <td>Jeffallan/claude-skills</td><td>Write Playwright E2E tests with page objects, fixtures and CI.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/code-documenter/SKILL.md" rel="noopener">code-documenter</a></th>
+            <td>Jeffallan/claude-skills</td><td>Add docstrings, JSDoc, OpenAPI specs and user guides to code.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/api-designer/SKILL.md" rel="noopener">api-designer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Design REST or GraphQL APIs with resource models, OpenAPI and error standards.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/architecture-designer/SKILL.md" rel="noopener">architecture-designer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Design system architecture, draw Mermaid diagrams, write ADRs, weigh trade-offs.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/devops-engineer/SKILL.md" rel="noopener">devops-engineer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Write Dockerfiles, CI/CD, Kubernetes and Terraform with a rollback plan.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/sre-engineer/SKILL.md" rel="noopener">sre-engineer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Set SLOs and error budgets, plan incident response and capacity.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/database-optimizer/SKILL.md" rel="noopener">database-optimizer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Tune Postgres or MySQL: slow queries, EXPLAIN, indexes, rewrites.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/spec-miner/SKILL.md" rel="noopener">spec-miner</a></th>
+            <td>Jeffallan/claude-skills</td><td>Read old code with no docs and pull out the real specs and dependencies.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/feature-forge/SKILL.md" rel="noopener">feature-forge</a></th>
+            <td>Jeffallan/claude-skills</td><td>Run a requirements workshop and write user stories, EARS rules, acceptance tests.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/the-fool/SKILL.md" rel="noopener">the-fool</a></th>
+            <td>Jeffallan/claude-skills</td><td>Play devil's advocate: pre-mortem, red team and assumption checks on a plan.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/legacy-modernizer/SKILL.md" rel="noopener">legacy-modernizer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Plan step-by-step legacy migration with strangler facades and char tests.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/chaos-engineer/SKILL.md" rel="noopener">chaos-engineer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Design chaos experiments and game days with blast radius and rollback.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/cli-developer/SKILL.md" rel="noopener">cli-developer</a></th>
+            <td>Jeffallan/claude-skills</td><td>Build CLI tools: commands, flags, prompts, progress bars, shell completions.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/monitoring-expert/SKILL.md" rel="noopener">monitoring-expert</a></th>
+            <td>Jeffallan/claude-skills</td><td>Set up logs, Prometheus metrics, tracing, alerts and load tests.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/Jeffallan/claude-skills/blob/HEAD/skills/typescript-pro/SKILL.md" rel="noopener">typescript-pro</a></th>
+            <td>Jeffallan/claude-skills</td><td>Write advanced TypeScript types: generics, guards, branded types, tsconfig.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/tdd-workflow/SKILL.md" rel="noopener">tdd-workflow</a></th>
+            <td>affaan-m/everything-claude-code</td><td>TDD loop: failing test first, smallest fix to green, refactor, 80% coverage.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/verification-loop/SKILL.md" rel="noopener">verification-loop</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Check finished work: build, types, lint, tests, security grep, diff review.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/security-review/SKILL.md" rel="noopener">security-review</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Security checklist for auth, user input, secrets, endpoints and payments.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/security-scan/SKILL.md" rel="noopener">security-scan</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Scan the .claude folder, hooks and MCP servers for bad config and injection.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/database-migrations/SKILL.md" rel="noopener">database-migrations</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Ship safe DB migrations: reversible, zero-downtime renames, safe indexes, backfills.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/deployment-patterns/SKILL.md" rel="noopener">deployment-patterns</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Deploy with rolling, blue-green or canary, Docker, health checks and rollback.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/git-workflow/SKILL.md" rel="noopener">git-workflow</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Pick a branching flow, write clean commits, merge vs rebase, fix conflicts.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/coding-standards/SKILL.md" rel="noopener">coding-standards</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Baseline coding rules: clear names, immutability, KISS, DRY, YAGNI.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/codebase-onboarding/SKILL.md" rel="noopener">codebase-onboarding</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Map an unfamiliar repo and write an onboarding guide plus a starter CLAUDE.md.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/browser-qa/SKILL.md" rel="noopener">browser-qa</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Run post-deploy UI checks in a real browser: console errors, flows, screenshots.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/canary-watch/SKILL.md" rel="noopener">canary-watch</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Watch a live URL after release for errors, slow pages and broken endpoints.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/ai-regression-testing/SKILL.md" rel="noopener">ai-regression-testing</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Catch repeat AI coding bugs with sandbox API tests and a bug-check flow.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/search-first/SKILL.md" rel="noopener">search-first</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Research existing libraries and tools before writing custom code.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/gateguard/SKILL.md" rel="noopener">gateguard</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Block the first edit until the agent shows facts about importers and schemas.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/conventional-commit-review/SKILL.md" rel="noopener">conventional-commit-review</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Review staged changes and write a Conventional Commits message.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/hexagonal-architecture/SKILL.md" rel="noopener">hexagonal-architecture</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Design ports and adapters: domain core, use cases, testable boundaries.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/mcp-server-patterns/SKILL.md" rel="noopener">mcp-server-patterns</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Build MCP servers with the TypeScript SDK: tools, resources, Zod, transports.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/affaan-m/everything-claude-code/blob/HEAD/skills/safety-guard/SKILL.md" rel="noopener">safety-guard</a></th>
+            <td>affaan-m/everything-claude-code</td><td>Warn before rm -rf, force push, DROP TABLE; lock edits to one folder.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/git/skills/commit/SKILL.md" rel="noopener">commit</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Make clean conventional commits: run checks, split big diffs, write the message.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/git/skills/create-pr/SKILL.md" rel="noopener">create-pr</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Open a GitHub PR with gh using the repo template and pre-flight checks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/review/skills/review-pr/SKILL.md" rel="noopener">review-pr</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Review an open GitHub PR and post inline comments on the diff.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/review/skills/review-local-changes/SKILL.md" rel="noopener">review-local-changes</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Review uncommitted work before commit and suggest fixes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/kaizen/skills/root-cause-tracing/SKILL.md" rel="noopener">root-cause-tracing</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Trace a deep error backward up the call stack to the original trigger.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/tdd/skills/test-driven-development/SKILL.md" rel="noopener">test-driven-development</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Strict red-green-refactor: no code without a failing test first.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/tdd/skills/write-tests/SKILL.md" rel="noopener">write-tests</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Add missing tests for your local changes using review and developer agents.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/tdd/skills/fix-tests/SKILL.md" rel="noopener">fix-tests</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Fix failing tests after refactors or business logic changes, one by one.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/docs/skills/update-docs/SKILL.md" rel="noopener">update-docs</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Update docs, READMEs, JSDoc and API docs to match local code changes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/git/skills/resolve-fixed-pr-comments/SKILL.md" rel="noopener">resolve-fixed-pr-comments</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Check which PR review comments are really fixed and resolve those threads.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/NeoLabHQ/context-engineering-kit/blob/HEAD/plugins/customaize-agent/skills/create-skill/SKILL.md" rel="noopener">create-skill</a></th>
+            <td>NeoLabHQ/context-engineering-kit</td><td>Guide to write a new SKILL.md using red-green-refactor and progressive disclosure.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/context-compression/SKILL.md" rel="noopener">context-compression</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Compress long agent sessions with structured summaries that keep file trails.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/context-optimization/SKILL.md" rel="noopener">context-optimization</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Cut token cost with budgets, observation masking, KV-cache layout, partitioning.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/context-degradation/SKILL.md" rel="noopener">context-degradation</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Diagnose lost-in-middle, context poisoning, clash and confusion in agents.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/tool-design/SKILL.md" rel="noopener">tool-design</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Write agent tools: clear descriptions, schemas, error messages, naming.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/evaluation/SKILL.md" rel="noopener">evaluation</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Build agent evals: rubrics, regression suites, quality gates, baselines.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/harness-engineering/SKILL.md" rel="noopener">harness-engineering</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Design agent loops: locked surfaces, durable logs, rollback, human approval.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/multi-agent-patterns/SKILL.md" rel="noopener">multi-agent-patterns</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Pick supervisor, swarm or handoff designs and avoid multi-agent traps.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering/blob/HEAD/skills/project-development/SKILL.md" rel="noopener">project-development</a></th>
+            <td>muratcankoylan/Agent-Skills-for-Context-Engineering</td><td>Plan LLM projects: task fit, pipeline stages, cost math, single vs multi agent.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/HEAD/.claude/skills/ui-ux-pro-max/SKILL.md" rel="noopener">ui-ux-pro-max</a></th>
+            <td>nextlevelbuilder/ui-ux-pro-max-skill</td><td>UI/UX rules and a design system generator for web and mobile screens.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/HEAD/.claude/skills/design-system/SKILL.md" rel="noopener">design-system</a></th>
+            <td>nextlevelbuilder/ui-ux-pro-max-skill</td><td>Three-layer design tokens, CSS variables and component specs.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/nextlevelbuilder/ui-ux-pro-max-skill/blob/HEAD/.claude/skills/ui-styling/SKILL.md" rel="noopener">ui-styling</a></th>
+            <td>nextlevelbuilder/ui-ux-pro-max-skill</td><td>Build accessible UI with shadcn/ui, Radix, Tailwind and canvas designs.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/Leonxlnx/taste-skill/blob/HEAD/skills/taste-skill/SKILL.md" rel="noopener">taste-skill</a></th>
+            <td>Leonxlnx/taste-skill</td><td>Art-direct landing pages and app screens so they do not look like AI slop.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/debugging/systematic-debugging/SKILL.md" rel="noopener">systematic-debugging</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Four phase debugging: find the root cause before any fix.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/chrome-devtools/SKILL.md" rel="noopener">chrome-devtools</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Drive Chrome with Puppeteer scripts for screenshots, network and perf checks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/repomix/SKILL.md" rel="noopener">repomix</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Pack a whole repo into one AI-ready file with include and exclude rules.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/devops/SKILL.md" rel="noopener">devops</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Deploy to Cloudflare, Docker, Google Cloud and Kubernetes with CI/CD.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/mermaidjs-v11/SKILL.md" rel="noopener">mermaidjs-v11</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Draw flowcharts, sequence, ER and class diagrams in Mermaid v11.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="review">
+            <th scope="row"><a href="https://github.com/mrgoonie/claudekit-skills/blob/HEAD/.claude/skills/code-review/SKILL.md" rel="noopener">code-review</a></th>
+            <td>mrgoonie/claudekit-skills</td><td>Handle review feedback with checks, request reviews, and verify before claiming done.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/SawyerHood/dev-browser/blob/HEAD/skills/dev-browser/SKILL.md" rel="noopener">dev-browser</a></th>
+            <td>SawyerHood/dev-browser</td><td>Control a real Chrome with short scripts and named pages to test web apps.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/jezweb/claude-skills/blob/HEAD/plugins/dev-tools/skills/vitest/SKILL.md" rel="noopener">vitest</a></th>
+            <td>jezweb/claude-skills</td><td>Set up Vitest in any project: config, setup file, scripts, sample test.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/jezweb/claude-skills/blob/HEAD/plugins/dev-tools/skills/github-release/SKILL.md" rel="noopener">github-release</a></th>
+            <td>jezweb/claude-skills</td><td>Clean a repo for release, scan secrets, tag a version and publish with gh.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="docs">
+            <th scope="row"><a href="https://github.com/jezweb/claude-skills/blob/HEAD/plugins/dev-tools/skills/project-docs/SKILL.md" rel="noopener">project-docs</a></th>
+            <td>jezweb/claude-skills</td><td>Write ARCHITECTURE, API endpoints and DB schema docs by reading the code.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/jezweb/claude-skills/blob/HEAD/plugins/dev-tools/skills/responsiveness-check/SKILL.md" rel="noopener">responsiveness-check</a></th>
+            <td>jezweb/claude-skills</td><td>Resize through breakpoints, screenshot each width, find layout breaks.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-agents/SKILL.md" rel="noopener">flisk-agents</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Build an AI agent in a local Flisk stack: agent plus MCP tools, database and queue, with durable sessions and its process contract.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-benchmark/SKILL.md" rel="noopener">flisk-benchmark</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Measure how many Flisk services fit on a machine: idle memory from the Docker VM, start time, image disk use and health.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-build-runtimes/SKILL.md" rel="noopener">flisk-build-runtimes</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Pick the language and framework of a new Flisk service: Bun, Python (FastAPI), Go, Rust or Node backends; React, Vue, Svelte and more for frontends.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-byo/SKILL.md" rel="noopener">flisk-byo</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Wrap any existing Dockerfile, registry image or source tree in a Flisk stack as a bring-your-own resource, including one-shot jobs like migrations.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-contributing/SKILL.md" rel="noopener">flisk-contributing</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Contribute to the flisk CLI repo itself: nested AGENTS.md rules, rebuilding cli/dist, make test, skills sync and signed-off commits.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-data/SKILL.md" rel="noopener">flisk-data</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Reset, seed, snapshot and restore the data in a Flisk project's shared local Postgres.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-databases/SKILL.md" rel="noopener">flisk-databases</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Give a Flisk service a database and migrations: Prisma or Drizzle, or Atlas, Dbmate and TypeORM as a one-shot migrator job.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-aws/SKILL.md" rel="noopener">flisk-deploy-aws</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to AWS (ECS/Fargate, EKS, App Runner, Lambda) by mapping service.json to production artifacts.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-azure/SKILL.md" rel="noopener">flisk-deploy-azure</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Azure (Container Apps, AKS) with images in ACR and secrets in Key Vault.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-cloudflare/SKILL.md" rel="noopener">flisk-deploy-cloudflare</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Deploy the frontend or edge parts of a Flisk project to Cloudflare Pages or Workers.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-digitalocean/SKILL.md" rel="noopener">flisk-deploy-digitalocean</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to DigitalOcean App Platform, Droplets or Kubernetes.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-fly/SKILL.md" rel="noopener">flisk-deploy-fly</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Fly.io with a fly.toml per service, fly secrets set and fly deploy.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-gcp/SKILL.md" rel="noopener">flisk-deploy-gcp</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Google Cloud (Cloud Run, GKE) with Artifact Registry images and Secret Manager.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-heroku/SKILL.md" rel="noopener">flisk-deploy-heroku</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Heroku with config vars and a Procfile or the container registry.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-railway/SKILL.md" rel="noopener">flisk-deploy-railway</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Railway through the Railway CLI or a connected repo.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-render/SKILL.md" rel="noopener">flisk-deploy-render</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Take a working Flisk stack to Render with a render.yaml blueprint or dashboard services.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-deploy-vercel/SKILL.md" rel="noopener">flisk-deploy-vercel</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Deploy the frontend or serverless parts of a Flisk project to Vercel and point it at the production API.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-doctor/SKILL.md" rel="noopener">flisk-doctor</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Check or repair the Flisk environment and project config with flisk doctor: --all, --json, --fix, and freeing Docker networks.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-dry-run/SKILL.md" rel="noopener">flisk-dry-run</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Preview what a Flisk command would do without changing anything: flisk up --dry-run, its JSON form for CI, and the down, import, doctor and upgrade dry runs.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="frontend">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-frontend/SKILL.md" rel="noopener">flisk-frontend</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Add and run a frontend in a Flisk stack and use what Flisk generates for it: nginx, Vite, env.ts and a typed api-client.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-generated-files/SKILL.md" rel="noopener">flisk-generated-files</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Know which files Flisk owns, check them for drift with flisk config verify and explain, and regenerate them instead of hand-editing.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-helm/SKILL.md" rel="noopener">flisk-helm</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Use Flisk for the local loop while Helm, Argo CD or Kustomize own production: import a chart's service as BYO, map fields by hand, run alongside Helm.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-import-compose/SKILL.md" rel="noopener">flisk-import-compose</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Import a root docker-compose.yml into Flisk with flisk import: one bring-your-own service per Compose service.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-import-procfile/SKILL.md" rel="noopener">flisk-import-procfile</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Turn Procfile processes (web, worker, release) into Flisk bring-your-own resources, one small Dockerfile each.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="plan">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-layout/SKILL.md" rel="noopener">flisk-layout</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Decide where a Flisk project lives across repos and teams, and handle name and port clashes, CODEOWNERS and layouts for 5, 20 and 50 services.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-ports/SKILL.md" rel="noopener">flisk-ports</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Find and fix the URLs of a Flisk stack: flisk networks, Traefik routing on *.localhost, host port selection and the FLISK_*_PORT overrides.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-scaffold/SKILL.md" rel="noopener">flisk-scaffold</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Start a Flisk project (blank or from a starter) and generate new backend, frontend, worker, agent or MCP services in it.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="security">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-secrets/SKILL.md" rel="noopener">flisk-secrets</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Give Flisk services configuration and secrets: params, secrets.required and the gitignored .env, flisk up --env-file and Infisical.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-service-json/SKILL.md" rel="noopener">flisk-service-json</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Read, edit and validate a service.json: required fields, port, health check, dependsOn, features, params, secrets and routes.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-starlark-perf/SKILL.md" rel="noopener">flisk-starlark-perf</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Find and cut the time Flisk spends before containers run: discovery, Tiltfile evaluation, config generation and golden image builds.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="debug">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-troubleshoot/SKILL.md" rel="noopener">flisk-troubleshoot</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Diagnose a Flisk stack that fails after flisk up: red Tilt resources, Postgres crash loops, unhealthy services, hung up or down.</td>
+            <td>40</td>
+            <td>2/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-ui/SKILL.md" rel="noopener">flisk-ui</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Open the flisk ui terminal dashboard to browse stacks, services, Tilt events and generated files by keyboard.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/flisk-upgrade/SKILL.md" rel="noopener">flisk-upgrade</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Upgrade the Flisk CLI, keep a team on a minimum version with minFliskVersion, and regenerate files after an upgrade.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk-skills/blob/HEAD/skills/layer-autoresearch/SKILL.md" rel="noopener">layer-autoresearch</a></th>
+            <td>flisk-sh/flisk-skills</td><td>Contributor loop of change, measure, keep or discard on Flisk's Docker layer generators to cut idle memory per service.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="meta">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-agent-ops/SKILL.md" rel="noopener">flisk-agent-ops</a></th>
+            <td>flisk-sh/flisk</td><td>Tell coding agents to scaffold and run services through Flisk CLI and MCP, not hand-made Dockerfiles.</td>
+            <td>80</td>
+            <td>2/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-build/SKILL.md" rel="noopener">flisk-build</a></th>
+            <td>flisk-sh/flisk</td><td>Turn 'build me a shop or SaaS or agent' into Flisk resources, write app code, check every URL is healthy.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="test">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-e2e-author/SKILL.md" rel="noopener">flisk-e2e-author</a></th>
+            <td>flisk-sh/flisk</td><td>Add or change a Flisk end-to-end test: decide if needed, scaffold from the agent suite, show pass and break.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="data">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-recipe-ai-agent/SKILL.md" rel="noopener">flisk-recipe-ai-agent</a></th>
+            <td>flisk-sh/flisk</td><td>Recipe: agent with sessions, MCP tools and a notes API with Postgres in one stack, then check each URL.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-recipe-blog/SKILL.md" rel="noopener">flisk-recipe-blog</a></th>
+            <td>flisk-sh/flisk</td><td>Recipe: public blog site plus posts API with Postgres and token-protected admin routes in one stack.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-recipe-saas/SKILL.md" rel="noopener">flisk-recipe-saas</a></th>
+            <td>flisk-sh/flisk</td><td>Recipe: web app, accounts API for signup and login, billing API for plans, all with Postgres in one stack.</td>
+            <td>20</td>
+            <td>1/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-recipe-shop/SKILL.md" rel="noopener">flisk-recipe-shop</a></th>
+            <td>flisk-sh/flisk</td><td>Recipe: storefront site plus orders API with products and orders tables, started and checked URL by URL.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-recipe-starters/SKILL.md" rel="noopener">flisk-recipe-starters</a></th>
+            <td>flisk-sh/flisk</td><td>Clone a ready-made Flisk starter (restaurant, SaaS, store, agent stack, user mgmt) not a blank project.</td>
+            <td>60</td>
+            <td>1/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="git">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-release/SKILL.md" rel="noopener">flisk-release</a></th>
+            <td>flisk-sh/flisk</td><td>Cut a Flisk CLI release: candidate run, release workflow, npm, GitHub releases, verify and repair channels.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="code">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-resource/SKILL.md" rel="noopener">flisk-resource</a></th>
+            <td>flisk-sh/flisk</td><td>Create a Flisk service with flisk resource --type agent, backend, worker or mcp, or register an existing one.</td>
+            <td>60</td>
+            <td>3/3</td>
+            <td>0/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-status/SKILL.md" rel="noopener">flisk-status</a></th>
+            <td>flisk-sh/flisk</td><td>Report which Flisk stacks and services run and are healthy, from flisk status --json, not from guesses.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+          <tr data-sub="ops">
+            <th scope="row"><a href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-up/SKILL.md" rel="noopener">flisk-up</a></th>
+            <td>flisk-sh/flisk</td><td>Start a Flisk stack: doctor, dry-run preview, flisk up, confirm health. Also runs services without Docker.</td>
+            <td>100</td>
+            <td>3/3</td>
+            <td>1/1</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <div id="tray" class="tray" aria-label="Tools to compare" hidden></div>
+  <div id="cmp" class="cmp" hidden></div>
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Community-edited, published by <a href="https://flisk.sh" rel="noopener">Flisk</a>. Flisk is on the map too, scored by the same rubric as every other tool.
+        First seeded October 2026, with AI-assisted research, so check the sources.
+        Wrong dot? <a href="https://github.com/flisk-sh/roadmap/blob/main/CONTRIBUTING.md" rel="noopener">Fix it on GitHub</a>.
+        Commands side by side: <a href="https://cmd.flisk.sh" rel="noopener">cmd.flisk.sh</a>.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var b = document.getElementById("theme-toggle");
+      if (!b) return;
+      b.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("theme", next); } catch (e) {}
+      });
+    })();
+  </script>
+  <script src="assets/js/app.js" defer></script>
+<script src="me-overlay.js" defer></script></body>
+</html>

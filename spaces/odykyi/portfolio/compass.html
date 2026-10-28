@@ -1,0 +1,3515 @@
+<!doctype html>
+<html lang="en">
+<head><script>(function(){var p=new URLSearchParams(location.search);if(!p.get("me")){p.set("name","Oleksandr Dykyi");p.set("me","argo-cd1,aws-cdk2,aws-sam2,backstage3,bun3,cdktf1,circleci1,claude-code2,cline2,cloudflare-tunnel2,cloudformation3,codex3,colima1,composer1,create-t3-app1,create-vite1,cursor3,deno1,dependabot3,devin3,docker-compose3,docker-desktop2,docker-engine2,docker-mcp-toolkit1,esbuild1,flisk3,gemini-cli2,github-actions3,github-copilot3,gitlab-ci2,helm2,homebrew1,hono2,jenkins1,k3s1,k9s3,kiro1,kubectl2,kubernetes3,kubernetes-dashboard1,langchain1,lima2,mcp-registry3,minikube1,model-context-protocol2,neon1,nestjs2,netlify-cli2,nextjs1,ngrok1,nodemon3,npm3,nvm3,nx1,ollama1,opencode3,opentelemetry1,orbstack2,pact1,playwright-mcp1,pm21,pnpm2,podman3,podman-desktop1,portainer1,prisma3,react-router2,replit1,sentry1,sequelize2,serverless-framework3,signoz1,skills-sh2,supabase-cli1,swc1,terraform3,terragrunt3,tilt3,turbopack1,typeorm2,vercel-cli1,vite1,webpack2,windsurf3,wrangler2,yarn3,yeoman3");history.replaceState(null,"",location.pathname+"?"+p.toString()+location.hash);}})();</script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>The DevEx Compass | DevEx Roadmap</title>
+  <meta name="description" content="Left: hard to use. Right: easy. Bottom: made for small, simple setups. Top: made for big, real systems. A checklist puts every dot, not a person.">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="The DevEx Compass | DevEx Roadmap">
+  <meta property="og:description" content="Left: hard to use. Right: easy. Bottom: made for small, simple setups. Top: made for big, real systems. A checklist puts every dot, not a person.">
+  <meta property="og:url" content="https://roadmap.flisk.si/compass/">
+  <meta property="og:image" content="https://roadmap.flisk.si/assets/og.png">
+  <meta property="og:image:width" content="800">
+  <meta property="og:image:height" content="420">
+  <meta property="og:image:alt" content="The DevEx Roadmap: 372 developer tools on an adoption radar">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="color-scheme" content="dark light">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  
+
+  <script>
+    // Dark first. A saved choice wins; storage can be blocked, so fail quietly.
+    try {
+      var t = localStorage.getItem("theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
+
+  <link rel="preconnect" href="https://api.fontshare.com">
+  <link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/style.css"><link rel="stylesheet" href="me-overlay.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="https://roadmap.flisk.si/">
+        <img src="assets/favicon.svg" alt="" width="20" height="20">
+        <span>DevEx Roadmap</span>
+      </a>
+      <span class="hook">372 dev tools · 44 roles · 400 agent skills · scored by a checklist, not opinions</span>
+      <nav class="nav" aria-label="Primary">
+        <a href="https://roadmap.flisk.si/findings/">Findings</a>
+        <a class="nav-extra" href="https://roadmap.flisk.si/about/">How it works</a>
+        <a class="nav-extra" href="https://cmd.flisk.sh" rel="noopener">Commands</a>
+        <a href="https://github.com/flisk-sh/roadmap" rel="noopener">GitHub</a>
+        <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch theme">Theme</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" class="wrap">
+    <div id="app" data-view="compass" data-sub="" data-base="/@odykyi/portfolio" data-repo="https://github.com/flisk-sh/roadmap" data-v="1793197345">
+
+  <div class="topbar">
+    <nav class="views" aria-label="Views">
+      <a class="view-tab view-tab-compass" data-view="compass" href="compass.html" aria-current="page">
+        <span class="view-icon view-icon-compass" aria-hidden="true"></span>Compass
+      </a>
+      <a class="view-tab view-tab-radar" data-view="radar" href="radar.html">
+        <span class="view-icon view-icon-radar" aria-hidden="true"></span>Adoption Radar
+      </a>
+      <a class="view-tab view-tab-lab" data-view="lab" href="lab.html">
+        <span class="view-icon view-icon-lab" aria-hidden="true"></span>Lab
+      </a>
+      <a class="view-tab view-tab-journeys" data-view="journeys" href="journeys.html">
+        <span class="view-icon view-icon-journeys" aria-hidden="true"></span>Journeys
+      </a>
+      <a class="view-tab view-tab-roles" data-view="roles" href="roles.html">
+        <span class="view-icon view-icon-roles" aria-hidden="true"></span>Roles
+      </a>
+      <a class="view-tab view-tab-skills" data-view="skills" href="skills.html">
+        <span class="view-icon view-icon-skills" aria-hidden="true"></span>Skills
+      </a>
+      <a class="view-tab view-tab-portfolio" data-view="portfolio" href="./">
+        <span class="view-icon view-icon-portfolio" aria-hidden="true"></span>Portfolio
+      </a>
+      <a class="view-tab view-tab-ask" data-view="ask" href="https://roadmap.flisk.si/ask/">
+        <span class="view-icon view-icon-ask" aria-hidden="true"></span>Ask
+      </a>
+    </nav>
+    <div class="toolbar js-only" hidden>
+      <input id="q" type="search" placeholder="Find a tool…" aria-label="Find" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  <h1 class="sr-only" id="view-title">The DevEx Compass</h1>
+  <p class="sr-only" id="view-blurb">Left: hard to use. Right: easy. Bottom: made for small, simple setups. Top: made for big, real systems. A checklist puts every dot, not a person.</p>
+  <nav class="subtabs" id="subtabs" aria-label="Sub-tabs">
+    <a class="subtab" data-sub="" href="compass.html" aria-current="page"><span class="sw sw-all" aria-hidden="true"></span>All</a>
+    <a class="subtab" data-sub="foundations" style="--c: #eab308" href="https://roadmap.flisk.si/compass/foundations/"><span class="sw" aria-hidden="true"></span>Package & build <small>51</small></a>
+    <a class="subtab" data-sub="containers" style="--c: #0ea5e9" href="https://roadmap.flisk.si/compass/containers/"><span class="sw" aria-hidden="true"></span>Containers & clusters <small>36</small></a>
+    <a class="subtab" data-sub="inner-loop" style="--c: #22c55e" href="https://roadmap.flisk.si/compass/inner-loop/"><span class="sw" aria-hidden="true"></span>Inner loop <small>51</small></a>
+    <a class="subtab" data-sub="environments" style="--c: #a855f7" href="https://roadmap.flisk.si/compass/environments/"><span class="sw" aria-hidden="true"></span>Dev environments <small>29</small></a>
+    <a class="subtab" data-sub="frameworks" style="--c: #ec4899" href="https://roadmap.flisk.si/compass/frameworks/"><span class="sw" aria-hidden="true"></span>Monorepos & frameworks <small>40</small></a>
+    <a class="subtab" data-sub="services" style="--c: #14b8a6" href="https://roadmap.flisk.si/compass/services/"><span class="sw" aria-hidden="true"></span>Local services & data <small>45</small></a>
+    <a class="subtab" data-sub="agents" style="--c: #f97316" href="https://roadmap.flisk.si/compass/agents/"><span class="sw" aria-hidden="true"></span>AI & agents <small>69</small></a>
+    <a class="subtab" data-sub="platform" style="--c: #64748b" href="https://roadmap.flisk.si/compass/platform/"><span class="sw" aria-hidden="true"></span>Platform <small>51</small></a>
+    <span class="view-count"><strong>372</strong> tools</span>
+  </nav>
+
+  <section class="stage-wrap" aria-label="The DevEx Compass">
+    <div id="stage" class="stage stage-compass" role="img" aria-label="The DevEx Compass. The same data is in the table below."></div>
+  </section>
+
+  <section class="explain">
+    <h2>How a dot gets its spot</h2>
+    <p>Nobody puts dots by hand. Each check is 10 points. Tools with the same score sit in a little bunch.</p>
+    <div class="explain-cols">
+      <div>
+        <h3>Easy to use? <small>left → right</small></h3><p>Is the tool easy for you, every day? Each check is 10 points. More checks: more to the right.</p>
+        <ol class="criteria"><li><strong>One command starts it.</strong> A single command brings up the whole thing it manages.</li><li><strong>Little setup.</strong> Useful out of the box, or with a short generated config.</li><li><strong>See changes fast.</strong> Live reload, file sync or incremental rebuilds in seconds.</li><li><strong>Clear errors.</strong> Says what broke and how to fix it, or ships a doctor-style check.</li><li><strong>Has a screen to look at.</strong> A web dashboard, TUI or desktop app, not only raw logs.</li><li><strong>Working in 10 minutes.</strong> Official docs get a newcomer to a working result in about ten minutes.</li><li><strong>Mac, Linux and Windows.</strong> Supported on all three, natively or through WSL.</li><li><strong>No account needed.</strong> Runs on your machine without signing up or a network round trip.</li><li><strong>Light and fast.</strong> Starts in seconds and does not need a large VM or many GB of RAM.</li><li><strong>AI can drive it.</strong> An MCP server, a JSON output mode or an API an AI agent can drive.</li>
+        </ol>
+      </div>
+      <div>
+        <h3>Made for big, real systems? <small>bottom → top</small></h3><p>Small and simple: one service, nothing around it. Big and real: many services, real databases, containers, Kubernetes, the cloud, logs, big teams. Each check is 10 points. More checks: higher up.</p>
+        <ol class="criteria"><li><strong>Works with containers.</strong> Runs, builds or watches containers.</li><li><strong>Handles many services.</strong> Brings up, connects or watches several services together.</li><li><strong>Services talk to each other.</strong> Service-to-service networking, DNS or ingress like production.</li><li><strong>Real databases and queues.</strong> Databases, queues or volumes, not only in-memory fakes.</li><li><strong>Same images as live servers.</strong> Uses the images, bundles or lockfiles that production uses.</li><li><strong>Speaks Kubernetes.</strong> Manifests, pods, Helm charts or a real Kubernetes API.</li><li><strong>Works with the cloud.</strong> Emulates or reaches real cloud provider APIs.</li><li><strong>Real config and secrets.</strong> Environment, config and secrets handled the way production handles them.</li><li><strong>Logs, metrics, traces.</strong> Exposes telemetry the way production does.</li><li><strong>Works for big teams.</strong> Built for many services and many developers sharing a setup.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+  <details class="all-list">
+    <summary>The same tools as a table</summary>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Tool</th><th scope="col">Family</th><th scope="col">Category</th><th scope="col">Ring</th><th scope="col">License</th><th scope="col">Easy to use</th><th scope="col">Big real systems</th></tr></thead>
+        <tbody>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://www.npmjs.com" rel="noopener">npm</a> <span class="muted">The package manager bundled with Node.js</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/npm/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://pnpm.io" rel="noopener">pnpm</a> <span class="muted">Fast, disk-efficient Node package manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/pnpm/pnpm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://yarnpkg.com" rel="noopener">Yarn</a> <span class="muted">Node package manager with workspaces and Plug'n'Play</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/yarnpkg/berry/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://bun.sh" rel="noopener">Bun</a> <span class="muted">JavaScript runtime, package manager and bundler in one</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/oven-sh/bun/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://deno.com" rel="noopener">Deno</a> <span class="muted">JavaScript and TypeScript runtime with built-in tooling</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/denoland/deno/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://docs.astral.sh/uv/" rel="noopener">uv</a> <span class="muted">Fast Python package and project manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/astral-sh/uv/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://pip.pypa.io" rel="noopener">pip</a> <span class="muted">The standard Python package installer</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://pip.pypa.io/en/stable/news/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://python-poetry.org" rel="noopener">Poetry</a> <span class="muted">Python dependency management and packaging</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/python-poetry/poetry/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://pdm-project.org" rel="noopener">PDM</a> <span class="muted">Standards-based Python package and project manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/pdm-project/pdm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://hatch.pypa.io" rel="noopener">Hatch</a> <span class="muted">Python project manager with environments and builds</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/pypa/hatch/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://pipenv.pypa.io" rel="noopener">Pipenv</a> <span class="muted">Python virtualenv and Pipfile.lock manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/pypa/pipenv/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://rye.astral.sh" rel="noopener">Rye</a> <span class="muted">Experimental Python project manager, superseded by uv</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/astral-sh/rye" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://docs.conda.io" rel="noopener">Conda</a> <span class="muted">Cross-language package and environment manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/conda/conda/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://pixi.sh" rel="noopener">Pixi</a> <span class="muted">Fast conda and PyPI project manager with lockfiles</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/prefix-dev/pixi/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://doc.rust-lang.org/cargo/" rel="noopener">Cargo</a> <span class="muted">Rust's package manager and build tool</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/rust-lang/rust/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://go.dev/ref/mod" rel="noopener">Go modules</a> <span class="muted">Go's built-in dependency management</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://go.dev/doc/devel/release" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://maven.apache.org" rel="noopener">Maven</a> <span class="muted">Convention-based Java build and dependency tool</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://maven.apache.org/docs/history.html" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://gradle.org" rel="noopener">Gradle</a> <span class="muted">Build automation and dependency tool for the JVM</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/gradle/gradle/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://getcomposer.org" rel="noopener">Composer</a> <span class="muted">Dependency manager for PHP</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/composer/composer/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://bundler.io" rel="noopener">Bundler</a> <span class="muted">Gem dependency manager for Ruby</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/rubygems/rubygems/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://www.nuget.org" rel="noopener">NuGet</a> <span class="muted">Package manager for .NET</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://learn.microsoft.com/en-us/nuget/release-notes/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://brew.sh" rel="noopener">Homebrew</a> <span class="muted">Package manager for macOS and Linux</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://github.com/Homebrew/brew/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://www.swift.org/documentation/package-manager/" rel="noopener">Swift Package Manager</a> <span class="muted">Swift's built-in package and build manager</span></th>
+            <td>Package & build</td>
+            <td>Package managers</td>
+            <td><a href="https://www.swift.org/install/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://mise.jdx.dev" rel="noopener">mise</a> <span class="muted">Polyglot tool versions, env vars and tasks</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/jdx/mise/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://asdf-vm.com" rel="noopener">asdf</a> <span class="muted">Plugin-based version manager for many runtimes</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/asdf-vm/asdf/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://github.com/nvm-sh/nvm" rel="noopener">nvm</a> <span class="muted">Shell script to manage Node.js versions</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/nvm-sh/nvm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://github.com/Schniz/fnm" rel="noopener">fnm</a> <span class="muted">Fast Node.js version manager written in Rust</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/Schniz/fnm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://volta.sh" rel="noopener">Volta</a> <span class="muted">JavaScript tool manager pinned via package.json</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/volta-cli/volta/issues/2080" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://github.com/pyenv/pyenv" rel="noopener">pyenv</a> <span class="muted">Install and switch between Python versions</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/pyenv/pyenv/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://github.com/rbenv/rbenv" rel="noopener">rbenv</a> <span class="muted">Lightweight Ruby version manager</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/rbenv/rbenv/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://rustup.rs" rel="noopener">rustup</a> <span class="muted">The Rust toolchain installer</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/rust-lang/rustup/blob/master/CHANGELOG.md" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://sdkman.io" rel="noopener">SDKMAN!</a> <span class="muted">Manage parallel JDK and JVM tool versions</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/sdkman/sdkman-cli/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://moonrepo.dev/proto" rel="noopener">proto</a> <span class="muted">Pluggable multi-language version manager</span></th>
+            <td>Package & build</td>
+            <td>Version managers</td>
+            <td><a href="https://github.com/moonrepo/proto/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://vite.dev" rel="noopener">Vite</a> <span class="muted">Frontend dev server and build tool</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/vitejs/vite/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://esbuild.github.io" rel="noopener">esbuild</a> <span class="muted">Extremely fast JavaScript bundler and minifier</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/evanw/esbuild/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://rspack.rs" rel="noopener">Rspack</a> <span class="muted">Rust bundler compatible with the webpack API</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/web-infra-dev/rspack/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://rolldown.rs" rel="noopener">Rolldown</a> <span class="muted">Rust bundler with a Rollup-compatible API</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/rolldown/rolldown/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://nextjs.org/docs/app/api-reference/turbopack" rel="noopener">Turbopack</a> <span class="muted">Incremental Rust bundler built into Next.js</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/vercel/next.js/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://webpack.js.org" rel="noopener">webpack</a> <span class="muted">Configurable module bundler for JavaScript</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/webpack/webpack/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://rollupjs.org" rel="noopener">Rollup</a> <span class="muted">ES module bundler for libraries</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/rollup/rollup/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://parceljs.org" rel="noopener">Parcel</a> <span class="muted">Zero-configuration web application bundler</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/parcel-bundler/parcel/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://swc.rs" rel="noopener">SWC</a> <span class="muted">Rust compiler for JavaScript and TypeScript</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/swc-project/swc/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://tsdown.dev" rel="noopener">tsdown</a> <span class="muted">Library bundler for TypeScript, powered by Rolldown</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/rolldown/tsdown/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://bazel.build" rel="noopener">Bazel</a> <span class="muted">Hermetic, multi-language build system from Google</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/bazelbuild/bazel/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://buck2.build" rel="noopener">Buck2</a> <span class="muted">Meta's fast multi-language build system</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/facebook/buck2/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://www.pantsbuild.org" rel="noopener">Pants</a> <span class="muted">Monorepo build system for Python, Go, JVM and more</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/pantsbuild/pants/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://earthly.dev" rel="noopener">Earthly</a> <span class="muted">Containerized builds from Dockerfile-like Earthfiles</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/earthly/earthly" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://dagger.io" rel="noopener">Dagger</a> <span class="muted">Programmable CI/CD pipelines that run in containers</span></th>
+            <td>Package & build</td>
+            <td>Build tools</td>
+            <td><a href="https://github.com/dagger/dagger/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://www.gnu.org/software/make/" rel="noopener">Make</a> <span class="muted">The classic dependency-based build and task tool</span></th>
+            <td>Package & build</td>
+            <td>Task runners</td>
+            <td><a href="https://ftp.gnu.org/gnu/make/" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://just.systems" rel="noopener">Just</a> <span class="muted">A command runner with make-like recipes</span></th>
+            <td>Package & build</td>
+            <td>Task runners</td>
+            <td><a href="https://github.com/casey/just/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="foundations">
+            <th scope="row"><a href="https://taskfile.dev" rel="noopener">Task</a> <span class="muted">YAML-based task runner and build tool in Go</span></th>
+            <td>Package & build</td>
+            <td>Task runners</td>
+            <td><a href="https://github.com/go-task/task/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://docs.docker.com/engine/" rel="noopener">Docker Engine</a> <span class="muted">The open-source Docker daemon and CLI for Linux</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://docs.docker.com/engine/release-notes/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://www.docker.com/products/docker-desktop/" rel="noopener">Docker Desktop</a> <span class="muted">Docker Engine, Compose and Kubernetes in a desktop app</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://docs.docker.com/desktop/release-notes/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>70</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://podman.io" rel="noopener">Podman</a> <span class="muted">Daemonless, rootless container engine</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/containers/podman/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://podman-desktop.io" rel="noopener">Podman Desktop</a> <span class="muted">Desktop app for Podman, Kubernetes and other engines</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/podman-desktop/podman-desktop/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://rancherdesktop.io" rel="noopener">Rancher Desktop</a> <span class="muted">Desktop containers and k3s Kubernetes, free and open</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/rancher-sandbox/rancher-desktop/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://orbstack.dev" rel="noopener">OrbStack</a> <span class="muted">Fast, light Docker and Linux VMs for macOS</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://docs.orbstack.dev/release-notes" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>70</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/abiosoft/colima" rel="noopener">Colima</a> <span class="muted">Minimal container runtimes on macOS and Linux via Lima</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/abiosoft/colima/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://lima-vm.io" rel="noopener">Lima</a> <span class="muted">Linux VMs with containerd for macOS and Linux</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/lima-vm/lima/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://containerd.io" rel="noopener">containerd</a> <span class="muted">Industry-standard container runtime daemon</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/containerd/containerd/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/containerd/nerdctl" rel="noopener">nerdctl</a> <span class="muted">Docker-compatible CLI for containerd</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/containerd/nerdctl/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://runfinch.com" rel="noopener">Finch</a> <span class="muted">AWS's open-source client for container development</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/runfinch/finch/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/apple/container" rel="noopener">Apple container</a> <span class="muted">Run Linux containers as light VMs on Apple silicon</span></th>
+            <td>Containers & clusters</td>
+            <td>Container runtimes</td>
+            <td><a href="https://github.com/apple/container/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://docs.docker.com/compose/" rel="noopener">Docker Compose</a> <span class="muted">Define and run multi-container apps from YAML</span></th>
+            <td>Containers & clusters</td>
+            <td>Compose</td>
+            <td><a href="https://github.com/docker/compose/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://docs.docker.com/compose/how-tos/file-watch/" rel="noopener">Compose Watch</a> <span class="muted">File sync and rebuild-on-change for Docker Compose</span></th>
+            <td>Containers & clusters</td>
+            <td>Compose</td>
+            <td><a href="https://github.com/docker/compose/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/containers/podman-compose" rel="noopener">Podman Compose</a> <span class="muted">Run Compose files with Podman</span></th>
+            <td>Containers & clusters</td>
+            <td>Compose</td>
+            <td><a href="https://github.com/containers/podman-compose/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://kompose.io" rel="noopener">Kompose</a> <span class="muted">Convert Compose files to Kubernetes manifests</span></th>
+            <td>Containers & clusters</td>
+            <td>Compose</td>
+            <td><a href="https://github.com/kubernetes/kompose/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://kind.sigs.k8s.io" rel="noopener">kind</a> <span class="muted">Kubernetes clusters in Docker containers</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/kubernetes-sigs/kind/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://k3d.io" rel="noopener">k3d</a> <span class="muted">Run k3s clusters in Docker</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/k3d-io/k3d/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://k3s.io" rel="noopener">k3s</a> <span class="muted">Lightweight certified Kubernetes distribution</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/k3s-io/k3s/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://minikube.sigs.k8s.io" rel="noopener">minikube</a> <span class="muted">Local Kubernetes for learning and development</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/kubernetes/minikube/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://microk8s.io" rel="noopener">MicroK8s</a> <span class="muted">Canonical's low-ops Kubernetes with add-ons</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/canonical/microk8s/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://k0sproject.io" rel="noopener">k0s</a> <span class="muted">Single-binary, zero-dependency Kubernetes</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/k0sproject/k0s/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://www.vcluster.com" rel="noopener">vcluster</a> <span class="muted">Virtual Kubernetes clusters inside a host cluster</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://github.com/loft-sh/vcluster/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://kubernetes.io" rel="noopener">Kubernetes</a> <span class="muted">Upstream container orchestration, as a reference point</span></th>
+            <td>Containers & clusters</td>
+            <td>Local Kubernetes</td>
+            <td><a href="https://kubernetes.io/releases/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>90</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://docs.docker.com/build/buildkit/" rel="noopener">BuildKit / buildx</a> <span class="muted">Docker's concurrent, cache-efficient image builder</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/moby/buildkit/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://buildpacks.io" rel="noopener">Cloud Native Buildpacks</a> <span class="muted">Build OCI images from source without a Dockerfile</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/buildpacks/pack/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://ko.build" rel="noopener">ko</a> <span class="muted">Build Go container images without Docker</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/ko-build/ko/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/GoogleContainerTools/jib" rel="noopener">Jib</a> <span class="muted">Daemonless container images for Java via Maven or Gradle</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/GoogleContainerTools/jib/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/GoogleContainerTools/kaniko" rel="noopener">Kaniko</a> <span class="muted">Build images from a Dockerfile inside Kubernetes</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/GoogleContainerTools/kaniko" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>10</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://buildah.io" rel="noopener">Buildah</a> <span class="muted">Build OCI images without a daemon</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/containers/buildah/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://nixpacks.com" rel="noopener">Nixpacks</a> <span class="muted">Build images from source using Nix packages</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/railwayapp/nixpacks" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://railpack.com" rel="noopener">Railpack</a> <span class="muted">Zero-config image builder on BuildKit, from Railway</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/railwayapp/railpack/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://depot.dev" rel="noopener">Depot</a> <span class="muted">Hosted remote BuildKit builders with shared cache</span></th>
+            <td>Containers & clusters</td>
+            <td>Image builders</td>
+            <td><a href="https://github.com/depot/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://www.portainer.io" rel="noopener">Portainer</a> <span class="muted">Web UI for Docker, Podman and Kubernetes</span></th>
+            <td>Containers & clusters</td>
+            <td>Container UIs</td>
+            <td><a href="https://github.com/portainer/portainer/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/jesseduffield/lazydocker" rel="noopener">Lazydocker</a> <span class="muted">Terminal UI for Docker and Compose</span></th>
+            <td>Containers & clusters</td>
+            <td>Container UIs</td>
+            <td><a href="https://github.com/jesseduffield/lazydocker/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="containers">
+            <th scope="row"><a href="https://github.com/wagoodman/dive" rel="noopener">Dive</a> <span class="muted">Explore image layers and find wasted space</span></th>
+            <td>Containers & clusters</td>
+            <td>Container UIs</td>
+            <td><a href="https://github.com/wagoodman/dive/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://flisk.sh" rel="noopener">Flisk</a> <span class="muted">Local dev loop for microservices and multi-agent stacks</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/flisk-sh/flisk/releases" rel="noopener">Assess</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://tilt.dev" rel="noopener">Tilt</a> <span class="muted">Live-update loop for multi-service apps</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/tilt-dev/tilt/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://skaffold.dev" rel="noopener">Skaffold</a> <span class="muted">Build, push and deploy loop for Kubernetes apps</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/GoogleContainerTools/skaffold/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://garden.io" rel="noopener">Garden</a> <span class="muted">Graph-based build, deploy and test for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/garden-io/garden/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://devspace.sh" rel="noopener">DevSpace</a> <span class="muted">File sync and dev mode for Kubernetes workloads</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/devspace-sh/devspace/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://www.okteto.com" rel="noopener">Okteto</a> <span class="muted">Dev environments and file sync on a Kubernetes cluster</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/okteto/okteto/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/dotnet/tye" rel="noopener">Project Tye</a> <span class="muted">Experimental .NET multi-service runner</span></th>
+            <td>Inner loop</td>
+            <td>Live-update loops</td>
+            <td><a href="https://github.com/dotnet/tye" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/Azure/draft" rel="noopener">Draft</a> <span class="muted">Generates Dockerfiles, manifests and pipelines for AKS</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/Azure/draft/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://werf.io" rel="noopener">werf</a> <span class="muted">Git-driven build and deploy CLI built on Helm</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/werf/werf/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://helm.sh" rel="noopener">Helm</a> <span class="muted">Package manager and templating for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/helm/helm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://kustomize.io" rel="noopener">Kustomize</a> <span class="muted">Template-free overlays for Kubernetes manifests</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/kubernetes-sigs/kustomize/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://timoni.sh" rel="noopener">Timoni</a> <span class="muted">CUE-based package manager for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/stefanprodan/timoni/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://carvel.dev/kapp/" rel="noopener">kapp</a> <span class="muted">Deploys a set of resources as one app with diffs</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/carvel-dev/kapp/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://kubernetes.io/docs/reference/kubectl/" rel="noopener">kubectl</a> <span class="muted">The official Kubernetes command-line client</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/kubernetes/kubernetes/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://helmfile.readthedocs.io" rel="noopener">Helmfile</a> <span class="muted">Declarative spec for deploying many Helm releases</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/helmfile/helmfile/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://tanka.dev" rel="noopener">Tanka</a> <span class="muted">Jsonnet-based Kubernetes configuration tool</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/grafana/tanka/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://cdk8s.io" rel="noopener">cdk8s</a> <span class="muted">Kubernetes manifests from TypeScript, Python, Go or Java</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/cdk8s-team/cdk8s-cli/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://krew.sigs.k8s.io" rel="noopener">Krew</a> <span class="muted">Plugin manager for kubectl</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/kubernetes-sigs/krew/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/stern/stern" rel="noopener">stern</a> <span class="muted">Tails logs from many pods and containers at once</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/stern/stern/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://kubectx.dev" rel="noopener">kubectx</a> <span class="muted">Fast switching between kubectl contexts and namespaces</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/ahmetb/kubectx/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/kubie-org/kubie" rel="noopener">kubie</a> <span class="muted">Per-shell Kubernetes context and namespace switching</span></th>
+            <td>Inner loop</td>
+            <td>Kubernetes dev</td>
+            <td><a href="https://github.com/kubie-org/kubie/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://www.telepresence.io" rel="noopener">Telepresence</a> <span class="muted">Runs a local process as if it were inside the cluster</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/telepresenceio/telepresence/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://metalbear.com/mirrord/" rel="noopener">mirrord</a> <span class="muted">Mirrors cluster traffic, files and env into a local process</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/metalbear-co/mirrord/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://gefyra.dev" rel="noopener">Gefyra</a> <span class="muted">Runs local containers inside a Kubernetes network</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/gefyrahq/gefyra/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://www.signadot.com" rel="noopener">Signadot</a> <span class="muted">Request-routed sandboxes on a shared Kubernetes cluster</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/signadot/cli/releases" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/txn2/kubefwd" rel="noopener">kubefwd</a> <span class="muted">Bulk port-forwards cluster services with local DNS names</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/txn2/kubefwd/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/Azure/Bridge-To-Kubernetes" rel="noopener">Bridge to Kubernetes</a> <span class="muted">Retired VS Code bridge from Microsoft</span></th>
+            <td>Inner loop</td>
+            <td>Cluster bridges</td>
+            <td><a href="https://github.com/Azure/Bridge-To-Kubernetes" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://k9scli.io" rel="noopener">k9s</a> <span class="muted">Terminal UI for navigating and managing clusters</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/derailed/k9s/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://k8slens.dev" rel="noopener">Lens</a> <span class="muted">Desktop app for managing Kubernetes clusters</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://docs.k8slens.dev/release-notes/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://headlamp.dev" rel="noopener">Headlamp</a> <span class="muted">Extensible web and desktop UI for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/kubernetes-sigs/headlamp/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://freelens.app" rel="noopener">Freelens</a> <span class="muted">Open source desktop UI forked from Lens</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/freelensapp/freelens/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://kubetail.com" rel="noopener">Kubetail</a> <span class="muted">Real-time log viewer for Kubernetes in browser or terminal</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/kubetail-org/kubetail/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://aptakube.com" rel="noopener">Aptakube</a> <span class="muted">Native desktop client for many clusters at once</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/aptakube/aptakube/releases" rel="noopener">Trial</a></td>
+            <td>Paid</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/kdash-rs/kdash" rel="noopener">KDash</a> <span class="muted">Lightweight terminal dashboard for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/kdash-rs/kdash/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/kubernetes/dashboard" rel="noopener">Kubernetes Dashboard</a> <span class="muted">Retired official web UI for Kubernetes</span></th>
+            <td>Inner loop</td>
+            <td>Cluster UIs</td>
+            <td><a href="https://github.com/kubernetes/dashboard" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>10</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://pm2.keymetrics.io" rel="noopener">PM2</a> <span class="muted">Process manager for Node.js and other runtimes</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/Unitech/pm2/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://f1bonacc1.github.io/process-compose/" rel="noopener">process-compose</a> <span class="muted">Compose-style orchestration for plain processes</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/F1bonacc1/process-compose/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/DarthSim/overmind" rel="noopener">Overmind</a> <span class="muted">Procfile runner on tmux with per-process restart</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/DarthSim/overmind/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://ddollar.github.io/foreman/" rel="noopener">Foreman</a> <span class="muted">The original Procfile process runner</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://rubygems.org/gems/foreman" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/DarthSim/hivemind" rel="noopener">Hivemind</a> <span class="muted">Minimal Procfile runner without tmux</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/DarthSim/hivemind/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/nickstenning/honcho" rel="noopener">Honcho</a> <span class="muted">Python port of Foreman for Procfiles</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/nickstenning/honcho/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/mattn/goreman" rel="noopener">goreman</a> <span class="muted">Single-binary Foreman clone written in Go</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/mattn/goreman/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/open-cli-tools/concurrently" rel="noopener">concurrently</a> <span class="muted">Runs several npm scripts or commands in one terminal</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/open-cli-tools/concurrently/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/pvolok/mprocs" rel="noopener">mprocs</a> <span class="muted">TUI that runs several commands side by side</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/pvolok/mprocs/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://nodemon.io" rel="noopener">nodemon</a> <span class="muted">Restarts a Node.js process when files change</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/remy/nodemon/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/air-verse/air" rel="noopener">Air</a> <span class="muted">Live reload for Go applications</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/air-verse/air/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://watchexec.github.io" rel="noopener">watchexec</a> <span class="muted">Runs a command when files change, any language</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/watchexec/watchexec/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://dystroy.org/bacon/" rel="noopener">bacon</a> <span class="muted">Background Rust checker that reruns on change</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/Canop/bacon/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/watchexec/cargo-watch" rel="noopener">cargo-watch</a> <span class="muted">Archived cargo subcommand that reruns on change</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/watchexec/cargo-watch" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://facebook.github.io/watchman/" rel="noopener">Watchman</a> <span class="muted">File watching service used by build tools</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/facebook/watchman/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="inner-loop">
+            <th scope="row"><a href="https://github.com/cespare/reflex" rel="noopener">reflex</a> <span class="muted">Small Go tool that reruns commands on file change</span></th>
+            <td>Inner loop</td>
+            <td>Process runners</td>
+            <td><a href="https://github.com/cespare/reflex/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://nixos.org" rel="noopener">Nix</a> <span class="muted">Purely functional package manager and dev shells</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/NixOS/nix/tags" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://devenv.sh" rel="noopener">devenv</a> <span class="muted">Nix-based dev environments with services and processes</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/cachix/devenv/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://www.jetify.com/devbox" rel="noopener">Devbox</a> <span class="muted">Isolated shells from Nix packages without writing Nix</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/jetify-com/devbox/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://flox.dev" rel="noopener">Flox</a> <span class="muted">Nix-backed environments you can share and layer</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/flox/flox/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://direnv.net" rel="noopener">direnv</a> <span class="muted">Loads and unloads env vars per directory</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/direnv/direnv/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://distrobox.it" rel="noopener">Distrobox</a> <span class="muted">Any Linux distro in a container, integrated with the host</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/89luca89/distrobox/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://containertoolbx.org" rel="noopener">Toolbx</a> <span class="muted">Container-based mutable shells for Fedora and RHEL</span></th>
+            <td>Dev environments</td>
+            <td>Reproducible shells</td>
+            <td><a href="https://github.com/containers/toolbox/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://containers.dev" rel="noopener">Dev Containers</a> <span class="muted">Open spec and CLI for container-based dev environments</span></th>
+            <td>Dev environments</td>
+            <td>Dev containers</td>
+            <td><a href="https://github.com/devcontainers/cli/tags" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://devpod.sh" rel="noopener">DevPod</a> <span class="muted">Client-only dev containers on any backend</span></th>
+            <td>Dev environments</td>
+            <td>Dev containers</td>
+            <td><a href="https://github.com/loft-sh/devpod/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://developer.hashicorp.com/vagrant" rel="noopener">Vagrant</a> <span class="muted">Reproducible VM-based dev environments</span></th>
+            <td>Dev environments</td>
+            <td>Dev containers</td>
+            <td><a href="https://github.com/hashicorp/vagrant/releases" rel="noopener">Trial</a></td>
+            <td>Free, closed source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://github.com/features/codespaces" rel="noopener">GitHub Codespaces</a> <span class="muted">Hosted dev containers attached to GitHub repos</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://github.blog/changelog/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://ona.com" rel="noopener">Ona</a> <span class="muted">Cloud environments and AI agents, formerly Gitpod</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://ona.com/stories/gitpod-is-now-ona" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://coder.com" rel="noopener">Coder</a> <span class="muted">Self-hosted remote workspaces defined in Terraform</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://github.com/coder/coder/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://eclipse.dev/che/" rel="noopener">Eclipse Che</a> <span class="muted">Kubernetes-native browser IDE workspaces</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://github.com/eclipse-che/che/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://coder.com/docs/code-server" rel="noopener">code-server</a> <span class="muted">VS Code in the browser on any machine you run</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://github.com/coder/code-server/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://www.daytona.io" rel="noopener">Daytona</a> <span class="muted">Former dev-environment manager, now AI code sandboxes</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://github.com/daytonaio/daytona" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://codesandbox.io" rel="noopener">CodeSandbox</a> <span class="muted">Browser sandboxes and microVM dev environments</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://codesandbox.io" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://stackblitz.com" rel="noopener">StackBlitz</a> <span class="muted">Node.js dev environments running in the browser tab</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://blog.stackblitz.com" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://replit.com" rel="noopener">Replit</a> <span class="muted">Hosted IDE with built-in hosting and an AI agent</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://docs.replit.com/updates" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://cloud.google.com/workstations" rel="noopener">Google Cloud Workstations</a> <span class="muted">Managed dev environments inside your Google Cloud project</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://cloud.google.com/workstations/docs/release-notes" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://firebase.studio" rel="noopener">Firebase Studio</a> <span class="muted">Sunsetting browser workspace from Google, formerly IDX</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://firebase.google.com/docs/studio/migrating-project" rel="noopener">Hold</a></td>
+            <td>Free, closed source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://aws.amazon.com/cloud9/" rel="noopener">AWS Cloud9</a> <span class="muted">Browser IDE on EC2, closed to new customers</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://aws.amazon.com/blogs/devops/how-to-migrate-from-aws-cloud9-to-aws-ide-toolkits-or-aws-cloudshell/" rel="noopener">Hold</a></td>
+            <td>Paid</td>
+            <td>20</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://azure.microsoft.com/en-us/products/dev-box" rel="noopener">Microsoft Dev Box</a> <span class="muted">Cloud Windows workstations for developers</span></th>
+            <td>Dev environments</td>
+            <td>Cloud workspaces</td>
+            <td><a href="https://learn.microsoft.com/en-us/azure/dev-box/dev-box-windows-365-announcement" rel="noopener">Hold</a></td>
+            <td>Paid</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://ddev.com" rel="noopener">DDEV</a> <span class="muted">Docker-based local stacks for PHP and Node projects</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://github.com/ddev/ddev/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://lando.dev" rel="noopener">Lando</a> <span class="muted">Recipe-based Docker dev environments</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://github.com/lando/lando/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://laravel.com/docs/sail" rel="noopener">Laravel Sail</a> <span class="muted">Docker Compose setup for Laravel apps</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://github.com/laravel/sail/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://herd.laravel.com" rel="noopener">Laravel Herd</a> <span class="muted">Native PHP and Node dev environment for Laravel</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://herd.laravel.com/docs/macos/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://localwp.com" rel="noopener">Local</a> <span class="muted">Desktop app for local WordPress sites</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://localwp.com/releases/" rel="noopener">Adopt</a></td>
+            <td>Free, closed source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="environments">
+            <th scope="row"><a href="https://docksal.io" rel="noopener">Docksal</a> <span class="muted">Docker-based stacks for Drupal and PHP</span></th>
+            <td>Dev environments</td>
+            <td>Local stacks</td>
+            <td><a href="https://github.com/docksal/docksal/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://nx.dev" rel="noopener">Nx</a> <span class="muted">Monorepo build system with task graph and caching</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://github.com/nrwl/nx/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://turborepo.com" rel="noopener">Turborepo</a> <span class="muted">Task runner and cache for JavaScript monorepos</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://github.com/vercel/turborepo/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://lerna.js.org" rel="noopener">Lerna</a> <span class="muted">Versioning and publishing for JavaScript monorepos</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://github.com/lerna/lerna/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://rushjs.io" rel="noopener">Rush</a> <span class="muted">Microsoft's monorepo manager for large JS repos</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://www.npmjs.com/package/@microsoft/rush" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://moonrepo.dev" rel="noopener">moon</a> <span class="muted">Rust monorepo task runner with toolchain management</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://github.com/moonrepo/moon/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://microsoft.github.io/lage/" rel="noopener">Lage</a> <span class="muted">Task runner for JS monorepos from Microsoft</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://www.npmjs.com/package/lage" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://github.com/changesets/changesets" rel="noopener">Changesets</a> <span class="muted">Versioning and changelogs for multi-package repos</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Monorepo tools</td>
+            <td><a href="https://github.com/changesets/changesets/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://aspire.dev" rel="noopener">Aspire</a> <span class="muted">Code-first app host with dashboard for distributed apps</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/dotnet/aspire/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://encore.dev" rel="noopener">Encore</a> <span class="muted">Backend framework that provisions infra from code</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/encoredev/encore/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://dapr.io" rel="noopener">Dapr</a> <span class="muted">Sidecar runtime APIs for distributed applications</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/dapr/dapr/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>90</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://wasp.sh" rel="noopener">Wasp</a> <span class="muted">Full-stack React and Node framework with a DSL</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/wasp-lang/wasp/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://redwoodjs.com" rel="noopener">RedwoodJS</a> <span class="muted">Full-stack React, GraphQL and Prisma framework</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/redwoodjs/redwood/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://nitric.io" rel="noopener">Nitric</a> <span class="muted">Cloud framework with infrastructure inferred from code</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/nitrictech/nitric/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://quarkus.io" rel="noopener">Quarkus</a> <span class="muted">Java framework with dev mode, Dev UI and Dev Services</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/quarkusio/quarkus/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://spring.io/projects/spring-boot" rel="noopener">Spring Boot</a> <span class="muted">Java framework with Compose support and devtools</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/spring-projects/spring-boot/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://micronaut.io" rel="noopener">Micronaut</a> <span class="muted">JVM framework with Test Resources for local deps</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/micronaut-projects/micronaut-core/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://rubyonrails.org" rel="noopener">Ruby on Rails</a> <span class="muted">Full-stack Ruby web framework</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/rails/rails/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://laravel.com" rel="noopener">Laravel</a> <span class="muted">PHP web framework with Sail for local Docker</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/laravel/framework/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://www.djangoproject.com" rel="noopener">Django</a> <span class="muted">Batteries-included Python web framework</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://www.djangoproject.com/download/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://nextjs.org" rel="noopener">Next.js</a> <span class="muted">React framework for full-stack web apps</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/vercel/next.js/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://reactrouter.com" rel="noopener">React Router</a> <span class="muted">React framework mode, successor to Remix</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/remix-run/react-router/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://astro.build" rel="noopener">Astro</a> <span class="muted">Content-first web framework with islands</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/withastro/astro/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://nestjs.com" rel="noopener">NestJS</a> <span class="muted">Structured Node.js framework for server apps</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/nestjs/nest/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://hono.dev" rel="noopener">Hono</a> <span class="muted">Small web framework for any JavaScript runtime</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/honojs/hono/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://fastapi.tiangolo.com" rel="noopener">FastAPI</a> <span class="muted">Python API framework with type-driven validation</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>App frameworks</td>
+            <td><a href="https://github.com/fastapi/fastapi/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://sst.dev" rel="noopener">SST</a> <span class="muted">Infra-as-code framework with live AWS dev mode</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/sst/sst/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://www.serverless.com" rel="noopener">Serverless Framework</a> <span class="muted">Deploy and develop AWS Lambda apps from YAML</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/serverless/serverless/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://aws.amazon.com/serverless/sam/" rel="noopener">AWS SAM</a> <span class="muted">AWS CLI to build and run Lambda apps locally</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/aws/aws-sam-cli/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://arc.codes" rel="noopener">Architect</a> <span class="muted">Serverless AWS apps with a local sandbox</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://www.npmjs.com/package/@architect/architect" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://developers.cloudflare.com/workers/wrangler/" rel="noopener">Wrangler</a> <span class="muted">Cloudflare Workers CLI with local workerd dev</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/cloudflare/workers-sdk/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://vercel.com/docs/cli" rel="noopener">Vercel CLI</a> <span class="muted">Deploy and emulate Vercel projects locally</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://www.npmjs.com/package/vercel" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://docs.netlify.com/cli/get-started/" rel="noopener">Netlify CLI</a> <span class="muted">Run Netlify sites and functions locally</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/netlify/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://learn.microsoft.com/azure/azure-functions/functions-run-local" rel="noopener">Azure Functions Core Tools</a> <span class="muted">Run and debug Azure Functions locally</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Serverless frameworks</td>
+            <td><a href="https://github.com/Azure/azure-functions-core-tools/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://create.t3.gg" rel="noopener">create-t3-app</a> <span class="muted">Scaffold a typesafe Next.js, tRPC and Prisma app</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://github.com/t3-oss/create-t3-app/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://vite.dev/guide/" rel="noopener">create-vite</a> <span class="muted">Official Vite project templates</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://www.npmjs.com/package/create-vite" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://yeoman.io" rel="noopener">Yeoman</a> <span class="muted">Generator ecosystem for scaffolding projects</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://www.npmjs.com/package/yeoman-generator" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://www.jhipster.tech" rel="noopener">JHipster</a> <span class="muted">Generate Spring Boot apps with Angular, React or Vue</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://github.com/jhipster/generator-jhipster/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://cookiecutter.readthedocs.io" rel="noopener">Cookiecutter</a> <span class="muted">Project templates from Jinja-templated directories</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://github.com/cookiecutter/cookiecutter/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://copier.readthedocs.io" rel="noopener">Copier</a> <span class="muted">Project templates that can update generated projects</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://github.com/copier-org/copier/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="frameworks">
+            <th scope="row"><a href="https://plopjs.com" rel="noopener">Plop</a> <span class="muted">Micro-generator for files inside an existing repo</span></th>
+            <td>Monorepos & frameworks</td>
+            <td>Scaffolders</td>
+            <td><a href="https://github.com/plopjs/plop/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.localstack.cloud" rel="noopener">LocalStack</a> <span class="muted">Local AWS cloud emulator in a container</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://docs.localstack.cloud/aws/changelog/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://docs.getmoto.org" rel="noopener">Moto</a> <span class="muted">Mock AWS services for Python tests or as a server</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/getmoto/moto/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.min.io" rel="noopener">MinIO</a> <span class="muted">S3-compatible object storage server</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/minio/minio/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://learn.microsoft.com/azure/storage/common/storage-use-azurite" rel="noopener">Azurite</a> <span class="muted">Local emulator for Azure Blob, Queue and Table storage</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/Azure/Azurite/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://firebase.google.com/docs/emulator-suite" rel="noopener">Firebase Emulator Suite</a> <span class="muted">Local Firestore, Auth, Functions and more with a UI</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/firebase/firebase-tools/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://cloud.google.com/sdk/gcloud/reference/beta/emulators" rel="noopener">Google Cloud emulators</a> <span class="muted">gcloud emulators for Pub/Sub, Firestore, Spanner, Bigtable</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://cloud.google.com/sdk/docs/release-notes" rel="noopener">Adopt</a></td>
+            <td>Free, closed source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://developers.cloudflare.com/workers/testing/miniflare/" rel="noopener">Miniflare</a> <span class="muted">Local simulator for Cloudflare Workers on workerd</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/cloudflare/workers-sdk/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/fsouza/fake-gcs-server" rel="noopener">fake-gcs-server</a> <span class="muted">Emulator for the Google Cloud Storage API</span></th>
+            <td>Local services & data</td>
+            <td>Cloud emulators</td>
+            <td><a href="https://github.com/fsouza/fake-gcs-server/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://supabase.com/docs/guides/local-development" rel="noopener">Supabase CLI</a> <span class="muted">Run the full Supabase stack locally in Docker</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://github.com/supabase/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://appwrite.io" rel="noopener">Appwrite</a> <span class="muted">Self-hostable backend with auth, DB, storage, functions</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://github.com/appwrite/appwrite/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://pocketbase.io" rel="noopener">PocketBase</a> <span class="muted">Backend in one Go binary with SQLite and admin UI</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://github.com/pocketbase/pocketbase/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.convex.dev" rel="noopener">Convex</a> <span class="muted">Reactive TypeScript backend with a local dev server</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://www.npmjs.com/package/convex" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://nhost.io" rel="noopener">Nhost</a> <span class="muted">Postgres, Hasura GraphQL, auth and storage stack</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://github.com/nhost/nhost/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://neon.com" rel="noopener">Neon</a> <span class="muted">Serverless Postgres with copy-on-write branches</span></th>
+            <td>Local services & data</td>
+            <td>Local backends</td>
+            <td><a href="https://neon.com/docs/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://wiremock.org" rel="noopener">WireMock</a> <span class="muted">HTTP API mock server with stubbing and recording</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/wiremock/wiremock/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://mockoon.com" rel="noopener">Mockoon</a> <span class="muted">Desktop app and CLI for local mock APIs</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/mockoon/mockoon/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://stoplight.io/open-source/prism" rel="noopener">Prism</a> <span class="muted">Mock server and validator from OpenAPI documents</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/stoplightio/prism/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://mswjs.io" rel="noopener">Mock Service Worker</a> <span class="muted">API mocking by intercepting requests in browser and Node</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/mswjs/msw/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://mailpit.axllent.org" rel="noopener">Mailpit</a> <span class="muted">SMTP catcher with web UI and API for testing email</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/axllent/mailpit/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/mailhog/MailHog" rel="noopener">MailHog</a> <span class="muted">SMTP testing server with web UI</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/mailhog/MailHog/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://ngrok.com" rel="noopener">ngrok</a> <span class="muted">Public HTTPS tunnels to local services</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://ngrok.com/docs/agent/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/" rel="noopener">Cloudflare Tunnel</a> <span class="muted">Expose local services through Cloudflare via cloudflared</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/cloudflare/cloudflared/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://theboroer.github.io/localtunnel-www/" rel="noopener">localtunnel</a> <span class="muted">Expose localhost through a public URL</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://www.npmjs.com/package/localtunnel" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://tailscale.com/kb/1223/funnel" rel="noopener">Tailscale Funnel</a> <span class="muted">Share a local port to the internet over Tailscale</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/tailscale/tailscale/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://microcks.io" rel="noopener">Microcks</a> <span class="muted">Mocks and contract tests from OpenAPI, AsyncAPI, gRPC</span></th>
+            <td>Local services & data</td>
+            <td>Mocks and tunnels</td>
+            <td><a href="https://github.com/microcks/microcks/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://testcontainers.com" rel="noopener">Testcontainers</a> <span class="muted">Throwaway Docker dependencies from test code</span></th>
+            <td>Local services & data</td>
+            <td>Test dependencies</td>
+            <td><a href="https://github.com/testcontainers/testcontainers-node/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/Shopify/toxiproxy" rel="noopener">Toxiproxy</a> <span class="muted">TCP proxy that injects latency and network faults</span></th>
+            <td>Local services & data</td>
+            <td>Test dependencies</td>
+            <td><a href="https://github.com/Shopify/toxiproxy/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://pact.io" rel="noopener">Pact</a> <span class="muted">Consumer-driven contract testing between services</span></th>
+            <td>Local services & data</td>
+            <td>Test dependencies</td>
+            <td><a href="https://github.com/pact-foundation/pact-js/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.prisma.io" rel="noopener">Prisma</a> <span class="muted">TypeScript ORM with schema migrations and Studio</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/prisma/prisma/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://orm.drizzle.team" rel="noopener">Drizzle ORM</a> <span class="muted">SQL-like TypeScript ORM with drizzle-kit migrations</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/drizzle-team/drizzle-orm/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://atlasgo.io" rel="noopener">Atlas</a> <span class="muted">Declarative schema-as-code migrations with linting</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/ariga/atlas/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/amacneil/dbmate" rel="noopener">dbmate</a> <span class="muted">Language-agnostic SQL migration tool</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/amacneil/dbmate/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.red-gate.com/products/flyway/" rel="noopener">Flyway</a> <span class="muted">Versioned SQL migrations for many databases</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/flyway/flyway/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.liquibase.com" rel="noopener">Liquibase</a> <span class="muted">Database change management with changelogs</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/liquibase/liquibase/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/golang-migrate/migrate" rel="noopener">golang-migrate</a> <span class="muted">Database migrations CLI and Go library</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/golang-migrate/migrate/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://sqitch.org" rel="noopener">Sqitch</a> <span class="muted">Dependency-based database change management</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/sqitchers/sqitch/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://alembic.sqlalchemy.org" rel="noopener">Alembic</a> <span class="muted">Migrations for SQLAlchemy</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/sqlalchemy/alembic/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://kysely.dev" rel="noopener">Kysely</a> <span class="muted">Type-safe TypeScript SQL query builder</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/kysely-org/kysely/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://typeorm.io" rel="noopener">TypeORM</a> <span class="muted">Decorator-based ORM for TypeScript</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/typeorm/typeorm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://sequelize.org" rel="noopener">Sequelize</a> <span class="muted">Promise-based ORM for Node.js</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/sequelize/sequelize/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://www.sqlalchemy.org" rel="noopener">SQLAlchemy</a> <span class="muted">Python SQL toolkit and ORM</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/sqlalchemy/sqlalchemy/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://learn.microsoft.com/ef/core/" rel="noopener">Entity Framework Core</a> <span class="muted">.NET ORM with code-first migrations</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/dotnet/efcore/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://sqlc.dev" rel="noopener">sqlc</a> <span class="muted">Generate type-safe code from SQL queries</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/sqlc-dev/sqlc/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://mikro-orm.io" rel="noopener">MikroORM</a> <span class="muted">TypeScript ORM with unit of work and migrations</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/mikro-orm/mikro-orm/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="services">
+            <th scope="row"><a href="https://github.com/launchbadge/sqlx" rel="noopener">SQLx</a> <span class="muted">Async Rust SQL toolkit with compile-time checked queries</span></th>
+            <td>Local services & data</td>
+            <td>ORMs and migrations</td>
+            <td><a href="https://github.com/launchbadge/sqlx/blob/main/CHANGELOG.md" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.langchain.com/langgraph" rel="noopener">LangGraph</a> <span class="muted">Stateful graphs for LLM agents</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/langchain-ai/langgraph/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.langchain.com" rel="noopener">LangChain</a> <span class="muted">Model, tool and retriever building blocks for LLM apps</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/langchain-ai/langchain/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://crewai.com" rel="noopener">CrewAI</a> <span class="muted">Role-based multi-agent crews and flows in Python</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/crewAIInc/crewAI/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://microsoft.github.io/autogen/" rel="noopener">AutoGen</a> <span class="muted">Microsoft's multi-agent conversation framework</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/microsoft/autogen/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.ag2.ai" rel="noopener">AG2</a> <span class="muted">Community fork of AutoGen 0.2 for multi-agent apps</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/ag2ai/ag2/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://learn.microsoft.com/en-us/agent-framework/" rel="noopener">Microsoft Agent Framework</a> <span class="muted">Successor to Semantic Kernel and AutoGen for .NET and Python</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/microsoft/agent-framework/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://learn.microsoft.com/en-us/semantic-kernel/" rel="noopener">Semantic Kernel</a> <span class="muted">Microsoft SDK for AI plugins in C#, Python and Java</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/microsoft/semantic-kernel/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://mastra.ai" rel="noopener">Mastra</a> <span class="muted">TypeScript framework for agents, workflows and RAG</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/mastra-ai/mastra/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://openai.github.io/openai-agents-python/" rel="noopener">OpenAI Agents SDK</a> <span class="muted">Lightweight agents, handoffs and guardrails from OpenAI</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/openai/openai-agents-python/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://code.claude.com/docs/en/agent-sdk/overview" rel="noopener">Claude Agent SDK</a> <span class="muted">The Claude Code agent loop as a library</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/anthropics/claude-agent-sdk-python/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://adk.dev" rel="noopener">Google ADK</a> <span class="muted">Google's Agent Development Kit for Python, Java, Go and TS</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/google/adk-python/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://pydantic.dev/docs/ai/overview/" rel="noopener">Pydantic AI</a> <span class="muted">Type-safe Python agent framework from the Pydantic team</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/pydantic/pydantic-ai/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.llamaindex.ai" rel="noopener">LlamaIndex</a> <span class="muted">Data and retrieval framework for LLM agents</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/run-llama/llama_index/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://haystack.deepset.ai" rel="noopener">Haystack</a> <span class="muted">Pipelines for RAG and agents from deepset</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/deepset-ai/haystack/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://dspy.ai" rel="noopener">DSPy</a> <span class="muted">Program and optimize LM pipelines instead of prompting</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/stanfordnlp/dspy/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://ai-sdk.dev" rel="noopener">Vercel AI SDK</a> <span class="muted">TypeScript toolkit for LLM apps, streaming UI and agents</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/vercel/ai/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://huggingface.co/docs/smolagents/index" rel="noopener">smolagents</a> <span class="muted">Hugging Face's minimal code-writing agents</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/huggingface/smolagents/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.agno.com" rel="noopener">Agno</a> <span class="muted">Python agents and teams with a runtime and control plane</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/agno-agi/agno/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.letta.com" rel="noopener">Letta</a> <span class="muted">Stateful agents with long-term memory, formerly MemGPT</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/letta-ai/letta/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://temporal.io" rel="noopener">Temporal</a> <span class="muted">Durable execution for long-running agent workflows</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/temporalio/temporal/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.inngest.com" rel="noopener">Inngest</a> <span class="muted">Durable steps, queues and AgentKit for serverless code</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/inngest/inngest/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>80</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://restate.dev" rel="noopener">Restate</a> <span class="muted">Durable execution engine for agents and services</span></th>
+            <td>AI & agents</td>
+            <td>Agent frameworks</td>
+            <td><a href="https://github.com/restatedev/restate/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://modelcontextprotocol.io" rel="noopener">Model Context Protocol</a> <span class="muted">Open protocol and SDKs connecting agents to tools and data</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/modelcontextprotocol/modelcontextprotocol/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/modelcontextprotocol/inspector" rel="noopener">MCP Inspector</a> <span class="muted">Visual test and debug tool for MCP servers</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/modelcontextprotocol/inspector/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://docs.docker.com/ai/mcp-catalog-and-toolkit/" rel="noopener">Docker MCP Toolkit</a> <span class="muted">Run catalog MCP servers as containers behind one gateway</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://docs.docker.com/desktop/release-notes/" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://smithery.ai" rel="noopener">Smithery</a> <span class="muted">Registry and hosting for MCP servers</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/arcadeai-labs/smithery-cli/releases" rel="noopener">Hold</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://registry.modelcontextprotocol.io" rel="noopener">MCP Registry</a> <span class="muted">Official community registry of public MCP servers</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/modelcontextprotocol/registry/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://gofastmcp.com" rel="noopener">FastMCP</a> <span class="muted">Pythonic framework for MCP servers and clients</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/PrefectHQ/fastmcp/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://composio.dev" rel="noopener">Composio</a> <span class="muted">Hosted tool integrations and auth for agents</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/ComposioHQ/composio/releases" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://skills.sh" rel="noopener">skills.sh</a> <span class="muted">Directory and CLI for installing agent skills</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/vercel-labs/skills/releases" rel="noopener">Assess</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.stagehand.dev" rel="noopener">Stagehand</a> <span class="muted">Browser automation SDK for agents, by Browserbase</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/browserbase/stagehand/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/microsoft/playwright-mcp" rel="noopener">Playwright MCP</a> <span class="muted">MCP server that drives a browser through Playwright</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/microsoft/playwright-mcp/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://e2b.dev" rel="noopener">E2B</a> <span class="muted">Cloud sandboxes for running agent-generated code</span></th>
+            <td>AI & agents</td>
+            <td>Agent tools and MCP</td>
+            <td><a href="https://github.com/e2b-dev/E2B/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://claude.com/product/claude-code" rel="noopener">Claude Code</a> <span class="muted">Anthropic's agentic coding tool for the terminal and IDEs</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/anthropics/claude-code/releases" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>90</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://openai.com/codex/" rel="noopener">Codex</a> <span class="muted">OpenAI's coding agent for terminal, IDE and cloud</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/openai/codex/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://cursor.com" rel="noopener">Cursor</a> <span class="muted">AI-first code editor forked from VS Code</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://cursor.com/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://geminicli.com" rel="noopener">Gemini CLI</a> <span class="muted">Google's open-source terminal agent for Gemini</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/google-gemini/gemini-cli/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/features/copilot" rel="noopener">GitHub Copilot</a> <span class="muted">GitHub's AI pair programmer, agent mode and cloud agent</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.blog/changelog/label/copilot/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://devin.ai/desktop" rel="noopener">Devin Desktop (formerly Windsurf)</a> <span class="muted">Cognition's agentic IDE, renamed from Windsurf</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://docs.devin.ai/desktop/changelog" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://cline.bot" rel="noopener">Cline</a> <span class="muted">Open-source coding agent for VS Code and the terminal</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/cline/cline/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/RooCodeInc/Roo-Code" rel="noopener">Roo Code</a> <span class="muted">VS Code agent forked from Cline, now discontinued</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/RooCodeInc/Roo-Code/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://aider.chat" rel="noopener">Aider</a> <span class="muted">Git-aware AI pair programming in the terminal</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/Aider-AI/aider/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://continue.dev" rel="noopener">Continue</a> <span class="muted">Open-source IDE agent and CI checks with any model</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/continuedev/continue/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://zed.dev" rel="noopener">Zed</a> <span class="muted">Fast Rust editor with built-in agent panel and ACP</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/zed-industries/zed/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.warp.dev" rel="noopener">Warp</a> <span class="muted">Agentic terminal and development environment</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://docs.warp.dev/changelog/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://ampcode.com" rel="noopener">Amp</a> <span class="muted">Coding agent for terminal and editors, from Sourcegraph</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://ampcode.com/chronicle" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://opencode.ai" rel="noopener">OpenCode</a> <span class="muted">Open-source terminal coding agent for any model</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/anomalyco/opencode/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>90</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://goose-docs.ai" rel="noopener">goose</a> <span class="muted">Local, extensible open-source AI agent built on MCP</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/aaif-goose/goose/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://kiro.dev" rel="noopener">Kiro</a> <span class="muted">AWS's spec-driven agentic IDE and CLI</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://kiro.dev/changelog/" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://jules.google" rel="noopener">Jules</a> <span class="muted">Google's asynchronous cloud coding agent</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://jules.google/docs/changelog/" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://devin.ai" rel="noopener">Devin</a> <span class="muted">Cognition's autonomous cloud software engineer</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://docs.devin.ai/release-notes/overview" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://paradev.com" rel="noopener">Paradev (formerly Superset)</a> <span class="muted">Desktop app to run many coding agents in parallel worktrees</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://github.com/ParadevAI/Paradev/releases" rel="noopener">Trial</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.conductor.build" rel="noopener">Conductor</a> <span class="muted">Mac app to run parallel Claude Code and Codex agents</span></th>
+            <td>AI & agents</td>
+            <td>Coding agents</td>
+            <td><a href="https://www.conductor.build/changelog" rel="noopener">Trial</a></td>
+            <td>Free, closed source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://ollama.com" rel="noopener">Ollama</a> <span class="muted">Run open models locally behind a simple API</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/ollama/ollama/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://lmstudio.ai" rel="noopener">LM Studio</a> <span class="muted">Desktop app to download and serve local models</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://lmstudio.ai/changelog" rel="noopener">Trial</a></td>
+            <td>Free, closed source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/ggml-org/llama.cpp" rel="noopener">llama.cpp</a> <span class="muted">C/C++ inference for GGUF models on CPU and GPU</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/ggml-org/llama.cpp/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://docs.vllm.ai" rel="noopener">vLLM</a> <span class="muted">High-throughput LLM serving engine</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/vllm-project/vllm/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://localai.io" rel="noopener">LocalAI</a> <span class="muted">Self-hosted OpenAI-compatible API for many model types</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/mudler/LocalAI/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://docs.docker.com/ai/model-runner/" rel="noopener">Docker Model Runner</a> <span class="muted">Pull and run models as OCI artifacts with Docker</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/docker/model-runner/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.jan.ai" rel="noopener">Jan</a> <span class="muted">Open-source desktop ChatGPT alternative that runs offline</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/janhq/jan/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://github.com/ml-explore/mlx-lm" rel="noopener">MLX LM</a> <span class="muted">Run and fine-tune LLMs on Apple silicon with MLX</span></th>
+            <td>AI & agents</td>
+            <td>Local models</td>
+            <td><a href="https://github.com/ml-explore/mlx-lm/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://langfuse.com" rel="noopener">Langfuse</a> <span class="muted">Open-source LLM tracing, evals and prompt management</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/langfuse/langfuse/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.langchain.com/langsmith/observability" rel="noopener">LangSmith</a> <span class="muted">LangChain's tracing, evals and deployment platform</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://docs.langchain.com/langsmith/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://arize.com/phoenix/" rel="noopener">Arize Phoenix</a> <span class="muted">Open-source LLM tracing and evaluation on OpenTelemetry</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/Arize-ai/phoenix/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>80</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.helicone.ai" rel="noopener">Helicone</a> <span class="muted">Proxy-based LLM logging and AI gateway</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/Helicone/helicone/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.traceloop.com/openllmetry" rel="noopener">OpenLLMetry</a> <span class="muted">OpenTelemetry instrumentation for LLM libraries</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/traceloop/openllmetry/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.braintrust.dev" rel="noopener">Braintrust</a> <span class="muted">Evals, logging and prompt playground for AI products</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://www.braintrust.dev/docs/changelog" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.promptfoo.dev" rel="noopener">promptfoo</a> <span class="muted">CLI for LLM evals and red teaming in CI</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/promptfoo/promptfoo/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="agents">
+            <th scope="row"><a href="https://www.comet.com/site/products/opik/" rel="noopener">Opik</a> <span class="muted">Open-source LLM tracing and evals from Comet</span></th>
+            <td>AI & agents</td>
+            <td>LLM observability</td>
+            <td><a href="https://github.com/comet-ml/opik/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://developer.hashicorp.com/terraform" rel="noopener">Terraform</a> <span class="muted">HashiCorp's declarative infrastructure as code in HCL</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/hashicorp/terraform/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://opentofu.org" rel="noopener">OpenTofu</a> <span class="muted">Open-source Terraform fork under the Linux Foundation</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/opentofu/opentofu/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.pulumi.com" rel="noopener">Pulumi</a> <span class="muted">Infrastructure as code in TypeScript, Python, Go and .NET</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/pulumi/pulumi/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://aws.amazon.com/cdk/" rel="noopener">AWS CDK</a> <span class="muted">AWS infrastructure in code, synthesized to CloudFormation</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/aws/aws-cdk/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://aws.amazon.com/cloudformation/" rel="noopener">AWS CloudFormation</a> <span class="muted">AWS's native declarative infrastructure templates</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/doc-history.html" rel="noopener">Adopt</a></td>
+            <td>Free, closed source</td>
+            <td>30</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/" rel="noopener">Bicep</a> <span class="muted">Microsoft's declarative language for Azure resources</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/Azure/bicep/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.crossplane.io" rel="noopener">Crossplane</a> <span class="muted">Kubernetes control plane for cloud infrastructure</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/crossplane/crossplane/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://terragrunt.com" rel="noopener">Terragrunt</a> <span class="muted">Orchestration wrapper for Terraform and OpenTofu stacks</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/gruntwork-io/terragrunt/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.redhat.com/en/ansible-collaborative" rel="noopener">Ansible</a> <span class="muted">Agentless configuration management over SSH</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/ansible/ansible/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://developer.hashicorp.com/terraform/cdktf" rel="noopener">CDK for Terraform</a> <span class="muted">Terraform in general-purpose languages, now deprecated</span></th>
+            <td>Platform</td>
+            <td>Infrastructure as code</td>
+            <td><a href="https://github.com/hashicorp/terraform-cdk/releases" rel="noopener">Hold</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://backstage.io" rel="noopener">Backstage</a> <span class="muted">Open-source developer portal framework by Spotify</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/backstage/backstage/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.port.io" rel="noopener">Port</a> <span class="muted">Hosted internal developer portal with a flexible data model</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/port-labs/ocean/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.cortex.io" rel="noopener">Cortex</a> <span class="muted">Hosted portal focused on service scorecards and ownership</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/cortexapps/cli/tags" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>30</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.opslevel.com" rel="noopener">OpsLevel</a> <span class="muted">Hosted service catalog with maturity checks</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/OpsLevel/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>40</td>
+            <td>10</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://humanitec.com" rel="noopener">Humanitec</a> <span class="muted">Platform Orchestrator that wires workloads to infrastructure</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/humanitec/cli/releases" rel="noopener">Trial</a></td>
+            <td>Paid</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.kratix.io" rel="noopener">Kratix</a> <span class="muted">Kubernetes framework for building platform APIs, by Syntasso</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/syntasso/kratix/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>10</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://roadie.io" rel="noopener">Roadie</a> <span class="muted">Managed, hosted Backstage</span></th>
+            <td>Platform</td>
+            <td>Developer portals</td>
+            <td><a href="https://github.com/RoadieHQ/roadie-backstage-plugins/releases" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>30</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://github.com/features/actions" rel="noopener">GitHub Actions</a> <span class="muted">CI/CD workflows built into GitHub</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://github.com/actions/runner/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://docs.gitlab.com/ci/" rel="noopener">GitLab CI/CD</a> <span class="muted">Pipelines built into GitLab, hosted or self-managed</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://docs.gitlab.com/releases/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.jenkins.io" rel="noopener">Jenkins</a> <span class="muted">Long-standing self-hosted automation server</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://www.jenkins.io/changelog/" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://circleci.com" rel="noopener">CircleCI</a> <span class="muted">Hosted CI/CD with Docker, machine and macOS executors</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://circleci.com/changelog/" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://buildkite.com" rel="noopener">Buildkite</a> <span class="muted">Hosted CI control plane with agents on your own machines</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://github.com/buildkite/agent/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>40</td>
+            <td>60</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://nektosact.com" rel="noopener">act</a> <span class="muted">Run GitHub Actions workflows locally in Docker</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://github.com/nektos/act/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://tekton.dev" rel="noopener">Tekton</a> <span class="muted">Kubernetes-native CI/CD pipeline building blocks</span></th>
+            <td>Platform</td>
+            <td>CI/CD</td>
+            <td><a href="https://github.com/tektoncd/pipeline/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>10</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://argo-cd.readthedocs.io" rel="noopener">Argo CD</a> <span class="muted">Declarative GitOps continuous delivery for Kubernetes</span></th>
+            <td>Platform</td>
+            <td>GitOps</td>
+            <td><a href="https://github.com/argoproj/argo-cd/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://fluxcd.io" rel="noopener">Flux</a> <span class="muted">CNCF GitOps toolkit for Kubernetes</span></th>
+            <td>Platform</td>
+            <td>GitOps</td>
+            <td><a href="https://github.com/fluxcd/flux2/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>70</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://kargo.io" rel="noopener">Kargo</a> <span class="muted">Promote changes across environments on top of Argo CD</span></th>
+            <td>Platform</td>
+            <td>GitOps</td>
+            <td><a href="https://github.com/akuity/kargo/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://opentelemetry.io" rel="noopener">OpenTelemetry</a> <span class="muted">Vendor-neutral APIs, SDKs and Collector for telemetry</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/open-telemetry/opentelemetry-collector/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://grafana.com/oss/grafana/" rel="noopener">Grafana</a> <span class="muted">Dashboards over metrics, logs and traces</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/grafana/grafana/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://prometheus.io" rel="noopener">Prometheus</a> <span class="muted">CNCF metrics database and alerting</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/prometheus/prometheus/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.jaegertracing.io" rel="noopener">Jaeger</a> <span class="muted">CNCF distributed tracing backend and UI</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/jaegertracing/jaeger/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://grafana.com/docs/opentelemetry/docker-lgtm/" rel="noopener">grafana/otel-lgtm</a> <span class="muted">OTel Collector, Grafana, Loki, Tempo and Mimir in one image</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/grafana/docker-otel-lgtm/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://signoz.io" rel="noopener">SigNoz</a> <span class="muted">OpenTelemetry-native logs, metrics and traces in one app</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/SigNoz/signoz/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://sentry.io" rel="noopener">Sentry</a> <span class="muted">Error tracking and performance monitoring</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/getsentry/sentry/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://grafana.com/oss/loki/" rel="noopener">Grafana Loki</a> <span class="muted">Label-indexed log aggregation from Grafana Labs</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/grafana/loki/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.datadoghq.com" rel="noopener">Datadog</a> <span class="muted">Hosted monitoring, APM and logs platform</span></th>
+            <td>Platform</td>
+            <td>Observability</td>
+            <td><a href="https://github.com/DataDog/datadog-agent/releases" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://developer.hashicorp.com/vault" rel="noopener">HashiCorp Vault</a> <span class="muted">Secrets storage, dynamic credentials and encryption</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/hashicorp/vault/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://openbao.org" rel="noopener">OpenBao</a> <span class="muted">Open-source Vault fork under the Linux Foundation</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/openbao/openbao/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.doppler.com" rel="noopener">Doppler</a> <span class="muted">Hosted secrets manager that injects env vars</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/DopplerHQ/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>60</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://infisical.com" rel="noopener">Infisical</a> <span class="muted">Open-source secrets manager and PKI</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/Infisical/infisical/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>50</td>
+            <td>50</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.1password.dev/cli" rel="noopener">1Password CLI</a> <span class="muted">Inject secrets from 1Password vaults into commands and env</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://app-updates.agilebits.com/product_history/CLI2" rel="noopener">Adopt</a></td>
+            <td>Paid</td>
+            <td>40</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://getsops.io" rel="noopener">SOPS</a> <span class="muted">Encrypt values in YAML, JSON and env files with KMS or age</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/getsops/sops/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>40</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://external-secrets.io" rel="noopener">External Secrets Operator</a> <span class="muted">Sync secrets from external managers into Kubernetes</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/external-secrets/external-secrets/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>10</td>
+            <td>40</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://docs.renovatebot.com" rel="noopener">Renovate</a> <span class="muted">Automated dependency update pull requests</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/renovatebot/renovate/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain" rel="noopener">Dependabot</a> <span class="muted">GitHub's built-in dependency and security updates</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/dependabot/dependabot-core/releases" rel="noopener">Adopt</a></td>
+            <td>Free, closed source</td>
+            <td>20</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://trivy.dev" rel="noopener">Trivy</a> <span class="muted">Scanner for vulnerabilities, misconfigs and secrets</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/aquasecurity/trivy/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://github.com/anchore/syft" rel="noopener">Syft</a> <span class="muted">Generate SBOMs from images and filesystems, by Anchore</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/anchore/syft/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>70</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://github.com/anchore/grype" rel="noopener">Grype</a> <span class="muted">Vulnerability scanner for images and SBOMs, by Anchore</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/anchore/grype/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>20</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://www.sigstore.dev" rel="noopener">Cosign</a> <span class="muted">Sign and verify container images, part of Sigstore</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/sigstore/cosign/releases" rel="noopener">Adopt</a></td>
+            <td>Open source</td>
+            <td>30</td>
+            <td>30</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://gitleaks.io" rel="noopener">Gitleaks</a> <span class="muted">Find committed secrets in git history</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/gitleaks/gitleaks/releases" rel="noopener">Trial</a></td>
+            <td>Open source</td>
+            <td>60</td>
+            <td>0</td>
+          </tr>
+          <tr data-sub="platform">
+            <th scope="row"><a href="https://snyk.io" rel="noopener">Snyk</a> <span class="muted">Hosted scanning for dependencies, code, containers and IaC</span></th>
+            <td>Platform</td>
+            <td>Secrets and supply chain</td>
+            <td><a href="https://github.com/snyk/cli/releases" rel="noopener">Adopt</a></td>
+            <td>Free tier, paid plans</td>
+            <td>50</td>
+            <td>40</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <div id="tray" class="tray" aria-label="Tools to compare" hidden></div>
+  <div id="cmp" class="cmp" hidden></div>
+  <div id="tip" class="tip" role="tooltip" hidden></div>
+</div>
+
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>Community-edited, published by <a href="https://flisk.sh" rel="noopener">Flisk</a>. Flisk is on the map too, scored by the same rubric as every other tool.
+        First seeded October 2026, with AI-assisted research, so check the sources.
+        Wrong dot? <a href="https://github.com/flisk-sh/roadmap/blob/main/CONTRIBUTING.md" rel="noopener">Fix it on GitHub</a>.
+        Commands side by side: <a href="https://cmd.flisk.sh" rel="noopener">cmd.flisk.sh</a>.
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var b = document.getElementById("theme-toggle");
+      if (!b) return;
+      b.addEventListener("click", function () {
+        var next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", next);
+        try { localStorage.setItem("theme", next); } catch (e) {}
+      });
+    })();
+  </script>
+  <script src="assets/js/app.js" defer></script>
+<script src="me-overlay.js" defer></script></body>
+</html>
