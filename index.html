@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents that survive a restart</title>
+<meta name="description" content="A live multi-agent stack from flisk project agent-stack: a Bun agent, an MCP tool server, Postgres and NATS. Start chats, kill the agent, and watch every session resume from its checkpoint.">
+<style>
+:root{--bg:#06070b;--panel:#0d1019;--line:#1d2335;--ink:#eef1fa;--dim:#8590ad;--ok:#34d399;--warn:#fbbf24;--bad:#f87171;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 16px 48px}
+.eyebrow{font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:#f472b6}
+h1{font-size:clamp(28px,5vw,50px);line-height:1.04;margin:6px 0 10px;letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(90deg,#f472b6,#fb923c,#facc15);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{color:var(--dim);max-width:720px;margin:0}
+.lede code,.foot code{font-family:var(--mono);color:var(--ink)}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:16px;margin-top:22px}
+@media(max-width:920px){.layout{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.card h3{margin:0;padding:10px 14px;font:600 12px var(--mono);color:var(--dim);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
+canvas{display:block;width:100%;height:440px;background:radial-gradient(700px 360px at 50% 40%,#151a33 0,#06070b 70%)}
+.bar{display:flex;gap:8px;flex-wrap:wrap;padding:12px 14px;border-top:1px solid var(--line)}
+button{font:600 13px var(--mono);border:1px solid var(--line);background:#151a2b;color:var(--ink);border-radius:10px;padding:9px 13px;cursor:pointer}
+button:hover:not(:disabled){border-color:#f472b6}
+button:disabled{opacity:.4;cursor:not-allowed}
+button.kill{border-color:#5b2330;color:#fecaca}
+button.go{background:linear-gradient(90deg,#db2777,#ea580c);border-color:transparent}
+.sessions{max-height:520px;overflow:auto}
+.sess{padding:10px 14px;border-bottom:1px solid var(--line);font:12.5px var(--mono);display:grid;grid-template-columns:12px 1fr auto;gap:10px;align-items:center}
+.sess i{width:10px;height:10px;border-radius:50%;display:block}
+.sess small{color:var(--dim);display:block}
+.sess b{font-weight:600}
+.sess .n{color:var(--ink);font-weight:700}
+.sess.paused{opacity:.5}
+.probes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.probe{font:12px var(--mono);background:#090b12;border:1px solid var(--line);border-radius:10px;padding:8px}
+.probe b{display:block;font-size:14px}
+.probe .g{color:var(--ok)}.probe .r{color:var(--bad)}.probe .y{color:var(--warn)}
+.log{font:12px/1.6 var(--mono);height:150px;overflow:auto;padding:10px 14px;color:var(--dim);background:#05060a}
+.log .ok{color:var(--ok)}.log .bad{color:var(--bad)}.log .w{color:var(--warn)}
+.foot{color:var(--dim);font-size:13px;margin-top:26px;border-top:1px solid var(--line);padding-top:14px}
+.foot a{color:#f9a8d4}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="eyebrow">flisk project agent-stack</div>
+<h1>Kill the agent. <em>Nobody loses their place.</em></h1>
+<p class="lede">A Bun agent, an MCP tool server, Postgres and NATS, all from <code>flisk project agent-stack</code>. Each chat is a session routed by <code>x-session-id</code>, and every turn writes a checkpoint. Start a few chats, then pull the plug.</p>
+
+<div class="layout">
+<div class="card">
+<h3><span>stack: agents · flisk up</span><span id="clock">uptime 0s</span></h3>
+<canvas id="cv" aria-label="Animated diagram of agent, tools, NATS and Postgres"></canvas>
+<div class="bar">
+<button class="go" id="add">+ new chat session</button>
+<button id="burst">⚡ 5 at once</button>
+<button class="kill" id="kill">☠ kill agent</button>
+<button id="restart">↻ flisk restart agent</button>
+</div>
+<div class="log" id="log">flisk up agents · 4 containers healthy</div>
+</div>
+
+<div class="card">
+<h3><span>GET /sessions</span><span id="count">0</span></h3>
+<div class="probes">
+<div class="probe">/health<b id="ph" class="g">200</b></div>
+<div class="probe">/ready<b id="pr" class="g">200</b></div>
+<div class="probe">checkpoints<b id="pc">0</b></div>
+</div>
+<div class="sessions" id="list"></div>
+</div>
+</div>
+
+<div class="foot">A browser simulation of the agent resource contract Flisk manages: <code>/health</code> for liveness, <code>/ready</code> once the checkpoint store is reachable, <code>GET /sessions</code> to list sessions, routing by <code>x-session-id</code>, checkpoints that survive restarts. Run the real one: <code>flisk project agent-stack</code> then <code>flisk up</code>, and inspect with <code>flisk agent sessions agent --watch</code>. · <a href="https://github.com/flisk-sh/flisk-agent-stack">flisk-agent-stack</a> · <a href="https://flisk.sh">flisk.sh</a></div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+let W,H,DPR;
+function size(){DPR=Math.min(2,devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);layout()}
+const N={users:{label:'chats',sub:'x-session-id'},agent:{label:'agent',sub:'Bun · sessions'},nats:{label:'NATS',sub:'messaging'},tools:{label:'MCP tools',sub:'tool server'},pg:{label:'Postgres',sub:'checkpoints'}};
+function layout(){const m=W<560;N.users.x=W*.12;N.users.y=H*.5;N.agent.x=W*.42;N.agent.y=H*.5;N.nats.x=W*.72;N.nats.y=H*.2;N.tools.x=W*.88;N.tools.y=H*.5;N.pg.x=W*.62;N.pg.y=H*.84;if(m){N.users.x=W*.14;N.tools.x=W*.84}}
+const COLORS=['#f472b6','#fb923c','#facc15','#34d399','#22d3ee','#818cf8','#c084fc','#f87171','#a3e635','#2dd4bf'];
+const words=['plan a trip','refund order #42','summarise PR','book a table','debug flaky test','draft release notes','compare GPUs','find a bug','translate docs','write a haiku'];
+let sessions=[],pk=[],agentUp=true,ready=true,ckpt=0,t0=performance.now(),downAt=0;
+const $=id=>document.getElementById(id);
+function log(h){const l=$('log');l.insertAdjacentHTML('beforeend','<br>'+h);l.scrollTop=l.scrollHeight}
+function id(){return Math.random().toString(36).slice(2,8)}
+function addSession(){const i=sessions.length;const s={id:'s_'+id(),c:COLORS[i%COLORS.length],task:words[i%words.length],turns:0,last:0,ang:Math.random()*6.28};sessions.push(s);log('POST /chat <span style="color:'+s.c+'">x-session-id: '+s.id+'</span> · '+s.task);render()}
+function render(){$('count').textContent=sessions.length;$('pc').textContent=ckpt;$('list').innerHTML=sessions.map(s=>'<div class="sess'+(agentUp?'':' paused')+'"><i style="background:'+s.c+'"></i><div><b>'+s.id+'</b><small>'+s.task+'</small></div><div class="n">'+s.turns+' turns</div></div>').join('')||'<div class="sess"><i></i><div><small>no sessions yet: start a chat</small></div></div>'}
+function packet(a,b,c,cb,r=4){pk.push({a,b,c,k:0,cb,r})}
+function turn(s){if(!agentUp)return;s.last=performance.now();
+packet('users','agent',s.c,()=>{if(!agentUp){s.lost=true;return}
+const useTool=Math.random()<.65;
+const fin=()=>packet('agent','pg',s.c,()=>{s.turns++;ckpt++;render();packet('agent','users',s.c,null,3)},3);
+if(useTool)packet('agent','nats',s.c,()=>packet('nats','tools',s.c,()=>packet('tools','agent',s.c,fin,3),3),3);else fin()})}
+function kill(){if(!agentUp)return;agentUp=false;ready=false;downAt=performance.now();$('ph').textContent='—';$('ph').className='r';$('pr').textContent='503';$('pr').className='r';log('<span class="bad">☠ agent container killed</span> · '+sessions.length+' sessions in flight');pk=pk.filter(p=>p.a!=='agent'&&p.b!=='agent');render();setTimeout(()=>{if(!agentUp)log('<span class="w">flisk status: agent unhealthy · Postgres still holds '+ckpt+' checkpoints</span>')},700)}
+function restart(){if(agentUp&&ready)return;agentUp=false;log('$ flisk restart agent');$('ph').textContent='…';$('ph').className='y';
+setTimeout(()=>{agentUp=true;$('ph').textContent='200';$('ph').className='g';log('<span class="ok">/health 200</span> · process alive');render();
+setTimeout(()=>{ready=true;$('pr').textContent='200';$('pr').className='g';log('<span class="ok">/ready 200</span> · checkpoint store reachable');log('<span class="ok">resumed '+sessions.length+' sessions from checkpoints</span> · turn counts kept: '+sessions.map(s=>s.turns).join(', '));sessions.forEach(s=>{s.lost=false;s.last=0});render()},800)},900)}
+$('add').onclick=()=>addSession();
+$('burst').onclick=()=>{for(let i=0;i<5;i++)addSession()};
+$('kill').onclick=kill;
+$('restart').onclick=restart;
+function node(n,col,alive){const r=Math.max(26,Math.min(40,W*.045));cx.beginPath();cx.arc(n.x,n.y,r,0,7);cx.fillStyle='#0f1322';cx.fill();cx.lineWidth=2;cx.strokeStyle=alive?col:'#5b2330';if(alive){cx.shadowColor=col;cx.shadowBlur=18}cx.stroke();cx.shadowBlur=0;cx.fillStyle=alive?'#eef1fa':'#7f5560';cx.font='600 13px ui-monospace,Menlo,monospace';cx.textAlign='center';cx.fillText(n.label,n.x,n.y+r+18);cx.fillStyle='#8590ad';cx.font='11px ui-monospace,Menlo,monospace';cx.fillText(n.sub,n.x,n.y+r+32)}
+function line(a,b){cx.beginPath();cx.moveTo(N[a].x,N[a].y);cx.lineTo(N[b].x,N[b].y);cx.strokeStyle='#1e2540';cx.lineWidth=1.5;cx.setLineDash([4,6]);cx.lineDashOffset=-performance.now()/40;cx.stroke();cx.setLineDash([])}
+let last=performance.now();
+function frame(t){const dt=Math.min(50,t-last);last=t;cx.clearRect(0,0,W,H);
+['users-agent','agent-nats','nats-tools','tools-agent','agent-pg'].forEach(e=>{const[a,b]=e.split('-');line(a,b)});
+node(N.users,'#f472b6',true);node(N.nats,'#22d3ee',true);node(N.tools,'#818cf8',true);node(N.pg,'#34d399',true);
+const pulse=agentUp?1+Math.sin(t/300)*.06:1;cx.save();cx.translate(N.agent.x,N.agent.y);cx.scale(pulse,pulse);cx.translate(-N.agent.x,-N.agent.y);node(N.agent,ready?'#fb923c':'#fbbf24',agentUp);cx.restore();
+if(!agentUp){cx.fillStyle='#f87171';cx.font='700 12px ui-monospace,Menlo,monospace';cx.textAlign='center';cx.fillText('DOWN',N.agent.x,N.agent.y+4)}
+// orbiting session dots around chats
+sessions.forEach((s,i)=>{s.ang+=dt*.0008;const R=48+(i%3)*12,x=N.users.x+Math.cos(s.ang)*R*.6,y=N.users.y+Math.sin(s.ang)*R;cx.beginPath();cx.arc(x,y,4,0,7);cx.fillStyle=s.c;cx.globalAlpha=agentUp?1:.4;cx.fill();cx.globalAlpha=1});
+// checkpoint stack on postgres
+const rows=Math.min(ckpt,40);for(let i=0;i<rows;i++){cx.fillStyle='rgba(52,211,153,'+(.15+.6*i/rows)+')';cx.fillRect(N.pg.x+48+(i%8)*7,N.pg.y-14+Math.floor(i/8)*6,5,4)}
+pk.forEach(p=>{p.k+=dt/520;const A=N[p.a],B=N[p.b],k=Math.min(1,p.k),e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2,x=A.x+(B.x-A.x)*e,y=A.y+(B.y-A.y)*e;cx.beginPath();cx.arc(x,y,p.r,0,7);cx.fillStyle=p.c;cx.shadowColor=p.c;cx.shadowBlur=12;cx.fill();cx.shadowBlur=0});
+const done=pk.filter(p=>p.k>=1);pk=pk.filter(p=>p.k<1);done.forEach(p=>p.cb&&p.cb());
+if(agentUp&&ready)sessions.forEach(s=>{if(t-s.last>2200+Math.random()*2400)turn(s)});
+$('clock').textContent=agentUp?'uptime '+Math.floor((t-(downAt||t0))/1000)+'s':'agent down';
+requestAnimationFrame(frame)}
+addEventListener('resize',size);size();
+['plan a trip','refund order #42','summarise PR'].forEach(()=>addSession());
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
