@@ -1,6 +1,8 @@
 # The site on GitHub Pages: every space/* branch gathered, checked again, and written out with the site around it.
 # Started by the publish and remove workflows, by a push to main, by hand, and every night (which also catches a
-# branch deleted by hand).
+# branch deleted by hand). One job, so a deploy does not wait for a second runner. publish-anon.yml deploys the same
+# way in its own run. Both share the "pages" group: a newer deploy replaces a waiting one, and each gathers every
+# branch, so nothing is lost.
 name: Deploy
 
 on:
@@ -20,10 +22,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    name: Build
+  deploy:
+    name: Build and deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     defaults:
       run:
         working-directory: services/app/web
@@ -42,15 +47,5 @@ jobs:
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: services/app/web/_site
-
-  deploy:
-    name: Deploy
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

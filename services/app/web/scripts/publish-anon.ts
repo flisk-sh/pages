@@ -164,7 +164,9 @@ async function main() {
 			rmSync(work, { recursive: true, force: true });
 		}
 	}
-	// A push with the workflow's token starts no other workflow, so the deploy is started by name.
+	// A push with the workflow's token starts no other workflow, so the deploy is started by name, unless the
+	// workflow deploys right after this (DEPLOY_HERE).
+	if (process.env.DEPLOY_HERE) return;
 	execFileSync(
 		"gh",
 		[
