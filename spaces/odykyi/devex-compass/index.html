@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DevEx Compass: local dev tools, mapped</title>
+<meta name="description" content="Local development tools on two axes, easy to use and big real systems, with their adoption ring. Hover a dot, filter by kind. Data from roadmap.flisk.si.">
+<style>
+:root{--bg:#fbfaf7;--fg:#1d1c1a;--muted:#6b6862;--line:#e6e2da;--card:#fff;--adopt:#1f7a4d;--trial:#2d4cc8;--assess:#c47a12;--hold:#b3261e}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1080px;margin:0 auto;padding:48px 20px 90px}
+h1{font-size:clamp(32px,5.5vw,54px);line-height:1.04;letter-spacing:-.03em;margin:0 0 10px}
+.lede{color:var(--muted);font-size:19px;margin:0 0 24px;max-width:42em}
+.tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.tabs button{font:inherit;font-size:14px;font-weight:600;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 14px;cursor:pointer;color:var(--fg)}
+.tabs button[aria-pressed=true]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.plot{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:12px;position:relative}
+svg{width:100%;height:auto;display:block}
+.tip{position:absolute;pointer-events:none;background:var(--fg);color:var(--bg);font-size:13px;padding:8px 11px;border-radius:10px;opacity:0;transition:opacity .12s;max-width:260px}
+.legend{display:flex;gap:18px;flex-wrap:wrap;margin:14px 4px 0;color:var(--muted);font-size:14px}.legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<main>
+<h1>DevEx Compass</h1>
+<p class="lede">Local development tools on two axes: how easy they are to use, and how big a real system they can run. Colour is the adoption ring. Hover a dot.</p>
+<div class="tabs" id="tabs"></div>
+<div class="plot"><svg id="svg" viewBox="0 0 1000 620" role="img" aria-label="Scatter plot of developer tools"></svg><div class="tip" id="tip"></div></div>
+<div class="legend"><span><i style="background:var(--adopt)"></i>Adopt</span><span><i style="background:var(--trial)"></i>Trial</span><span><i style="background:var(--assess)"></i>Assess</span><span><i style="background:var(--hold)"></i>Hold</span></div>
+</main>
+<script type="module">
+const tools = await (await fetch("tools.json")).json();
+const ring = { Adopt: "var(--adopt)", Trial: "var(--trial)", Assess: "var(--assess)", Hold: "var(--hold)" };
+const kinds = ["All", ...new Set(tools.map((t) => t.kind))];
+let kind = "All";
+const svg = document.getElementById("svg"), tip = document.getElementById("tip");
+const X = (v) => 70 + (v / 100) * 890, Y = (v) => 570 - (v / 100) * 530;
+function draw() {
+  const grid = [0, 25, 50, 75, 100].map((v) => `<line x1="${X(v)}" y1="40" x2="${X(v)}" y2="570" stroke="#eee"/><line x1="70" y1="${Y(v)}" x2="960" y2="${Y(v)}" stroke="#eee"/>`).join("");
+  const dots = tools.filter((t) => kind === "All" || t.kind === kind).map((t) =>
+    `<g class="d" data-n="${t.name}"><circle cx="${X(t.easy)}" cy="${Y(t.big)}" r="9" fill="${ring[t.ring]}" fill-opacity=".85" stroke="#fff" stroke-width="2"/><text x="${X(t.easy) + 13}" y="${Y(t.big) + 4}" font-size="13" fill="#3a3935">${t.name}</text></g>`).join("");
+  svg.innerHTML = `${grid}<text x="515" y="606" text-anchor="middle" font-size="14" fill="#6b6862">easy to use →</text><text x="22" y="305" transform="rotate(-90 22 305)" text-anchor="middle" font-size="14" fill="#6b6862">big real systems →</text>${dots}`;
+  for (const g of svg.querySelectorAll(".d")) {
+    const t = tools.find((x) => x.name === g.dataset.n);
+    g.onmouseenter = (e) => { tip.innerHTML = `<b>${t.name}</b> · ${t.ring}<br>${t.note}`; tip.style.opacity = 1; };
+    g.onmousemove = (e) => { const r = svg.parentElement.getBoundingClientRect(); tip.style.left = `${e.clientX - r.left + 14}px`; tip.style.top = `${e.clientY - r.top + 14}px`; };
+    g.onmouseleave = () => (tip.style.opacity = 0);
+  }
+  document.getElementById("tabs").innerHTML = kinds.map((k) => `<button aria-pressed="${k === kind}">${k} ${k === "All" ? tools.length : tools.filter((t) => t.kind === k).length}</button>`).join("");
+  document.querySelectorAll("#tabs button").forEach((b, i) => (b.onclick = () => { kind = kinds[i]; draw(); }));
+}
+draw();
+</script>
+</body>
+</html>

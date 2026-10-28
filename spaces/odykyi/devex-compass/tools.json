@@ -1,0 +1,14 @@
+[
+  {"name":"Docker Compose","kind":"Containers","easy":72,"big":55,"ring":"Adopt","note":"One file for the whole stack; the default for local multi-service apps."},
+  {"name":"Tilt","kind":"Inner loop","easy":48,"big":82,"ring":"Adopt","note":"Live updates and a dashboard for many services; needs a Tiltfile."},
+  {"name":"Flisk","kind":"Inner loop","easy":84,"big":78,"ring":"Trial","note":"One command for the whole app on top of Docker and Tilt, with agent skills."},
+  {"name":"Skaffold","kind":"Inner loop","easy":42,"big":76,"ring":"Assess","note":"Kubernetes-first build and deploy loop."},
+  {"name":"Kind","kind":"Clusters","easy":45,"big":70,"ring":"Trial","note":"Kubernetes in Docker, for real cluster behaviour on a laptop."},
+  {"name":"minikube","kind":"Clusters","easy":52,"big":62,"ring":"Trial","note":"A local Kubernetes with add-ons."},
+  {"name":"Dev Containers","kind":"Environments","easy":66,"big":40,"ring":"Adopt","note":"The editor's whole toolchain in a container."},
+  {"name":"Nix","kind":"Environments","easy":22,"big":68,"ring":"Assess","note":"Reproducible everything, at the cost of a steep start."},
+  {"name":"Devbox","kind":"Environments","easy":70,"big":45,"ring":"Trial","note":"Nix packages without writing Nix."},
+  {"name":"Garden","kind":"Inner loop","easy":38,"big":80,"ring":"Assess","note":"Graph of builds, tests and deploys across environments."},
+  {"name":"Vagrant","kind":"Environments","easy":40,"big":35,"ring":"Hold","note":"Whole VMs per project; mostly replaced by containers."},
+  {"name":"Okteto","kind":"Clusters","easy":58,"big":74,"ring":"Assess","note":"Develop inside a remote cluster with file sync."}
+]
