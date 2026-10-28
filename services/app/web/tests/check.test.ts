@@ -238,6 +238,8 @@ describe("helpers", () => {
 		const policy = csp();
 		expect(policy).toContain("form-action 'self'");
 		expect(policy).toContain("base-uri 'none'");
+		expect(policy).toMatch(/style-src[^;]*https:\/\/api\.fontshare\.com/);
+		expect(policy).toMatch(/font-src[^;]*https:\/\/cdn\.fontshare\.com/);
 		expect(policy).toMatch(/connect-src 'self' https:\/\/cdnjs/);
 		expect(policy).not.toMatch(/connect-src[^;]*https:(?!\/\/)/);
 	});
