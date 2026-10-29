@@ -91,6 +91,70 @@ const links = {
 	radar: "https://roadmap.flisk.si/radar/",
 };
 
+describe("the developer CV role fit", () => {
+	const roles = (
+		list: NonNullable<RoadmapData["roles"]["roles"]>,
+	): RoadmapData => ({ ...data, roles: { roles: list } });
+	const generic = ["bun", "helm"];
+
+	it("does not pick a role on generic tools alone", () => {
+		const { html } = cvPage(
+			roles([
+				{
+					id: "ml",
+					name: "MLOps Engineer",
+					what: "Models.",
+					core: [...generic, "uv"],
+					key: ["uv"],
+				},
+				{
+					id: "ops",
+					name: "DevOps Engineer",
+					what: "Pipes.",
+					core: generic,
+					key: ["helm"],
+				},
+			]),
+			parseMe("bun3,helm3"),
+			"Sam",
+			links,
+			new Date("2026-10-28"),
+		);
+		expect(html).toContain("Recommended role: DevOps Engineer</title>");
+		expect(html).toContain("100% MATCH");
+	});
+
+	it("halves a role whose key tools are all unrated", () => {
+		const { html } = cvPage(
+			roles([
+				{
+					id: "ml",
+					name: "MLOps Engineer",
+					what: "Models.",
+					core: [...generic, "uv"],
+					key: ["uv"],
+				},
+			]),
+			parseMe("bun3,helm3"),
+			"Sam",
+			links,
+			new Date("2026-10-28"),
+		);
+		expect(html).toContain("33% MATCH");
+	});
+
+	it("scores roles without key tools as before", () => {
+		const { html } = cvPage(
+			roles([{ id: "x", name: "X", what: "x", core: generic }]),
+			parseMe("bun3"),
+			"Sam",
+			links,
+			new Date("2026-10-28"),
+		);
+		expect(html).toContain("50% MATCH");
+	});
+});
+
 describe("the developer CV", () => {
 	const { html, logos } = cvPage(
 		data,

@@ -34,6 +34,8 @@ export interface RoadmapData {
 			core?: string[];
 			daily?: string[];
 			nice?: string[];
+			/** The tools that set the role apart; rate none and the match is halved. */
+			key?: string[];
 		}[];
 	};
 	journeys: {
@@ -189,7 +191,7 @@ export function cvPage(
 	const col = (id: string) => hex(FAM[BY[id]?.fam ?? ""]?.color);
 	const lv = (id: string) => me[id] ?? 0;
 
-	// The same scoring as roadmap's portfolio, so the numbers match.
+	// The same scoring as roadmap's portfolio (assets/js/rolefit.js), so the numbers match.
 	const fit = data.roles.roles
 		.map((r) => {
 			let got = 0;
@@ -200,9 +202,17 @@ export function cvPage(
 						max += w * 3;
 						got += w * lv(id);
 					}
-			return { r, pct: max ? Math.round((got / max) * 100) : 0 };
+			// Many roles share generic tools, so rating none of a role's key tools halves its match.
+			const keys = (r.key ?? []).filter((id) => BY[id]);
+			const keyGot = keys.reduce((a, id) => a + lv(id), 0);
+			const halve = keys.length > 0 && keyGot === 0;
+			return {
+				r,
+				pct: max ? Math.round((got / max) * 100 * (halve ? 0.5 : 1)) : 0,
+				keyGot,
+			};
 		})
-		.sort((a, b) => b.pct - a.pct);
+		.sort((a, b) => b.pct - a.pct || b.keyGot - a.keyGot);
 	const top = fit[0] ?? {
 		r: { id: "", name: "Developer", what: "", core: [] },
 		pct: 0,
@@ -562,7 +572,7 @@ ${makeBar}
 </div><div>${spider()}</div></div>
 ${
 	roleCards
-		? `<section><div class="sh"><h2>Role fit</h2><p>Scored with roadmap's job loadouts: a must-have tool counts 3, an every-day tool 2, a good-to-know tool 1, times my level. Solid rings are tools I rated; dashed ones I haven't.</p></div>
+		? `<section><div class="sh"><h2>Role fit</h2><p>Scored with roadmap's job loadouts: a must-have tool counts 3, an every-day tool 2, a good-to-know tool 1, times my level, halved when I rated none of a role's key tools. Solid rings are tools I rated; dashed ones I haven't.</p></div>
 <div class="roles">${roleCards}</div>${others ? `<div class="panel more"><p class="lbl">Next closest roles</p><ul class="others">${others}</ul></div>` : ""}</section>`
 		: ""
 }
