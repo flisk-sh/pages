@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { checkMarkdown, handle, MAX_MARKDOWN_BYTES, newId, newToken, sha256 } from "../src/worker.js";
+import { checkMarkdown, handle, MAX_MARKDOWN_BYTES, newId, newToken, readSession, safeReturn, sha256, signSession } from "../src/worker.js";
 
 const env = {
 	PAGES_REPO: "flisk-sh/pages",
@@ -139,5 +139,89 @@ describe("helpers", () => {
 		const html = await res.text();
 		expect(html).toContain("https://pages.test/@anon/abcdefghjk/");
 		expect(html).toContain("location.hash");
+	});
+});
+
+describe("signing in with GitHub", () => {
+	const auth = { ...env, GITHUB_CLIENT_ID: "cid", GITHUB_CLIENT_SECRET: "sec", SESSION_SECRET: "s3cret" };
+	const back = "https://roadmap.test/portfolio/?me=bun3";
+
+	it("sends the visitor to GitHub with no scope and remembers where to return", async () => {
+		const res = await handle(new Request(`https://publish.test/auth/github?return=${encodeURIComponent(back)}`), auth);
+		expect(res.status).toBe(302);
+		const to = new URL(res.headers.get("location"));
+		expect(to.origin + to.pathname).toBe("https://github.com/login/oauth/authorize");
+		expect(to.searchParams.get("client_id")).toBe("cid");
+		expect(to.searchParams.get("scope")).toBeNull();
+		expect(to.searchParams.get("redirect_uri")).toBe("https://publish.test/auth/callback");
+		const state = to.searchParams.get("state");
+		expect(res.headers.get("set-cookie")).toContain(`gh_state=${state}.`);
+		expect(res.headers.get("set-cookie")).toContain("HttpOnly");
+	});
+
+	it("does not return to a page outside the allowed sites", async () => {
+		const res = await handle(new Request("https://publish.test/auth/github?return=https%3A%2F%2Fevil.test%2F"), auth);
+		expect(res.status).toBe(400);
+		expect(safeReturn(auth, "javascript:alert(1)")).toBe("");
+		expect(safeReturn(auth, "https://roadmap.test/a?b=1#x")).toBe("https://roadmap.test/a?b=1");
+	});
+
+	async function callback(cookieState) {
+		const start = await handle(new Request(`https://publish.test/auth/github?return=${encodeURIComponent(back)}`), auth);
+		const cookie = start.headers.get("set-cookie").split(";")[0].replace(/gh_state=[a-f0-9]+/, (m) => (cookieState ? `gh_state=${cookieState}` : m));
+		const calls = [];
+		const fetcher = async (url, init) => {
+			calls.push(url);
+			if (url.includes("access_token")) return Response.json({ access_token: "tok" });
+			return Response.json({ login: "Odykyi" });
+		};
+		const stateParam = new URL(start.headers.get("location")).searchParams.get("state");
+		const res = await handle(new Request(`https://publish.test/auth/callback?code=c&state=${stateParam}`, { headers: { cookie } }), auth, fetcher);
+		return { res, calls };
+	}
+
+	it("trades the code for a login, returns a signed session and keeps the GitHub token to itself", async () => {
+		const { res, calls } = await callback();
+		expect(res.status).toBe(302);
+		const to = res.headers.get("location");
+		expect(to.startsWith("https://roadmap.test/portfolio/?me=bun3#gh=gh1.")).toBe(true);
+		expect(to).not.toContain("tok");
+		expect(await readSession(auth, to.split("#gh=")[1])).toBe("odykyi");
+		expect(calls).toHaveLength(2);
+	});
+
+	it("refuses a callback whose state does not match the cookie", async () => {
+		const { res } = await callback("0".repeat(48));
+		expect(res.status).toBe(400);
+	});
+
+	it("signs sessions that expire and cannot be forged", async () => {
+		const t = await signSession(auth, "Sam", 0);
+		expect(await readSession(auth, t, 1000)).toBe("sam");
+		expect(await readSession(auth, t, 3_700_000)).toBe("");
+		expect(await readSession({ ...auth, SESSION_SECRET: "other" }, t, 1000)).toBe("");
+		const [a, , c] = t.split(".");
+		const forged = `${a}.${btoa(JSON.stringify({ login: "root", exp: 9e9 })).replace(/=+$/, "")}.${c}`;
+		expect(await readSession(auth, forged, 1000)).toBe("");
+	});
+
+	it("saves a signed-in CV for the session's login, whatever the body says", async () => {
+		const gh = github();
+		const session = await signSession(auth, "odykyi");
+		const res = await handle(req("PUT", "/v1/me/space", { cv: { me: "bun3", name: "Sam" }, owner: "victim" }, { authorization: `Bearer ${session}` }), auth, gh.fetcher);
+		expect(res.status).toBe(202);
+		expect((await res.json()).url).toBe("https://pages.test/@odykyi/cv/");
+		expect(gh.sent[0].body.client_payload).toEqual({ op: "save", owner: "odykyi", cv: { me: "bun3", name: "Sam" } });
+	});
+
+	it("takes it down, and refuses without a valid session", async () => {
+		const gh = github();
+		const session = await signSession(auth, "odykyi");
+		expect((await handle(req("DELETE", "/v1/me/space", undefined, { authorization: `Bearer ${session}` }), auth, gh.fetcher)).status).toBe(202);
+		expect(gh.sent[0].body.client_payload).toEqual({ op: "remove", owner: "odykyi" });
+		expect((await handle(req("DELETE", "/v1/me/space", undefined, { authorization: "Bearer nope" }), auth, gh.fetcher)).status).toBe(401);
+		expect(gh.sent).toHaveLength(1);
+		const me = await handle(req("GET", "/v1/me", undefined, { authorization: `Bearer ${session}` }), auth);
+		expect(await me.json()).toEqual({ login: "odykyi" });
 	});
 });

@@ -2,7 +2,7 @@
 # sends a repository_dispatch; this checks the Markdown like every other publish and commits space/anon/<id>.
 # scripts/publish-anon.ts reads the payload from the event file; nothing from it is put into a shell command.
 name: Publish (anonymous)
-run-name: anon ${{ github.event.client_payload.op }} ${{ github.event.client_payload.id }}
+run-name: anon ${{ github.event.client_payload.op }} ${{ github.event.client_payload.id || github.event.client_payload.owner }}
 
 on:
   repository_dispatch:
@@ -15,7 +15,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: anon-${{ github.event.client_payload.id }}
+  group: anon-${{ github.event.client_payload.id || github.event.client_payload.owner }}
   cancel-in-progress: false
 
 jobs:
