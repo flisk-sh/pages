@@ -952,3 +952,30 @@ footer a {
 	font-size: 13px;
 	margin: 10px 0 0;
 }
+
+/* Make your own */
+.make {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 10px 18px;
+	margin: 0 0 18px;
+	padding: 12px 16px;
+	background: var(--tint);
+	border: 1px solid var(--accent);
+	border-radius: 14px;
+}
+.make p {
+	margin: 0;
+	color: var(--fg);
+	font-size: 15px;
+	min-width: 0;
+}
+.make .btn {
+	white-space: nowrap;
+}
+footer + .make,
+.make + footer {
+	margin-top: 8px;
+}

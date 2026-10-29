@@ -59,9 +59,13 @@ export interface CvLinks {
 	portfolio: string;
 	radar: string;
 	github?: string;
+	/** Where "make your own" leads: roadmap's Portfolio with nothing rated, so a visitor starts their own. */
+	make?: string;
 	/** The page's own public address. With it the page gets share links, README badge snippets and link-preview tags. */
 	url?: string;
 }
+
+export const MAKE_URL = "https://roadmap.flisk.si/portfolio/?from=cv";
 
 /** shields.io static-badge text: a dash is written twice, an underscore twice, a space as an underscore. */
 const badgeText = (t: string) =>
@@ -483,6 +487,8 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 		.join("");
 
 	const desc = `${name}, ${top.r.name}: ${rated} developer tools rated, ${count(3)} at expert level, across ${families} tool families.`;
+	const make = links.make ?? MAKE_URL;
+	const makeBar = `<aside class="make"><p><b>Want a page like this?</b> Click the tools you use, then publish. About a minute, no account needed.</p><a class="btn p" href="${e(make)}">Make my own CV →</a></aside>`;
 	const pageTitle = `${name} · ${top.r.name} · Developer CV`;
 	const preview = links.url
 		? `<meta property="og:type" content="profile"><meta property="og:title" content="${e(pageTitle)}"><meta property="og:description" content="${e(desc)}"><meta property="og:url" content="${e(links.url)}"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="${e(pageTitle)}"><meta name="twitter:description" content="${e(desc)}">`
@@ -518,6 +524,7 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${e(pageTitle)}</title><meta name="description" content="${e(desc)}">${preview}<style>${CSS}</style></head><body><div class="wrap">
 <nav class="top"><a class="brand" href="https://roadmap.flisk.si/"><i>&gt;_</i>DevEx CV</a><div class="links"><a href="${e(links.portfolio)}">Portfolio</a><a href="${e(links.radar)}">Radar</a>${links.github ? `<a href="${e(links.github)}">GitHub</a>` : ""}</div></nav>
+${makeBar}
 <div class="hero"><div>
 <span class="badge">Developer CV</span>
 <h1><span>${e(name)}</span></h1>
@@ -555,6 +562,7 @@ ${
 		: ""
 }
 ${share}
+${makeBar}
 <footer><p>Ratings are self-reported. Tools, roles and skills are scored by the public checklist on <a href="https://roadmap.flisk.si/">roadmap.flisk.si</a>.</p><p>Published with <a href="https://pages.flisk.si/">pages.flisk.si</a></p></footer>
 </div></body></html>`;
 	return { html, logos: [...used] };
