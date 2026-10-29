@@ -7,6 +7,16 @@
 //   DELETE /v1/spaces/<id>   Bearer <token>  → 202 {id}                            take it down
 //   GET    /manage/<id>#<token>   a page with the link and a delete button (the token stays in the fragment)
 //
+// Signing in with GitHub is optional and lets a CV live at /@<login>/cv/ instead of /@anon/<id>/:
+//   GET    /auth/github?return=<url>   send the visitor to GitHub (no scope: public profile only)
+//   GET    /auth/callback              GitHub sends them back; we read their login, keep no token, and return them
+//                                      to <url>#gh=<session>, a signed one-hour session that holds only the login
+//   GET    /v1/me                      Bearer <session> → {login}
+//   PUT    /v1/me/space  {cv}          Bearer <session> → 202 {url}   save the CV at /@<login>/cv/ (new or new version)
+//   DELETE /v1/me/space                Bearer <session> → 202 {url}   take it down
+// The GitHub access token is used once to read /user and is then dropped. Secrets: GITHUB_CLIENT_ID is a var;
+// GITHUB_CLIENT_SECRET and SESSION_SECRET are secrets.
+//
 // Nothing is stored here. The worker checks the request, then sends a repository_dispatch to flisk-sh/pages; the
 // publish-anon workflow runs the same check as every other publish and commits the branch space/anon/<id>. Only
 // sha256(token) leaves the worker, as a commit trailer the workflow compares on update and delete.
@@ -72,7 +82,7 @@ function cors(request, env) {
 	if (!allowed.includes(origin)) return {};
 	return {
 		"access-control-allow-origin": origin,
-		"access-control-allow-methods": "POST, PUT, DELETE, OPTIONS",
+		"access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
 		"access-control-allow-headers": "content-type, authorization",
 		"access-control-max-age": "86400",
 		vary: "origin",
@@ -153,6 +163,106 @@ document.getElementById("del").onclick = async () => {
 </script></body></html>`;
 }
 
+// ---- Sign in with GitHub ------------------------------------------------------------------------------------
+
+const SESSION_SECONDS = 3600;
+const HANDLE = /^[a-z0-9](?:[a-z0-9-]{0,38})$/;
+const b64 = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64 = (text) => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+async function hmac(secret, text) {
+	const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+	return b64(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text))));
+}
+
+/** A signed session `gh1.<payload>.<mac>` holding only the lowercased login and when it ends. */
+export async function signSession(env, login, now = Date.now()) {
+	const payload = b64(new TextEncoder().encode(JSON.stringify({ login: login.toLowerCase(), exp: Math.floor(now / 1000) + SESSION_SECONDS })));
+	return `gh1.${payload}.${await hmac(env.SESSION_SECRET, `gh1.${payload}`)}`;
+}
+
+/** The login a session belongs to, or "" when it is forged, malformed or over. */
+export async function readSession(env, token, now = Date.now()) {
+	const m = /^gh1\.([\w-]+)\.([\w-]+)$/.exec(token ?? "");
+	if (!m || !env.SESSION_SECRET) return "";
+	if ((await hmac(env.SESSION_SECRET, `gh1.${m[1]}`)) !== m[2]) return "";
+	try {
+		const { login, exp } = JSON.parse(new TextDecoder().decode(unb64(m[1])));
+		return HANDLE.test(login) && exp > now / 1000 ? login : "";
+	} catch {
+		return "";
+	}
+}
+
+/** Only an http(s) page on an allowed site may be returned to, so the redirect cannot be turned on another site. */
+export function safeReturn(env, value) {
+	try {
+		const u = new URL(value);
+		const allowed = (env.ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+		return allowed.includes(u.origin) ? u.origin + u.pathname + u.search : "";
+	} catch {
+		return "";
+	}
+}
+
+const cookie = (value, maxAge) => `gh_state=${value}; Max-Age=${maxAge}; Path=/auth; HttpOnly; Secure; SameSite=Lax`;
+
+async function startLogin(request, env) {
+	const url = new URL(request.url);
+	const back = safeReturn(env, url.searchParams.get("return") ?? "");
+	if (!back || !env.GITHUB_CLIENT_ID || !env.SESSION_SECRET) return json({ error: "sign-in is not set up for that page" }, 400);
+	const state = newToken();
+	const q = new URLSearchParams({ client_id: env.GITHUB_CLIENT_ID, redirect_uri: `${env.PUBLISH_ORIGIN}/auth/callback`, state, allow_signup: "false" });
+	return new Response(null, {
+		status: 302,
+		headers: { location: `https://github.com/login/oauth/authorize?${q}`, "set-cookie": cookie(`${state}.${b64(new TextEncoder().encode(back))}`, 600) },
+	});
+}
+
+async function finishLogin(request, env, fetcher) {
+	const url = new URL(request.url);
+	const [state, back64] = (/(?:^|;\s*)gh_state=([^;]+)/.exec(request.headers.get("cookie") ?? "")?.[1] ?? "").split(".");
+	const code = url.searchParams.get("code") ?? "";
+	if (!TOKEN.test(state ?? "") || state !== url.searchParams.get("state") || !code || !back64)
+		return json({ error: "that sign-in did not start here; try again" }, 400);
+	const back = safeReturn(env, new TextDecoder().decode(unb64(back64)));
+	if (!back) return json({ error: "bad return page" }, 400);
+	const token = await fetcher("https://github.com/login/oauth/access_token", {
+		method: "POST",
+		headers: { accept: "application/json", "content-type": "application/json", "user-agent": "pages-publish-worker" },
+		body: JSON.stringify({ client_id: env.GITHUB_CLIENT_ID, client_secret: env.GITHUB_CLIENT_SECRET, code, redirect_uri: `${env.PUBLISH_ORIGIN}/auth/callback` }),
+	}).then((r) => r.json()).catch(() => ({}));
+	if (typeof token.access_token !== "string") return json({ error: "GitHub did not accept that sign-in; try again" }, 400);
+	const me = await fetcher("https://api.github.com/user", {
+		headers: { authorization: `Bearer ${token.access_token}`, accept: "application/vnd.github+json", "user-agent": "pages-publish-worker" },
+	}).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+	const login = String(me.login ?? "").toLowerCase();
+	if (!HANDLE.test(login)) return json({ error: "could not read your GitHub login" }, 502);
+	// The access token goes no further than this function.
+	return new Response(null, {
+		status: 302,
+		headers: { location: `${back}#gh=${await signSession(env, login)}`, "set-cookie": cookie("", 0), "referrer-policy": "no-referrer" },
+	});
+}
+
+async function ownSpace(request, env, fetcher, headers, url) {
+	const login = await readSession(env, bearer(request));
+	if (!login) return json({ error: "sign in with GitHub first" }, 401, headers);
+	if (request.method === "GET") return json({ login }, 200, headers);
+	let content = {};
+	if (request.method === "PUT") {
+		const [c, problem] = readContent(await readJson(request));
+		if (problem || !c.cv) return json({ error: problem || "send a cv" }, 400, headers);
+		content = c;
+	}
+	const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+	if (await overLimit(env, url.origin, ip)) return json({ error: "Too many changes from here; try again in an hour." }, 429, headers);
+	const op = request.method === "PUT" ? "save" : "remove";
+	if (!(await dispatch(env, { op, owner: login, ...content }, fetcher)))
+		return json({ error: "Could not reach GitHub; try again." }, 502, headers);
+	return json({ login, url: `${env.PAGES_ORIGIN}/@${login}/cv/`, live_in_seconds: 120 }, 202, headers);
+}
+
 export async function handle(request, env, fetcher = fetch) {
 	const url = new URL(request.url);
 	const origin = url.origin;
@@ -171,6 +281,12 @@ export async function handle(request, env, fetcher = fetch) {
 				"referrer-policy": "no-referrer",
 			},
 		});
+
+	if (request.method === "GET" && url.pathname === "/auth/github") return startLogin(request, env);
+	if (request.method === "GET" && url.pathname === "/auth/callback") return finishLogin(request, env, fetcher);
+	if (url.pathname === "/v1/me" && request.method === "GET") return ownSpace(request, env, fetcher, headers, url);
+	if (url.pathname === "/v1/me/space" && (request.method === "PUT" || request.method === "DELETE"))
+		return ownSpace(request, env, fetcher, headers, url);
 
 	const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
 	if (request.method === "POST" && url.pathname === "/v1/spaces") {

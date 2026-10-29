@@ -9,9 +9,13 @@ PAGES_REPO = "flisk-sh/pages"
 PAGES_ORIGIN = "https://pages.flisk.si"
 PUBLISH_ORIGIN = "https://publish.flisk.si"
 ALLOWED_ORIGINS = "https://roadmap.flisk.si,https://pages.flisk.si"
+GITHUB_CLIENT_ID = "" # the OAuth app's client id (Settings → Developer settings → OAuth Apps)
 MAX_PER_IP_HOUR = "5"
 MAX_PER_IP_DAY = "20"
 MAX_PER_HOUR = "120"
 
 # Secret (set once): bunx wrangler@4 secret put GITHUB_TOKEN
 #   a fine-grained token for flisk-sh/pages only, "Contents: read and write" (repository_dispatch needs it)
+# Sign in with GitHub (optional): an OAuth app whose callback is https://publish.flisk.si/auth/callback, no scopes.
+#   bunx wrangler@4 secret put GITHUB_CLIENT_SECRET
+#   bunx wrangler@4 secret put SESSION_SECRET      (any long random string)

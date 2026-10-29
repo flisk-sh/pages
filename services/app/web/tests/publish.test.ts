@@ -95,4 +95,17 @@ describe("anonymous publishes", () => {
 		).toBe("b".repeat(64));
 		expect(hashIn("Publish @sam/x from #3")).toBe("");
 	});
+
+	it("accepts a signed-in save or remove for a GitHub login and nothing else", async () => {
+		const { invalid } = await import("../scripts/publish-anon");
+		const cv = { me: "bun3" };
+		expect(invalid({ op: "save", owner: "odykyi", cv })).toBe("");
+		expect(invalid({ op: "remove", owner: "odykyi" })).toBe("");
+		expect(invalid({ op: "save", owner: "../main", cv })).toBe("bad owner");
+		expect(invalid({ op: "save", owner: "Odykyi", cv })).toBe("bad owner");
+		expect(invalid({ op: "save", owner: "odykyi" })).toBe("no cv");
+		expect(invalid({ op: "save", owner: "odykyi", cv: { me: "<x>" } })).toBe(
+			"bad ratings",
+		);
+	});
 });

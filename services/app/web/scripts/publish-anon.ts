@@ -1,6 +1,8 @@
 // The anonymous publish, run by .github/workflows/publish-anon.yml for each repository_dispatch that
 // publish.flisk.si sends. The payload is read from GITHUB_EVENT_PATH, never interpolated into a shell:
 //   {op: "publish" | "update" | "delete", id, hash, markdown?, cv?: {me, name}, source?}
+// or, for a visitor who signed in with GitHub (the worker checked who they are):
+//   {op: "save" | "remove", owner: <login>, cv?: {me, name}}   → the branch space/<owner>/cv, no key needed
 // A space is the branch space/anon/<id>: an index.md, or a developer CV that src/cv.ts builds here from roadmap's
 // ratings string and roadmap's own data, so no visitor's markup is ever published. Its commits carry `Pages-Edit-Hash: <sha256 of the
 // visitor's key>`; update and delete go through only when the hash matches the one on the branch.
@@ -29,6 +31,7 @@ export interface Payload {
 	op: string;
 	id: string;
 	hash: string;
+	owner?: string;
 	markdown?: string;
 	cv?: { me: string; name?: string };
 	source?: string;
@@ -36,11 +39,18 @@ export interface Payload {
 
 /** Why a payload cannot be acted on, or "" when it can. */
 export function invalid(p: Partial<Payload>): string {
-	if (!["publish", "update", "delete"].includes(p.op ?? ""))
-		return "unknown op";
-	if (!/^[a-z0-9]{10}$/.test(p.id ?? "")) return "bad id";
-	if (!/^[a-f0-9]{64}$/.test(p.hash ?? "")) return "bad hash";
-	if (p.op === "delete") return "";
+	if (p.op === "save" || p.op === "remove") {
+		if (!/^[a-z0-9](?:[a-z0-9-]{0,38})$/.test(p.owner ?? ""))
+			return "bad owner";
+		if (p.op === "remove") return "";
+		if (!p.cv) return "no cv";
+	} else {
+		if (!["publish", "update", "delete"].includes(p.op ?? ""))
+			return "unknown op";
+		if (!/^[a-z0-9]{10}$/.test(p.id ?? "")) return "bad id";
+		if (!/^[a-f0-9]{64}$/.test(p.hash ?? "")) return "bad hash";
+		if (p.op === "delete") return "";
+	}
 	if (p.cv !== undefined) {
 		if (typeof p.cv?.me !== "string" || !ME_PATTERN.test(p.cv.me))
 			return "bad ratings";
@@ -102,7 +112,9 @@ async function main() {
 	const p = (event.client_payload ?? {}) as Payload;
 	const why = invalid(p);
 	if (why) throw new Error(`refused: ${why}`);
-	const branch = `space/anon/${p.id}`;
+	const signedIn = p.op === "save" || p.op === "remove";
+	const handle = signedIn ? `${p.owner}/cv` : `anon/${p.id}`;
+	const branch = `space/${handle}`;
 	let parent = "";
 	try {
 		run([
@@ -116,15 +128,15 @@ async function main() {
 
 	if (p.op === "publish" && parent)
 		throw new Error(`refused: ${branch} already exists`);
-	if (p.op !== "publish") {
+	if (!signedIn && p.op !== "publish") {
 		if (!parent) throw new Error(`refused: no space ${p.id}`);
 		if (hashIn(run(["log", "-1", "--format=%B", parent])) !== p.hash)
 			throw new Error("refused: wrong key");
 	}
 
-	if (p.op === "delete") {
-		run(["push", "origin", "--delete", branch]);
-		console.log(`removed @anon/${p.id}`);
+	if (p.op === "delete" || p.op === "remove") {
+		if (parent) run(["push", "origin", "--delete", branch]);
+		console.log(`removed @${handle}`);
 	} else {
 		const work = mkdtempSync(join(tmpdir(), "anon-"));
 		try {
@@ -142,14 +154,16 @@ async function main() {
 				.replace(/[^\w./:?=&%-]/g, "")
 				.slice(0, 200);
 			const message = [
-				`${p.op === "publish" ? "Publish" : "Update"} @anon/${p.id}`,
+				`${p.op === "publish" || !parent ? "Publish" : "Update"} @${handle}`,
 				"",
 				...(source ? [`Source: ${source}`] : []),
-				`Pages-Edit-Hash: ${p.hash}`,
+				...(signedIn ? [] : [`Pages-Edit-Hash: ${p.hash}`]),
 			].join("\n");
 			const who = {
-				GIT_AUTHOR_NAME: "pages anonymous",
-				GIT_AUTHOR_EMAIL: "anon@pages.flisk.si",
+				GIT_AUTHOR_NAME: signedIn ? (p.owner as string) : "pages anonymous",
+				GIT_AUTHOR_EMAIL: signedIn
+					? `${p.owner}@users.noreply.github.com`
+					: "anon@pages.flisk.si",
 				GIT_COMMITTER_NAME: "github-actions[bot]",
 				GIT_COMMITTER_EMAIL:
 					"41898282+github-actions[bot]@users.noreply.github.com",
@@ -159,7 +173,7 @@ async function main() {
 				who,
 			);
 			run(["push", "origin", `${commit}:refs/heads/${branch}`]);
-			console.log(`published @anon/${p.id} at ${commit}`);
+			console.log(`published @${handle} at ${commit}`);
 		} finally {
 			rmSync(work, { recursive: true, force: true });
 		}
