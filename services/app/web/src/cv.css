@@ -979,3 +979,31 @@ footer + .make,
 .make + footer {
 	margin-top: 8px;
 }
+
+/* Links: names open their page on roadmap or the tool's own site. They keep the look of the text until hovered. */
+a.chip {
+	color: inherit;
+	text-decoration: none;
+}
+a.chip:hover,
+a.chip:focus-visible {
+	background: color-mix(in srgb, var(--c) 24%, var(--panel));
+	outline: none;
+}
+.rolecard h3 a,
+.card h3 a,
+.tcard .thead b a,
+.tcard .thead span a,
+.skill .sname {
+	color: inherit;
+	text-decoration: none;
+	border-bottom: 1px dotted var(--faint);
+}
+.rolecard h3 a:hover,
+.card h3 a:hover,
+.tcard .thead b a:hover,
+.tcard .thead span a:hover,
+.skill .sname:hover {
+	color: var(--accent-text);
+	border-bottom-color: var(--accent-text);
+}

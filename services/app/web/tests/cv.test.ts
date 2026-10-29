@@ -274,3 +274,56 @@ describe("sharing a published CV", () => {
 		expect(out).toContain("https://x.test/?a=1&amp;b=&quot;2&quot;");
 	});
 });
+
+describe("clickable names and tooltips", () => {
+	const linked: RoadmapData = structuredClone(data);
+	linked.tools.foundations[0].url = "https://bun.sh";
+	linked.tools.containers[0].url = "javascript:alert(1)";
+	linked.roles.roles[0].group = "build";
+	const { html } = cvPage(
+		linked,
+		parseMe("bun3,helm2"),
+		"Sam",
+		links,
+		new Date("2026-10-28"),
+	);
+
+	it("links a tool chip to the tool's own site, with a tooltip of its level, line and ring", () => {
+		expect(html).toContain(
+			'<a class="chip l3" href="https://bun.sh" rel="noopener"',
+		);
+		expect(html).toContain('title="Bun: expert. Fast JS. Adopt: use it"');
+	});
+
+	it("never links a tool to anything but https, and leaves it a plain chip", () => {
+		expect(html).not.toContain("javascript:");
+		expect(html).toContain('<span class="chip l2"');
+	});
+
+	it("links role, journey level and family names to roadmap", () => {
+		expect(html).toContain(
+			'<h3><a href="https://roadmap.flisk.si/roles/build/"',
+		);
+		expect(html).toContain('<h3><a href="https://roadmap.flisk.si/roles/"'); // a role with no group
+		expect(html).toContain('href="https://roadmap.flisk.si/journeys/backend/"');
+		expect(html).toContain(
+			'href="https://roadmap.flisk.si/radar/foundations/"',
+		);
+		expect(html).toContain('title="Adopt: use it"');
+	});
+
+	it("links a skill's name to its file and still has no script", () => {
+		expect(html).toContain(
+			'<a class="sname" href="https://github.com/acme/skills/blob/HEAD/skills/bun-install/SKILL.md"',
+		);
+		expect(html).not.toMatch(/<script/i);
+	});
+
+	it("escapes a hostile tool url instead of breaking out of the attribute", () => {
+		const bad: RoadmapData = structuredClone(data);
+		bad.tools.foundations[0].url = 'https://x.test/"onmouseover="alert(1)';
+		expect(
+			cvPage(bad, parseMe("bun3"), "Sam", links, new Date("2026-10-28")).html,
+		).not.toContain('onmouseover="alert');
+	});
+});
