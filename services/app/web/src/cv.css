@@ -914,3 +914,41 @@ footer a {
 		display: none;
 	}
 }
+
+/* Share */
+.sharebtns {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.sharebtns .btn {
+	padding: 8px 14px;
+	font-size: 14px;
+}
+.badges {
+	margin-top: 14px;
+}
+.badges summary {
+	cursor: pointer;
+	color: var(--accent-text);
+	font-weight: 600;
+	font-size: 14.5px;
+}
+.snip {
+	margin-top: 10px;
+}
+.snip pre {
+	margin: 4px 0 0;
+	padding: 8px 10px;
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	overflow-x: auto;
+	user-select: all;
+	font: 12.5px / 1.5 var(--mono);
+}
+.fine {
+	color: var(--faint);
+	font-size: 13px;
+	margin: 10px 0 0;
+}

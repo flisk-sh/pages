@@ -1,6 +1,6 @@
 // Builds a developer CV folder from roadmap ratings, the same page one-click publishing makes:
 //   bun scripts/cv.ts --me "bun3,helm2" --name "Sam" --out ./cv [--data assets/data.json] [--logos assets/logos]
-//                     [--portfolio URL] [--radar URL] [--github URL]
+//                     [--portfolio URL] [--radar URL] [--github URL] [--url PUBLIC_ADDRESS]
 // --me may also be a file holding the ratings. --data and --logos default to roadmap.flisk.si.
 import {
 	copyFileSync,
@@ -34,6 +34,7 @@ const { html, logos } = cvPage(data, parseMe(me), arg("name"), {
 	portfolio: arg("portfolio", `${ROADMAP}/portfolio/?${q}`),
 	radar: arg("radar", `${ROADMAP}/radar/?${q}`),
 	github: arg("github") || undefined,
+	url: arg("url") || undefined,
 });
 mkdirSync(join(out, "logos"), { recursive: true });
 writeFileSync(join(out, "index.html"), html);
