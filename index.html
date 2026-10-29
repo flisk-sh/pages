@@ -1,0 +1,986 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oleksandr Dykyi · Founding Engineer · Developer CV</title><meta name="description" content="Oleksandr Dykyi, Founding Engineer: 95 developer tools rated, 27 at expert level, across 8 tool families."><style>/* The developer CV page (src/cv.ts): roadmap.flisk.si's look (Roles cards, Journeys line, Skills cards), no scripts. */
+/* biome-ignore-all lint/style/noDescendingSpecificity: the rules are ordered by section, as in roadmap's style.css */
+:root {
+	--bg: #08080c;
+	--panel: #101015;
+	--panel2: #15151b;
+	--fg: #ececf1;
+	--muted: #a1a1ad;
+	--faint: #6b6b78;
+	--line: rgba(255, 255, 255, 0.08);
+	--line2: rgba(255, 255, 255, 0.18);
+	--grid: rgba(255, 255, 255, 0.045);
+	--accent: #22c55e;
+	--accent-text: #6ee7a0;
+	--tint: rgba(34, 197, 94, 0.12);
+	--blue: #38a7f0;
+	--blue-text: #7cc4f5;
+	--h0: rgba(255, 255, 255, 0.06);
+	--mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+	color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+	:root {
+		--bg: #f6f6f4;
+		--panel: #fff;
+		--panel2: #fafaf8;
+		--fg: #141418;
+		--muted: #55555f;
+		--faint: #8b8b96;
+		--line: rgba(0, 0, 0, 0.09);
+		--line2: rgba(0, 0, 0, 0.22);
+		--grid: rgba(0, 0, 0, 0.05);
+		--accent-text: #15803d;
+		--tint: rgba(34, 197, 94, 0.1);
+		--blue-text: #0b6fb3;
+		--h0: rgba(0, 0, 0, 0.06);
+		color-scheme: light;
+	}
+}
+* {
+	box-sizing: border-box;
+}
+html {
+	background: var(--bg);
+}
+body {
+	margin: 0;
+	color: var(--fg);
+	font:
+		16px / 1.55 ui-sans-serif,
+		system-ui,
+		-apple-system,
+		"Segoe UI",
+		sans-serif;
+	-webkit-font-smoothing: antialiased;
+	background:
+		radial-gradient(
+			60rem 30rem at 85% -10%,
+			rgba(34, 197, 94, 0.09),
+			transparent 70%
+		),
+		radial-gradient(
+			50rem 30rem at -10% 40%,
+			rgba(56, 167, 240, 0.06),
+			transparent 70%
+		),
+		linear-gradient(var(--grid) 1px, transparent 1px) 0 0 / 44px 44px,
+		linear-gradient(90deg, var(--grid) 1px, transparent 1px) 0 0 / 44px 44px,
+		var(--bg);
+}
+.wrap {
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 0 20px;
+}
+.lbl {
+	font: 600 11.5px / 1.3 var(--mono);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--faint);
+	margin: 0;
+}
+.lbl b {
+	color: var(--accent-text);
+	font-weight: 600;
+	margin-left: 8px;
+	letter-spacing: 0.04em;
+}
+
+/* Top bar */
+nav.top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 16px;
+	padding: 18px 0;
+	border-bottom: 1px solid var(--line);
+	margin-bottom: 52px;
+	font-size: 14px;
+}
+nav.top .brand {
+	display: flex;
+	gap: 10px;
+	align-items: center;
+	font-weight: 700;
+	color: var(--fg);
+	text-decoration: none;
+}
+nav.top .brand i {
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
+	background: var(--accent);
+	display: grid;
+	place-items: center;
+	color: #04120a;
+	font: 800 13px var(--mono);
+	font-style: normal;
+}
+nav.top .links {
+	display: flex;
+	gap: 18px;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+}
+nav.top .links a {
+	color: var(--muted);
+	text-decoration: none;
+}
+nav.top .links a:hover {
+	color: var(--fg);
+}
+
+/* Hero */
+.hero {
+	display: grid;
+	grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+	gap: 40px;
+	align-items: center;
+	margin-bottom: 72px;
+}
+@media (max-width: 900px) {
+	.hero {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.badge {
+	display: inline-block;
+	background: var(--blue);
+	color: #04121d;
+	font: 700 12px var(--mono);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	border-radius: 6px;
+	padding: 6px 12px;
+	margin: 0 0 18px;
+}
+h1 {
+	font-size: clamp(46px, 8vw, 88px);
+	line-height: 0.92;
+	letter-spacing: -0.045em;
+	margin: 0 0 18px;
+	font-weight: 900;
+	overflow-wrap: anywhere;
+}
+h1 span {
+	background: linear-gradient(
+		100deg,
+		var(--fg) 30%,
+		var(--accent-text) 70%,
+		var(--blue-text)
+	);
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+}
+.role {
+	font-size: clamp(20px, 2.4vw, 26px);
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	margin: 0 0 10px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+}
+.pill {
+	font: 700 12px var(--mono);
+	background: var(--tint);
+	color: var(--accent-text);
+	border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+	border-radius: 999px;
+	padding: 4px 10px;
+	letter-spacing: 0.04em;
+	white-space: nowrap;
+}
+.what {
+	color: var(--muted);
+	margin: 0 0 26px;
+	max-width: 38em;
+	font-size: 17px;
+}
+.stats {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 10px;
+	margin-bottom: 24px;
+}
+@media (max-width: 560px) {
+	.stats {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+.stats div {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 14px;
+	padding: 14px 16px;
+}
+.stats b {
+	display: block;
+	font: 700 clamp(22px, 2.6vw, 30px) / 1.1 var(--mono);
+	letter-spacing: -0.03em;
+}
+.stats span {
+	font-size: 12.5px;
+	color: var(--faint);
+}
+.btns {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.btn {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--fg);
+	text-decoration: none;
+	border: 1px solid var(--line2);
+	border-radius: 999px;
+	padding: 9px 16px;
+	background: var(--panel);
+}
+.btn:hover {
+	border-color: var(--accent);
+}
+.btn.p {
+	background: var(--accent);
+	color: #04120a;
+	border-color: var(--accent);
+}
+.spider {
+	width: 100%;
+	max-width: 440px;
+	display: block;
+	margin: 0 auto;
+	overflow: visible;
+}
+.spider .ring {
+	fill: none;
+	stroke: var(--line2);
+}
+.spider .axis {
+	stroke: var(--line);
+}
+.spider .shape {
+	fill: rgba(34, 197, 94, 0.2);
+	stroke: var(--accent);
+	stroke-width: 2.5;
+	stroke-linejoin: round;
+}
+.spider text {
+	font: 700 11px var(--mono);
+}
+
+/* Sections */
+section {
+	margin: 0 0 80px;
+}
+.sh {
+	display: flex;
+	align-items: baseline;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin-bottom: 22px;
+}
+.sh h2 {
+	font-size: clamp(26px, 3.2vw, 36px);
+	letter-spacing: -0.035em;
+	margin: 0;
+	font-weight: 800;
+}
+.sh p {
+	margin: 0;
+	color: var(--muted);
+	max-width: 46em;
+}
+.panel {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 20px;
+	padding: clamp(18px, 3vw, 28px);
+}
+
+/* Chips and logo marks, as on roadmap. A chip never gets wider than its card: a long name ends in an ellipsis. */
+.chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.chip {
+	--c: #888;
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 100%;
+	padding: 4px 12px 4px 4px;
+	border-radius: 999px;
+	border: 2px solid color-mix(in srgb, var(--c) 85%, transparent);
+	background: color-mix(in srgb, var(--c) 10%, var(--panel));
+	font-size: 14.5px;
+	font-weight: 550;
+	white-space: nowrap;
+}
+.chip > span:not(.mk) {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	min-width: 0;
+}
+.chip.l3 {
+	box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent);
+}
+.chip.l1 {
+	border-width: 1.5px;
+	border-color: color-mix(in srgb, var(--c) 50%, transparent);
+}
+.chip.off {
+	border: 1.5px dashed var(--line2);
+	background: transparent;
+	color: var(--faint);
+	font-weight: 500;
+}
+.chip.off .mk {
+	filter: grayscale(1);
+	opacity: 0.55;
+}
+.chip i {
+	flex: none;
+	font: normal 9px var(--mono);
+	letter-spacing: 1px;
+	color: var(--c);
+}
+.mk {
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: var(--c);
+	display: inline-grid;
+	place-items: center;
+	flex: none;
+	overflow: hidden;
+}
+.glyph {
+	display: block;
+	width: 15px;
+	height: 15px;
+	background: #0b0b10;
+	-webkit-mask: var(--logo) center / contain no-repeat;
+	mask: var(--logo) center / contain no-repeat;
+}
+.mk.png img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.mk.sym {
+	font: 800 10.5px var(--mono);
+	color: #0b0b10;
+	letter-spacing: -0.02em;
+}
+.mk.big {
+	width: 46px;
+	height: 46px;
+	border-radius: 12px;
+	background: color-mix(in srgb, var(--c) 22%, var(--panel2));
+	border: 1.5px solid color-mix(in srgb, var(--c) 60%, transparent);
+}
+.mk.big .glyph {
+	width: 24px;
+	height: 24px;
+	background: var(--c);
+}
+.mk.big.png img {
+	border-radius: 10px;
+}
+.mk.big.sym {
+	font-size: 14px;
+	color: var(--c);
+}
+
+/* Role cards, as on roadmap's Roles view */
+.roles {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 16px;
+}
+@media (max-width: 1000px) {
+	.roles {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.rolecard {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 22px;
+	padding: 24px;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.rolecard.best {
+	border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+	box-shadow: 0 0 0 4px var(--tint);
+}
+.rhead {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	align-items: flex-start;
+}
+.rhead > div:first-child {
+	min-width: 0;
+}
+.rolecard h3 {
+	margin: 4px 0;
+	font-size: 22px;
+	letter-spacing: -0.02em;
+	font-weight: 800;
+	overflow-wrap: anywhere;
+}
+.rwhat {
+	color: var(--muted);
+	margin: 0 0 14px;
+	font-size: 15.5px;
+}
+.pctbig {
+	text-align: right;
+	flex: none;
+}
+.pctbig b {
+	font: 800 36px / 1 var(--mono);
+	color: var(--accent-text);
+	letter-spacing: -0.04em;
+}
+.pctbig b small {
+	font-size: 16px;
+}
+.pctbig span {
+	display: block;
+	font: 600 10.5px var(--mono);
+	color: var(--faint);
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.fbar {
+	display: flex;
+	gap: 4px;
+	height: 8px;
+	margin: 2px 0 16px;
+}
+.fbar i {
+	border-radius: 99px;
+}
+.rgroup {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 8px;
+	margin-top: 14px;
+}
+.rgroup .lbl {
+	font-size: 11px;
+}
+.rgroup .lbl.core {
+	color: var(--accent-text);
+}
+.rgroup .lbl b {
+	color: var(--faint);
+}
+.rolecard .chip {
+	font-size: 13.5px;
+}
+.panel.more {
+	margin-top: 16px;
+}
+.others {
+	list-style: none;
+	margin: 18px 0 0;
+	padding: 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+	gap: 10px 22px;
+}
+.others li {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 90px 40px;
+	gap: 10px;
+	align-items: center;
+	font-size: 14px;
+}
+.pbar {
+	height: 6px;
+	border-radius: 99px;
+	background: var(--h0);
+	overflow: hidden;
+}
+.pbar i {
+	display: block;
+	height: 100%;
+	background: var(--accent);
+	border-radius: 99px;
+}
+.others b {
+	font: 700 12.5px var(--mono);
+	text-align: right;
+}
+
+/* The journey line, as on roadmap's Journeys view */
+.track .head {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex-wrap: wrap;
+	margin-bottom: 26px;
+}
+.track .head .badge {
+	margin: 0;
+}
+.track .head p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 17px;
+}
+.steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+.step {
+	display: grid;
+	grid-template-columns: 84px minmax(0, 1fr);
+	position: relative;
+	padding-bottom: 22px;
+}
+.step::before {
+	content: "";
+	position: absolute;
+	left: 39px;
+	top: 50px;
+	bottom: -6px;
+	width: 8px;
+	border-radius: 8px;
+	background: var(--blue);
+	box-shadow: 0 0 18px rgba(56, 167, 240, 0.35);
+}
+.step:last-child::before {
+	display: none;
+}
+.num {
+	width: 72px;
+	height: 72px;
+	border-radius: 50%;
+	border: 8px solid var(--blue);
+	background: var(--bg);
+	display: grid;
+	place-items: center;
+	font:
+		800 26px ui-sans-serif,
+		system-ui,
+		sans-serif;
+	position: relative;
+	z-index: 1;
+	margin-left: 7px;
+	box-shadow: 0 0 22px rgba(56, 167, 240, 0.3);
+}
+.step.done .num {
+	background: var(--blue);
+	color: #04121d;
+}
+.step.todo .num {
+	border-color: var(--line2);
+	color: var(--faint);
+	box-shadow: none;
+}
+.card {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 22px;
+	padding: clamp(18px, 2.6vw, 28px) clamp(18px, 2.8vw, 32px);
+	min-width: 0;
+}
+.step.todo .card {
+	opacity: 0.72;
+}
+.card .lvl {
+	color: var(--blue-text);
+	font-size: 13px;
+	letter-spacing: 0.22em;
+}
+.card h3 {
+	font-size: clamp(22px, 2.6vw, 30px);
+	letter-spacing: -0.03em;
+	margin: 6px 0 2px;
+	font-weight: 800;
+}
+.card .goal {
+	color: var(--muted);
+	margin: 0 0 14px;
+	font-size: 17px;
+}
+.rrow {
+	display: grid;
+	grid-template-columns: 150px minmax(0, 1fr);
+	gap: 12px;
+	align-items: start;
+	margin-top: 10px;
+}
+.rrow .lbl {
+	text-transform: none;
+	letter-spacing: 0.06em;
+	font-size: 13px;
+	padding-top: 9px;
+}
+@media (max-width: 640px) {
+	.step {
+		grid-template-columns: 46px minmax(0, 1fr);
+	}
+	.num {
+		width: 40px;
+		height: 40px;
+		border-width: 5px;
+		font-size: 16px;
+		margin-left: 0;
+	}
+	.step::before {
+		left: 17px;
+		top: 34px;
+		width: 6px;
+	}
+	.rrow {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+	.rrow .lbl {
+		padding-top: 0;
+	}
+}
+.note {
+	border-left: 4px solid var(--blue);
+	padding: 2px 0 2px 16px;
+	margin: 18px 0 0;
+	color: var(--muted);
+	font-size: 16px;
+}
+
+/* Expert tools, as roadmap's tool cards */
+.tgrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+	gap: 14px;
+}
+.tcard {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	padding: 18px;
+	min-width: 0;
+}
+.thead {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+}
+.thead b {
+	display: block;
+	font-size: 19px;
+	letter-spacing: -0.02em;
+	overflow-wrap: anywhere;
+}
+.thead span {
+	font-size: 13px;
+	color: var(--faint);
+}
+.ring {
+	font: 800 11px var(--mono);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	font-style: normal;
+	border-radius: 6px;
+	padding: 4px 8px;
+	background: var(--accent);
+	color: #04120a;
+}
+.ring.trial {
+	background: #38a7f0;
+	color: #04121d;
+}
+.ring.assess {
+	background: #f5a524;
+	color: #1d1200;
+}
+.ring.hold {
+	background: #ef4444;
+	color: #1d0505;
+}
+.tag {
+	margin: 12px 0;
+	font-size: 14.5px;
+}
+.sc {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 4px 10px;
+	margin-bottom: 10px;
+	font-size: 13.5px;
+	color: var(--muted);
+}
+.sc b {
+	font: 700 14px var(--mono);
+	color: var(--fg);
+}
+.sc .pbar {
+	grid-column: 1 / -1;
+}
+.tmeta {
+	margin: 6px 0 0;
+	font: 500 12.5px var(--mono);
+	color: var(--faint);
+}
+
+/* Skill cards, as on roadmap's Skills view */
+.skills {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+	gap: 14px;
+}
+.skill {
+	background: var(--panel);
+	border: 1px solid var(--line);
+	border-radius: 18px;
+	padding: 18px 18px 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	min-width: 0;
+}
+.skill .top {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 10px;
+}
+.skill code {
+	font: 700 15px var(--mono);
+	color: var(--fg);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.skill .src {
+	font: 500 12px var(--mono);
+	color: var(--faint);
+	text-decoration: none;
+	overflow-wrap: anywhere;
+}
+.skill .src:hover {
+	color: var(--fg);
+}
+.skill p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 14.5px;
+	flex: 1;
+}
+.stag {
+	flex: none;
+	font: 700 10.5px var(--mono);
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	border-radius: 6px;
+	padding: 3px 7px;
+	white-space: nowrap;
+	color: var(--faint);
+	border: 1px solid var(--line2);
+}
+.stag.good {
+	background: var(--tint);
+	color: var(--accent-text);
+	border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.stag.mid {
+	background: rgba(245, 165, 36, 0.12);
+	color: #f5a524;
+	border-color: rgba(245, 165, 36, 0.4);
+}
+.stag.bad {
+	background: rgba(239, 68, 68, 0.12);
+	color: #ef4444;
+	border-color: rgba(239, 68, 68, 0.4);
+}
+.fits {
+	font: 600 12px var(--mono);
+	color: var(--faint);
+}
+.fits b {
+	color: var(--accent-text);
+}
+
+/* How much to trust the page, as AI-Atlas puts it: what it is made from */
+.trust {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 14px;
+}
+.trust span {
+	font: 600 12px var(--mono);
+	border: 1px solid var(--line2);
+	border-radius: 8px;
+	padding: 6px 10px;
+	color: var(--muted);
+	background: var(--panel);
+}
+.trust b {
+	color: var(--fg);
+}
+
+/* The toolkit, with a line on each tool */
+.evidence {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0 28px;
+}
+@media (max-width: 900px) {
+	.evidence {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+.ev {
+	display: grid;
+	grid-template-columns: minmax(0, 210px) minmax(0, 1fr);
+	gap: 12px;
+	align-items: center;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--line);
+}
+.ev p {
+	margin: 0;
+	color: var(--muted);
+	font-size: 14px;
+}
+@media (max-width: 520px) {
+	.ev {
+		grid-template-columns: minmax(0, 1fr);
+		gap: 6px;
+	}
+}
+
+/* The toolkit wall, by level */
+.lvlhead {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 26px 0 12px;
+}
+.lvlhead:first-child {
+	margin-top: 0;
+}
+.lvlhead i {
+	font: normal 12px var(--mono);
+	color: var(--accent-text);
+	letter-spacing: 2px;
+}
+.lvlhead h3 {
+	margin: 0;
+	font-size: 17px;
+}
+.lvlhead small {
+	color: var(--faint);
+	font: 600 12px var(--mono);
+}
+
+footer {
+	border-top: 1px solid var(--line);
+	padding: 26px 0 70px;
+	color: var(--faint);
+	font-size: 13.5px;
+	display: grid;
+	gap: 10px;
+}
+footer p {
+	margin: 0;
+	max-width: 62em;
+}
+footer a {
+	color: var(--muted);
+}
+@media print {
+	body {
+		background: #fff;
+		color: #000;
+	}
+	.btns,
+	nav.top {
+		display: none;
+	}
+}
+</style></head><body><div class="wrap">
+<nav class="top"><a class="brand" href="https://roadmap.flisk.si/"><i>&gt;_</i>DevEx CV</a><div class="links"><a href="https://roadmap.flisk.si/portfolio/?me=argo-cd1%2Caws-cdk2%2Caws-sam2%2Cbackstage3%2Cbun3%2Ccdktf1%2Ccircleci1%2Cclaude-code2%2Ccline2%2Ccloudflare-tunnel2%2Ccloudformation3%2Ccodespaces1%2Ccodex3%2Ccolima1%2Ccomposer1%2Ccreate-t3-app1%2Ccreate-vite1%2Ccursor3%2Cdeno1%2Cdependabot3%2Cdev-containers1%2Cdevin3%2Cdocker-compose3%2Cdocker-desktop2%2Cdocker-engine2%2Cdocker-mcp-toolkit1%2Cesbuild1%2Cfirebase-studio1%2Cflisk3%2Cgemini-cli2%2Cgithub-actions3%2Cgithub-copilot3%2Cgitlab-ci2%2Chelm2%2Chomebrew1%2Chono2%2Cjenkins1%2Ck3s1%2Ck9s3%2Ckiro1%2Ckubectl2%2Ckubernetes3%2Ckubernetes-dashboard1%2Clangchain1%2Clanggraph1%2Clima2%2Cmcp-registry3%2Cminikube1%2Cmodel-context-protocol2%2Cneon1%2Cnestjs2%2Cnetlify-cli2%2Cnextjs1%2Cngrok1%2Cnodemon3%2Cnpm3%2Cnvm3%2Cnx1%2Collama1%2Copencode3%2Copentelemetry1%2Corbstack2%2Cpact1%2Cplaywright-mcp1%2Cpm21%2Cpnpm2%2Cpodman3%2Cpodman-desktop1%2Cportainer1%2Cprisma3%2Cpulumi1%2Creact-router2%2Creplit1%2Croo-code2%2Csentry1%2Csequelize2%2Cserverless-framework3%2Csignoz1%2Cskills-sh2%2Cstackblitz1%2Csupabase-cli1%2Cswc1%2Cterraform3%2Cterragrunt3%2Ctilt3%2Cturbopack1%2Ctypeorm2%2Cvercel-cli1%2Cvite1%2Cwebpack2%2Cwindsurf3%2Cwrangler2%2Cyarn3%2Cyeoman3%2Czed1&amp;name=Oleksandr+Dykyi">Portfolio</a><a href="https://roadmap.flisk.si/radar/?me=argo-cd1%2Caws-cdk2%2Caws-sam2%2Cbackstage3%2Cbun3%2Ccdktf1%2Ccircleci1%2Cclaude-code2%2Ccline2%2Ccloudflare-tunnel2%2Ccloudformation3%2Ccodespaces1%2Ccodex3%2Ccolima1%2Ccomposer1%2Ccreate-t3-app1%2Ccreate-vite1%2Ccursor3%2Cdeno1%2Cdependabot3%2Cdev-containers1%2Cdevin3%2Cdocker-compose3%2Cdocker-desktop2%2Cdocker-engine2%2Cdocker-mcp-toolkit1%2Cesbuild1%2Cfirebase-studio1%2Cflisk3%2Cgemini-cli2%2Cgithub-actions3%2Cgithub-copilot3%2Cgitlab-ci2%2Chelm2%2Chomebrew1%2Chono2%2Cjenkins1%2Ck3s1%2Ck9s3%2Ckiro1%2Ckubectl2%2Ckubernetes3%2Ckubernetes-dashboard1%2Clangchain1%2Clanggraph1%2Clima2%2Cmcp-registry3%2Cminikube1%2Cmodel-context-protocol2%2Cneon1%2Cnestjs2%2Cnetlify-cli2%2Cnextjs1%2Cngrok1%2Cnodemon3%2Cnpm3%2Cnvm3%2Cnx1%2Collama1%2Copencode3%2Copentelemetry1%2Corbstack2%2Cpact1%2Cplaywright-mcp1%2Cpm21%2Cpnpm2%2Cpodman3%2Cpodman-desktop1%2Cportainer1%2Cprisma3%2Cpulumi1%2Creact-router2%2Creplit1%2Croo-code2%2Csentry1%2Csequelize2%2Cserverless-framework3%2Csignoz1%2Cskills-sh2%2Cstackblitz1%2Csupabase-cli1%2Cswc1%2Cterraform3%2Cterragrunt3%2Ctilt3%2Cturbopack1%2Ctypeorm2%2Cvercel-cli1%2Cvite1%2Cwebpack2%2Cwindsurf3%2Cwrangler2%2Cyarn3%2Cyeoman3%2Czed1&amp;name=Oleksandr+Dykyi">Radar</a></div></nav>
+<div class="hero"><div>
+<span class="badge">Developer CV</span>
+<h1><span>Oleksandr Dykyi</span></h1>
+<p class="role">Founding Engineer <span class="pill">57% MATCH</span></p>
+<p class="what">First engineer at a startup. Does a bit of everything, picks the stack.</p>
+<div class="stats"><div><b>95</b><span>tools rated</span></div><div><b>27</b><span>expert</span></div><div><b>25</b><span>use often</span></div><div><b>8/8</b><span>families</span></div></div>
+<div class="btns"><a class="btn p" href="https://roadmap.flisk.si/portfolio/?me=argo-cd1%2Caws-cdk2%2Caws-sam2%2Cbackstage3%2Cbun3%2Ccdktf1%2Ccircleci1%2Cclaude-code2%2Ccline2%2Ccloudflare-tunnel2%2Ccloudformation3%2Ccodespaces1%2Ccodex3%2Ccolima1%2Ccomposer1%2Ccreate-t3-app1%2Ccreate-vite1%2Ccursor3%2Cdeno1%2Cdependabot3%2Cdev-containers1%2Cdevin3%2Cdocker-compose3%2Cdocker-desktop2%2Cdocker-engine2%2Cdocker-mcp-toolkit1%2Cesbuild1%2Cfirebase-studio1%2Cflisk3%2Cgemini-cli2%2Cgithub-actions3%2Cgithub-copilot3%2Cgitlab-ci2%2Chelm2%2Chomebrew1%2Chono2%2Cjenkins1%2Ck3s1%2Ck9s3%2Ckiro1%2Ckubectl2%2Ckubernetes3%2Ckubernetes-dashboard1%2Clangchain1%2Clanggraph1%2Clima2%2Cmcp-registry3%2Cminikube1%2Cmodel-context-protocol2%2Cneon1%2Cnestjs2%2Cnetlify-cli2%2Cnextjs1%2Cngrok1%2Cnodemon3%2Cnpm3%2Cnvm3%2Cnx1%2Collama1%2Copencode3%2Copentelemetry1%2Corbstack2%2Cpact1%2Cplaywright-mcp1%2Cpm21%2Cpnpm2%2Cpodman3%2Cpodman-desktop1%2Cportainer1%2Cprisma3%2Cpulumi1%2Creact-router2%2Creplit1%2Croo-code2%2Csentry1%2Csequelize2%2Cserverless-framework3%2Csignoz1%2Cskills-sh2%2Cstackblitz1%2Csupabase-cli1%2Cswc1%2Cterraform3%2Cterragrunt3%2Ctilt3%2Cturbopack1%2Ctypeorm2%2Cvercel-cli1%2Cvite1%2Cwebpack2%2Cwindsurf3%2Cwrangler2%2Cyarn3%2Cyeoman3%2Czed1&amp;name=Oleksandr+Dykyi">Interactive portfolio →</a><a class="btn" href="https://roadmap.flisk.si/radar/?me=argo-cd1%2Caws-cdk2%2Caws-sam2%2Cbackstage3%2Cbun3%2Ccdktf1%2Ccircleci1%2Cclaude-code2%2Ccline2%2Ccloudflare-tunnel2%2Ccloudformation3%2Ccodespaces1%2Ccodex3%2Ccolima1%2Ccomposer1%2Ccreate-t3-app1%2Ccreate-vite1%2Ccursor3%2Cdeno1%2Cdependabot3%2Cdev-containers1%2Cdevin3%2Cdocker-compose3%2Cdocker-desktop2%2Cdocker-engine2%2Cdocker-mcp-toolkit1%2Cesbuild1%2Cfirebase-studio1%2Cflisk3%2Cgemini-cli2%2Cgithub-actions3%2Cgithub-copilot3%2Cgitlab-ci2%2Chelm2%2Chomebrew1%2Chono2%2Cjenkins1%2Ck3s1%2Ck9s3%2Ckiro1%2Ckubectl2%2Ckubernetes3%2Ckubernetes-dashboard1%2Clangchain1%2Clanggraph1%2Clima2%2Cmcp-registry3%2Cminikube1%2Cmodel-context-protocol2%2Cneon1%2Cnestjs2%2Cnetlify-cli2%2Cnextjs1%2Cngrok1%2Cnodemon3%2Cnpm3%2Cnvm3%2Cnx1%2Collama1%2Copencode3%2Copentelemetry1%2Corbstack2%2Cpact1%2Cplaywright-mcp1%2Cpm21%2Cpnpm2%2Cpodman3%2Cpodman-desktop1%2Cportainer1%2Cprisma3%2Cpulumi1%2Creact-router2%2Creplit1%2Croo-code2%2Csentry1%2Csequelize2%2Cserverless-framework3%2Csignoz1%2Cskills-sh2%2Cstackblitz1%2Csupabase-cli1%2Cswc1%2Cterraform3%2Cterragrunt3%2Ctilt3%2Cturbopack1%2Ctypeorm2%2Cvercel-cli1%2Cvite1%2Cwebpack2%2Cwindsurf3%2Cwrangler2%2Cyarn3%2Cyeoman3%2Czed1&amp;name=Oleksandr+Dykyi">My tools on the radar</a></div>
+<div class="trust"><span><b>Self-reported</b> ratings</span><span><b>Scored</b> by a public checklist</span><span><b>No scripts</b>, no tracking</span></div>
+</div><div><svg viewBox="-70 -6 480 352" class="spider" role="img" aria-label="Skill shape across 8 tool families"><polygon class="ring" points="170.0,140.5 190.9,149.1 199.5,170.0 190.9,190.9 170.0,199.5 149.1,190.9 140.5,170.0 149.1,149.1"/><polygon class="ring" points="170.0,111.0 211.7,128.3 229.0,170.0 211.7,211.7 170.0,229.0 128.3,211.7 111.0,170.0 128.3,128.3"/><polygon class="ring" points="170.0,81.5 232.6,107.4 258.5,170.0 232.6,232.6 170.0,258.5 107.4,232.6 81.5,170.0 107.4,107.4"/><polygon class="ring" points="170.0,52.0 253.4,86.6 288.0,170.0 253.4,253.4 170.0,288.0 86.6,253.4 52.0,170.0 86.6,86.6"/><line class="axis" x1="170" y1="170" x2="170.0" y2="52.0"/><line class="axis" x1="170" y1="170" x2="253.4" y2="86.6"/><line class="axis" x1="170" y1="170" x2="288.0" y2="170.0"/><line class="axis" x1="170" y1="170" x2="253.4" y2="253.4"/><line class="axis" x1="170" y1="170" x2="170.0" y2="288.0"/><line class="axis" x1="170" y1="170" x2="86.6" y2="253.4"/><line class="axis" x1="170" y1="170" x2="52.0" y2="170.0"/><line class="axis" x1="170" y1="170" x2="86.6" y2="86.6"/><polygon class="shape" points="170.0,102.2 215.9,124.1 223.1,170.0 180.4,180.4 170.0,237.8 142.9,197.1 52.0,170.0 107.4,107.4"/><circle cx="170.0" cy="102.2" r="4" fill="#eab308" stroke="var(--bg)" stroke-width="2"/><text x="170.0" y="30.0" text-anchor="middle" fill="#eab308">Package &amp; build</text><circle cx="215.9" cy="124.1" r="4" fill="#0ea5e9" stroke="var(--bg)" stroke-width="2"/><text x="271.8" y="72.2" text-anchor="start" fill="#0ea5e9">Containers &amp; clusters</text><circle cx="223.1" cy="170.0" r="4" fill="#22c55e" stroke="var(--bg)" stroke-width="2"/><text x="314.0" y="174.0" text-anchor="start" fill="#22c55e">Inner loop</text><circle cx="180.4" cy="180.4" r="4" fill="#a855f7" stroke="var(--bg)" stroke-width="2"/><text x="271.8" y="275.8" text-anchor="start" fill="#a855f7">Dev environments</text><circle cx="170.0" cy="237.8" r="4" fill="#ec4899" stroke="var(--bg)" stroke-width="2"/><text x="170.0" y="318.0" text-anchor="middle" fill="#ec4899">Monorepos &amp; frameworks</text><circle cx="142.9" cy="197.1" r="4" fill="#14b8a6" stroke="var(--bg)" stroke-width="2"/><text x="68.2" y="275.8" text-anchor="end" fill="#14b8a6">Local services &amp; data</text><circle cx="52.0" cy="170.0" r="4" fill="#f97316" stroke="var(--bg)" stroke-width="2"/><text x="26.0" y="174.0" text-anchor="end" fill="#f97316">AI &amp; agents</text><circle cx="107.4" cy="107.4" r="4" fill="#64748b" stroke="var(--bg)" stroke-width="2"/><text x="68.2" y="72.2" text-anchor="end" fill="#64748b">Platform</text></svg></div></div>
+<section><div class="sh"><h2>Role fit</h2><p>Scored with roadmap's job loadouts: a must-have tool counts 3, an every-day tool 2, a good-to-know tool 1, times my level. Solid rings are tools I rated; dashed ones I haven't.</p></div>
+<div class="roles"><div class="rolecard best"><div class="rhead"><div><p class="lbl">Best fit</p><h3>Founding Engineer</h3></div><div class="pctbig"><b>57<small>%</small></b><span>match</span></div></div><p class="rwhat">First engineer at a startup. Does a bit of everything, picks the stack.</p><div class="fbar"><i style="flex:2;background:#eab308"></i><i style="flex:3;background:#0ea5e9"></i><i style="flex:3;background:#22c55e"></i><i style="flex:5;background:#ec4899"></i><i style="flex:3;background:#14b8a6"></i><i style="flex:2;background:#f97316"></i><i style="flex:14;background:#64748b"></i></div><div class="rgroup"><span class="lbl core">Must have<b>5/5</b></span><div class="chips"><span class="chip l3" style="--c:#0ea5e9" title="Docker Compose: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-compose.svg)"></b></span><span>Docker Compose</span><i>●●●</i></span><span class="chip l3" style="--c:#64748b" title="GitHub Actions: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/github-actions.svg)"></b></span><span>GitHub Actions</span><i>●●●</i></span><span class="chip l1" style="--c:#ec4899" title="Next.js: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/nextjs.svg)"></b></span><span>Next.js</span><i>●○○</i></span><span class="chip l3" style="--c:#64748b" title="Terraform: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><span>Terraform</span><i>●●●</i></span><span class="chip l1" style="--c:#64748b" title="Sentry: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/sentry.svg)"></b></span><span>Sentry</span><i>●○○</i></span></div></div><div class="rgroup"><span class="lbl daily">Every day<b>5/6</b></span><div class="chips"><span class="chip l2" style="--c:#f97316" title="Claude Code: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/claude-code.svg)"></b></span><span>Claude Code</span><i>●●○</i></span><span class="chip l2" style="--c:#eab308" title="pnpm: use often"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/pnpm.svg)"></b></span><span>pnpm</span><i>●●○</i></span><span class="chip l1" style="--c:#14b8a6" title="Supabase CLI: have used"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/supabase-cli.svg)"></b></span><span>Supabase CLI</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="Vercel CLI: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/vercel-cli.svg)"></b></span><span>Vercel CLI</span><i>●○○</i></span><span class="chip l0 off" style="--c:#64748b" title="Doppler: not rated"><span class="mk png " style="--c:#64748b"><img src="logos/doppler.png" alt="" loading="lazy"></span><span>Doppler</span></span><span class="chip l3" style="--c:#22c55e" title="Tilt: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/tilt.png" alt="" loading="lazy"></span><span>Tilt</span><i>●●●</i></span></div></div><div class="rgroup"><span class="lbl nice">Good to know<b>2/5</b></span><div class="chips"><span class="chip l3" style="--c:#22c55e" title="Flisk: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/flisk.png" alt="" loading="lazy"></span><span>Flisk</span><i>●●●</i></span><span class="chip l0 off" style="--c:#64748b" title="OpenTofu: not rated"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/opentofu.svg)"></b></span><span>OpenTofu</span></span><span class="chip l1" style="--c:#64748b" title="Pulumi: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/pulumi.svg)"></b></span><span>Pulumi</span><i>●○○</i></span><span class="chip l0 off" style="--c:#64748b" title="Grafana: not rated"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/grafana.svg)"></b></span><span>Grafana</span></span><span class="chip l0 off" style="--c:#14b8a6" title="LocalStack: not rated"><span class="mk sym " style="--c:#14b8a6">Ls</span><span>LocalStack</span></span></div></div></div><div class="rolecard"><div class="rhead"><div><p class="lbl">Second fit</p><h3>Platform Engineer</h3></div><div class="pctbig"><b>55<small>%</small></b><span>match</span></div></div><p class="rwhat">Builds the internal tools and paved roads other developers use to ship.</p><div class="fbar"><i style="flex:3;background:#0ea5e9"></i><i style="flex:4;background:#22c55e"></i><i style="flex:3;background:#a855f7"></i><i style="flex:1;background:#ec4899"></i><i style="flex:21;background:#64748b"></i></div><div class="rgroup"><span class="lbl core">Must have<b>5/5</b></span><div class="chips"><span class="chip l3" style="--c:#64748b" title="Backstage: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/backstage.svg)"></b></span><span>Backstage</span><i>●●●</i></span><span class="chip l3" style="--c:#64748b" title="Terraform: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><span>Terraform</span><i>●●●</i></span><span class="chip l3" style="--c:#0ea5e9" title="Kubernetes: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/kubernetes.svg)"></b></span><span>Kubernetes</span><i>●●●</i></span><span class="chip l1" style="--c:#64748b" title="Argo CD: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/argo-cd.svg)"></b></span><span>Argo CD</span><i>●○○</i></span><span class="chip l3" style="--c:#64748b" title="GitHub Actions: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/github-actions.svg)"></b></span><span>GitHub Actions</span><i>●●●</i></span></div></div><div class="rgroup"><span class="lbl daily">Every day<b>3/6</b></span><div class="chips"><span class="chip l0 off" style="--c:#64748b" title="Crossplane: not rated"><span class="mk png " style="--c:#64748b"><img src="logos/crossplane.png" alt="" loading="lazy"></span><span>Crossplane</span></span><span class="chip l2" style="--c:#22c55e" title="Helm: use often"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/helm.svg)"></b></span><span>Helm</span><i>●●○</i></span><span class="chip l0 off" style="--c:#64748b" title="Humanitec: not rated"><span class="mk png " style="--c:#64748b"><img src="logos/humanitec.png" alt="" loading="lazy"></span><span>Humanitec</span></span><span class="chip l0 off" style="--c:#64748b" title="Port: not rated"><span class="mk png " style="--c:#64748b"><img src="logos/port.png" alt="" loading="lazy"></span><span>Port</span></span><span class="chip l1" style="--c:#64748b" title="OpenTelemetry: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/opentelemetry.svg)"></b></span><span>OpenTelemetry</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="Dev Containers: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/dev-containers.svg)"></b></span><span>Dev Containers</span><i>●○○</i></span></div></div><div class="rgroup"><span class="lbl nice">Good to know<b>2/5</b></span><div class="chips"><span class="chip l3" style="--c:#22c55e" title="Flisk: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/flisk.png" alt="" loading="lazy"></span><span>Flisk</span><i>●●●</i></span><span class="chip l3" style="--c:#22c55e" title="Tilt: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/tilt.png" alt="" loading="lazy"></span><span>Tilt</span><i>●●●</i></span><span class="chip l0 off" style="--c:#64748b" title="Kratix: not rated"><span class="mk sym " style="--c:#64748b">Ke</span><span>Kratix</span></span><span class="chip l0 off" style="--c:#a855f7" title="Coder: not rated"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/coder.svg)"></b></span><span>Coder</span></span><span class="chip l0 off" style="--c:#ec4899" title="Copier: not rated"><span class="mk png " style="--c:#ec4899"><img src="logos/copier.png" alt="" loading="lazy"></span><span>Copier</span></span></div></div></div><div class="rolecard"><div class="rhead"><div><p class="lbl">Third fit</p><h3>Forward Deployed Engineer</h3></div><div class="pctbig"><b>55<small>%</small></b><span>match</span></div></div><p class="rwhat">Sits with a customer and ships working software inside their setup, fast.</p><div class="fbar"><i style="flex:6;background:#0ea5e9"></i><i style="flex:7;background:#22c55e"></i><i style="flex:9;background:#14b8a6"></i><i style="flex:6;background:#f97316"></i><i style="flex:4;background:#64748b"></i></div><div class="rgroup"><span class="lbl core">Must have<b>5/5</b></span><div class="chips"><span class="chip l2" style="--c:#0ea5e9" title="Docker Desktop: use often"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-desktop.svg)"></b></span><span>Docker Desktop</span><i>●●○</i></span><span class="chip l3" style="--c:#0ea5e9" title="Docker Compose: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-compose.svg)"></b></span><span>Docker Compose</span><i>●●●</i></span><span class="chip l1" style="--c:#14b8a6" title="ngrok: have used"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/ngrok.svg)"></b></span><span>ngrok</span><i>●○○</i></span><span class="chip l2" style="--c:#f97316" title="Claude Code: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/claude-code.svg)"></b></span><span>Claude Code</span><i>●●○</i></span><span class="chip l2" style="--c:#22c55e" title="kubectl: use often"><span class="mk sym " style="--c:#22c55e">Kc</span><span>kubectl</span><i>●●○</i></span></div></div><div class="rgroup"><span class="lbl daily">Every day<b>3/6</b></span><div class="chips"><span class="chip l3" style="--c:#f97316" title="Cursor: expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/cursor.svg)"></b></span><span>Cursor</span><i>●●●</i></span><span class="chip l0 off" style="--c:#14b8a6" title="Mockoon: not rated"><span class="mk png " style="--c:#14b8a6"><img src="logos/mockoon.png" alt="" loading="lazy"></span><span>Mockoon</span></span><span class="chip l0 off" style="--c:#14b8a6" title="WireMock: not rated"><span class="mk png " style="--c:#14b8a6"><img src="logos/wiremock.png" alt="" loading="lazy"></span><span>WireMock</span></span><span class="chip l3" style="--c:#64748b" title="Terraform: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><span>Terraform</span><i>●●●</i></span><span class="chip l0 off" style="--c:#64748b" title="HashiCorp Vault: not rated"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/vault.svg)"></b></span><span>HashiCorp Vault</span></span><span class="chip l2" style="--c:#22c55e" title="Helm: use often"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/helm.svg)"></b></span><span>Helm</span><i>●●○</i></span></div></div><div class="rgroup"><span class="lbl nice">Good to know<b>3/5</b></span><div class="chips"><span class="chip l3" style="--c:#22c55e" title="Flisk: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/flisk.png" alt="" loading="lazy"></span><span>Flisk</span><i>●●●</i></span><span class="chip l3" style="--c:#22c55e" title="Tilt: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/tilt.png" alt="" loading="lazy"></span><span>Tilt</span><i>●●●</i></span><span class="chip l1" style="--c:#f97316" title="Ollama: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/ollama.svg)"></b></span><span>Ollama</span><i>●○○</i></span><span class="chip l0 off" style="--c:#14b8a6" title="LocalStack: not rated"><span class="mk sym " style="--c:#14b8a6">Ls</span><span>LocalStack</span></span><span class="chip l0 off" style="--c:#14b8a6" title="Tailscale Funnel: not rated"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/tailscale-funnel.svg)"></b></span><span>Tailscale Funnel</span></span></div></div></div></div><div class="panel more"><p class="lbl">Next closest roles</p><ul class="others"><li><span>Staff Engineer</span><span class="pbar"><i style="width:54%"></i></span><b>54%</b></li><li><span>Student / Junior Developer</span><span class="pbar"><i style="width:53%"></i></span><b>53%</b></li><li><span>Indie Hacker / Solo Founder</span><span class="pbar"><i style="width:50%"></i></span><b>50%</b></li><li><span>Full-stack Engineer</span><span class="pbar"><i style="width:49%"></i></span><b>49%</b></li><li><span>MLOps Engineer</span><span class="pbar"><i style="width:48%"></i></span><b>48%</b></li><li><span>Solutions Engineer</span><span class="pbar"><i style="width:48%"></i></span><b>48%</b></li></ul></div></section>
+<section class="track"><div class="head"><span class="badge">Backend line</span><p>APIs, workers and databases, from one service to a dozen. 7 of 7 levels on the line.</p></div>
+<ol class="steps"><li class="step done"><span class="num">1</span><div class="card"><p class="lbl lvl">Level 1<b>4/9 known</b></p><h3>Package Wrangler</h3><p class="goal">Install, pin and update dependencies without breaking your teammates.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l2" style="--c:#eab308" title="pnpm: use often"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/pnpm.svg)"></b></span><span>pnpm</span><i>●●○</i></span><span class="chip l0 off" style="--c:#eab308" title="uv: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/uv.svg)"></b></span><span>uv</span></span><span class="chip l0 off" style="--c:#eab308" title="mise: not rated"><span class="mk sym " style="--c:#eab308">Mi</span><span>mise</span></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l3" style="--c:#eab308" title="npm: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/npm.svg)"></b></span><span>npm</span><i>●●●</i></span><span class="chip l3" style="--c:#eab308" title="Bun: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/bun.svg)"></b></span><span>Bun</span><i>●●●</i></span><span class="chip l0 off" style="--c:#eab308" title="Poetry: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/poetry.svg)"></b></span><span>Poetry</span></span><span class="chip l1" style="--c:#eab308" title="Homebrew: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/homebrew.svg)"></b></span><span>Homebrew</span><i>●○○</i></span><span class="chip l0 off" style="--c:#eab308" title="Cargo: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/cargo.svg)"></b></span><span>Cargo</span></span><span class="chip l0 off" style="--c:#eab308" title="Go modules: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/go-modules.svg)"></b></span><span>Go modules</span></span></div></div><p class="note">Pick one package manager per language and commit the lockfile.</p></div></li><li class="step done"><span class="num">2</span><div class="card"><p class="lbl lvl">Level 2<b>3/8 known</b></p><h3>Build Master</h3><p class="goal">Turn source into fast, cached, repeatable builds and tasks.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l1" style="--c:#eab308" title="Vite: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/vite.svg)"></b></span><span>Vite</span><i>●○○</i></span><span class="chip l0 off" style="--c:#eab308" title="Make: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/make.svg)"></b></span><span>Make</span></span><span class="chip l0 off" style="--c:#eab308" title="Just: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/just.svg)"></b></span><span>Just</span></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l1" style="--c:#eab308" title="esbuild: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/esbuild.svg)"></b></span><span>esbuild</span><i>●○○</i></span><span class="chip l0 off" style="--c:#ec4899" title="Turborepo: not rated"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/turborepo.svg)"></b></span><span>Turborepo</span></span><span class="chip l1" style="--c:#ec4899" title="Nx: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/nx.svg)"></b></span><span>Nx</span><i>●○○</i></span><span class="chip l0 off" style="--c:#eab308" title="Gradle: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/gradle.svg)"></b></span><span>Gradle</span></span><span class="chip l0 off" style="--c:#eab308" title="Bazel: not rated"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/bazel.svg)"></b></span><span>Bazel</span></span></div></div><p class="note">Make every build and test runnable with one short command.</p></div></li><li class="step done"><span class="num">3</span><div class="card"><p class="lbl lvl">Level 3<b>4/7 known</b></p><h3>Container Crafter</h3><p class="goal">Package any service as an image and run a few of them together.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l2" style="--c:#0ea5e9" title="Docker Desktop: use often"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-desktop.svg)"></b></span><span>Docker Desktop</span><i>●●○</i></span><span class="chip l3" style="--c:#0ea5e9" title="Docker Compose: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-compose.svg)"></b></span><span>Docker Compose</span><i>●●●</i></span><span class="chip l0 off" style="--c:#14b8a6" title="Testcontainers: not rated"><span class="mk png " style="--c:#14b8a6"><img src="logos/testcontainers.png" alt="" loading="lazy"></span><span>Testcontainers</span></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l3" style="--c:#0ea5e9" title="Podman: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/podman.svg)"></b></span><span>Podman</span><i>●●●</i></span><span class="chip l2" style="--c:#0ea5e9" title="OrbStack: use often"><span class="mk sym " style="--c:#0ea5e9">Ob</span><span>OrbStack</span><i>●●○</i></span><span class="chip l0 off" style="--c:#0ea5e9" title="Cloud Native Buildpacks: not rated"><span class="mk png " style="--c:#0ea5e9"><img src="logos/buildpacks.png" alt="" loading="lazy"></span><span>Cloud Native Buildpacks</span></span><span class="chip l0 off" style="--c:#0ea5e9" title="Dive: not rated"><span class="mk sym " style="--c:#0ea5e9">Dv</span><span>Dive</span></span></div></div><p class="note">One Dockerfile per service, one Compose file for all of them.</p></div></li><li class="step done"><span class="num">4</span><div class="card"><p class="lbl lvl">Level 4<b>3/8 known</b></p><h3>Inner-Loop Runner</h3><p class="goal">Edit code and see it live across many services in seconds.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l0 off" style="--c:#0ea5e9" title="Compose Watch: not rated"><span class="mk sym " style="--c:#0ea5e9">Cw</span><span>Compose Watch</span></span><span class="chip l3" style="--c:#22c55e" title="Tilt: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/tilt.png" alt="" loading="lazy"></span><span>Tilt</span><i>●●●</i></span><span class="chip l3" style="--c:#22c55e" title="Flisk: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/flisk.png" alt="" loading="lazy"></span><span>Flisk</span><i>●●●</i></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l0 off" style="--c:#22c55e" title="process-compose: not rated"><span class="mk sym " style="--c:#22c55e">Pb</span><span>process-compose</span></span><span class="chip l0 off" style="--c:#22c55e" title="Overmind: not rated"><span class="mk sym " style="--c:#22c55e">Ov</span><span>Overmind</span></span><span class="chip l0 off" style="--c:#22c55e" title="Air: not rated"><span class="mk png " style="--c:#22c55e"><img src="logos/air.png" alt="" loading="lazy"></span><span>Air</span></span><span class="chip l3" style="--c:#22c55e" title="nodemon: expert"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/nodemon.svg)"></b></span><span>nodemon</span><i>●●●</i></span><span class="chip l0 off" style="--c:#14b8a6" title="LocalStack: not rated"><span class="mk sym " style="--c:#14b8a6">Ls</span><span>LocalStack</span></span></div></div><p class="note">Aim for a save-to-running loop under five seconds.</p></div></li><li class="step done"><span class="num">5</span><div class="card"><p class="lbl lvl">Level 5<b>3/8 known</b></p><h3>Cluster Tamer</h3><p class="goal">Develop against Kubernetes, locally or bridged to a shared cluster.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l0 off" style="--c:#0ea5e9" title="kind: not rated"><span class="mk sym " style="--c:#0ea5e9">Kd</span><span>kind</span></span><span class="chip l2" style="--c:#22c55e" title="Helm: use often"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/helm.svg)"></b></span><span>Helm</span><i>●●○</i></span><span class="chip l0 off" style="--c:#22c55e" title="Skaffold: not rated"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/skaffold.svg)"></b></span><span>Skaffold</span></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l0 off" style="--c:#0ea5e9" title="k3d: not rated"><span class="mk png " style="--c:#0ea5e9"><img src="logos/k3d.png" alt="" loading="lazy"></span><span>k3d</span></span><span class="chip l1" style="--c:#0ea5e9" title="minikube: have used"><span class="mk sym " style="--c:#0ea5e9">Mn</span><span>minikube</span><i>●○○</i></span><span class="chip l0 off" style="--c:#22c55e" title="Telepresence: not rated"><span class="mk png " style="--c:#22c55e"><img src="logos/telepresence.png" alt="" loading="lazy"></span><span>Telepresence</span></span><span class="chip l0 off" style="--c:#22c55e" title="mirrord: not rated"><span class="mk sym " style="--c:#22c55e">Mr</span><span>mirrord</span></span><span class="chip l3" style="--c:#22c55e" title="k9s: expert"><span class="mk sym " style="--c:#22c55e">K9</span><span>k9s</span><i>●●●</i></span></div></div><p class="note">Only reach for Kubernetes locally when production runs on it.</p></div></li><li class="step done"><span class="num">6</span><div class="card"><p class="lbl lvl">Level 6<b>4/7 known</b></p><h3>Agent Wrangler</h3><p class="goal">Run multi-agent systems with tools, memory and models on your own machine.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l0 off" style="--c:#f97316" title="Vercel AI SDK: not rated"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/vercel-ai-sdk.svg)"></b></span><span>Vercel AI SDK</span></span><span class="chip l2" style="--c:#f97316" title="Model Context Protocol: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/model-context-protocol.svg)"></b></span><span>Model Context Protocol</span><i>●●○</i></span><span class="chip l1" style="--c:#f97316" title="Ollama: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/ollama.svg)"></b></span><span>Ollama</span><i>●○○</i></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l1" style="--c:#f97316" title="LangGraph: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/langgraph.svg)"></b></span><span>LangGraph</span><i>●○○</i></span><span class="chip l0 off" style="--c:#f97316" title="Mastra: not rated"><span class="mk png " style="--c:#f97316"><img src="logos/mastra.png" alt="" loading="lazy"></span><span>Mastra</span></span><span class="chip l0 off" style="--c:#f97316" title="Langfuse: not rated"><span class="mk png " style="--c:#f97316"><img src="logos/langfuse.png" alt="" loading="lazy"></span><span>Langfuse</span></span><span class="chip l2" style="--c:#f97316" title="Claude Code: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/claude-code.svg)"></b></span><span>Claude Code</span><i>●●○</i></span></div></div><p class="note">Treat the agent like another service with health checks and logs.</p></div></li><li class="step done"><span class="num">7</span><div class="card"><p class="lbl lvl">Level 7<b>6/7 known</b></p><h3>Platform Architect</h3><p class="goal">Give every team golden paths, a portal and infrastructure as code.</p>
+<div class="rrow"><span class="lbl">On the line</span><div class="chips"><span class="chip l3" style="--c:#64748b" title="Terraform: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><span>Terraform</span><i>●●●</i></span><span class="chip l3" style="--c:#64748b" title="GitHub Actions: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/github-actions.svg)"></b></span><span>GitHub Actions</span><i>●●●</i></span><span class="chip l1" style="--c:#64748b" title="OpenTelemetry: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/opentelemetry.svg)"></b></span><span>OpenTelemetry</span><i>●○○</i></span></div></div><div class="rrow"><span class="lbl">Branches</span><div class="chips"><span class="chip l0 off" style="--c:#64748b" title="OpenTofu: not rated"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/opentofu.svg)"></b></span><span>OpenTofu</span></span><span class="chip l1" style="--c:#64748b" title="Pulumi: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/pulumi.svg)"></b></span><span>Pulumi</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="Argo CD: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/argo-cd.svg)"></b></span><span>Argo CD</span><i>●○○</i></span><span class="chip l3" style="--c:#64748b" title="Backstage: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/backstage.svg)"></b></span><span>Backstage</span><i>●●●</i></span></div></div><p class="note">Write down the path you took so the next team gets it for free.</p></div></li></ol></section>
+<section><div class="sh"><h2>Expert in</h2><p>27 tools I'd teach. Scores are roadmap's public checklist, 10 points a check.</p></div><div class="tgrid"><div class="tcard" style="--c:#f97316"><div class="thead"><span class="mk big" style="--c:#f97316"><b class="glyph" style="--logo:url(logos/opencode.svg)"></b></span><div><b>OpenCode</b><span>AI &amp; agents · Coding agents</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">Open-source terminal coding agent for any model</p>
+<div class="sc"><span>Easy to use</span><b>90</b><span class="pbar"><i style="width:90%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>0</b><span class="pbar"><i style="width:0%"></i></span></div>
+<p class="tmeta">★ 223k · released today</p></div><div class="tcard" style="--c:#f97316"><div class="thead"><span class="mk sym big" style="--c:#f97316">Cx</span><div><b>Codex</b><span>AI &amp; agents · Coding agents</span></div><em class="ring trial">trial</em></div>
+<p class="tag">OpenAI&#39;s coding agent for terminal, IDE and cloud</p>
+<div class="sc"><span>Easy to use</span><b>80</b><span class="pbar"><i style="width:80%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>0</b><span class="pbar"><i style="width:0%"></i></span></div>
+<p class="tmeta">★ 131k · released 1 days ago</p></div><div class="tcard" style="--c:#0ea5e9"><div class="thead"><span class="mk big" style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/kubernetes.svg)"></b></span><div><b>Kubernetes</b><span>Containers &amp; clusters · Local Kubernetes</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">Upstream container orchestration, as a reference point</p>
+<div class="sc"><span>Easy to use</span><b>30</b><span class="pbar"><i style="width:30%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>90</b><span class="pbar"><i style="width:90%"></i></span></div>
+<p class="tmeta">★ 129k · released today</p></div><div class="tcard" style="--c:#eab308"><div class="thead"><span class="mk big" style="--c:#eab308"><b class="glyph" style="--logo:url(logos/bun.svg)"></b></span><div><b>Bun</b><span>Package &amp; build · Package managers</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">JavaScript runtime, package manager and bundler in one</p>
+<div class="sc"><span>Easy to use</span><b>70</b><span class="pbar"><i style="width:70%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>10</b><span class="pbar"><i style="width:10%"></i></span></div>
+<p class="tmeta">★ 96k · released 6 days ago</p></div><div class="tcard" style="--c:#eab308"><div class="thead"><span class="mk big" style="--c:#eab308"><b class="glyph" style="--logo:url(logos/nvm.svg)"></b></span><div><b>nvm</b><span>Package &amp; build · Version managers</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">Shell script to manage Node.js versions</p>
+<div class="sc"><span>Easy to use</span><b>30</b><span class="pbar"><i style="width:30%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>0</b><span class="pbar"><i style="width:0%"></i></span></div>
+<p class="tmeta">★ 96k · released 37 days ago</p></div><div class="tcard" style="--c:#64748b"><div class="thead"><span class="mk big" style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><div><b>Terraform</b><span>Platform · Infrastructure as code</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">HashiCorp&#39;s declarative infrastructure as code in HCL</p>
+<div class="sc"><span>Easy to use</span><b>60</b><span class="pbar"><i style="width:60%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>50</b><span class="pbar"><i style="width:50%"></i></span></div>
+<p class="tmeta">★ 50k · released today</p></div><div class="tcard" style="--c:#14b8a6"><div class="thead"><span class="mk big" style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/prisma.svg)"></b></span><div><b>Prisma</b><span>Local services &amp; data · ORMs and migrations</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">TypeScript ORM with schema migrations and Studio</p>
+<div class="sc"><span>Easy to use</span><b>70</b><span class="pbar"><i style="width:70%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>20</b><span class="pbar"><i style="width:20%"></i></span></div>
+<p class="tmeta">★ 48k · released 9 days ago</p></div><div class="tcard" style="--c:#ec4899"><div class="thead"><span class="mk big" style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/serverless-framework.svg)"></b></span><div><b>Serverless Framework</b><span>Monorepos &amp; frameworks · Serverless frameworks</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">Deploy and develop AWS Lambda apps from YAML</p>
+<div class="sc"><span>Easy to use</span><b>40</b><span class="pbar"><i style="width:40%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>30</b><span class="pbar"><i style="width:30%"></i></span></div>
+<p class="tmeta">★ 47k · released today</p></div><div class="tcard" style="--c:#0ea5e9"><div class="thead"><span class="mk big" style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-compose.svg)"></b></span><div><b>Docker Compose</b><span>Containers &amp; clusters · Compose</span></div><em class="ring adopt">adopt</em></div>
+<p class="tag">Define and run multi-container apps from YAML</p>
+<div class="sc"><span>Easy to use</span><b>60</b><span class="pbar"><i style="width:60%"></i></span></div>
+<div class="sc"><span>Big real systems</span><b>60</b><span class="pbar"><i style="width:60%"></i></span></div>
+<p class="tmeta">★ 39k · released 7 days ago</p></div></div></section>
+<section><div class="sh"><h2>Agent skills</h2><p>Skills on roadmap's Skills tab that match the tools I rated expert or use often, with the score Haiku got for picking and following each one. They match my tools; this page doesn't say I use them.</p></div><div class="skills"><div class="skill"><div class="top"><code>codex</code><span class="stag bad" title="Haiku's score on roadmap's Skills tab">40/100</span></div>
+<a class="src" href="https://github.com/garrytan/gstack/blob/HEAD/codex/SKILL.md">garrytan/gstack</a><p>Ask the OpenAI Codex CLI for an independent second opinion on your code or plan.</p><span class="fits">Matches <b>Codex</b> (expert)</span></div><div class="skill"><div class="top"><code>terraform-policy</code><span class="stag good" title="Haiku's score on roadmap's Skills tab">100/100</span></div>
+<a class="src" href="https://github.com/hashicorp/agent-skills/blob/HEAD/plugins/terraform/skills/terraform-policy/SKILL.md">hashicorp/agent-skills</a><p>Write, test and convert Terraform Policy files (.policy.hcl), including Sentinel to tfpolicy.</p><span class="fits">Matches <b>Terraform</b> (expert)</span></div><div class="skill"><div class="top"><code>prisma-orm-setup</code><span class="stag good" title="Haiku's score on roadmap's Skills tab">100/100</span></div>
+<a class="src" href="https://github.com/prisma/skills/blob/HEAD/prisma-orm-setup/SKILL.md">prisma/skills</a><p>Set up Prisma ORM in an app or repair a broken database connection.</p><span class="fits">Matches <b>Prisma</b> (expert)</span></div><div class="skill"><div class="top"><code>github-actions-templates</code><span class="stag good" title="Haiku's score on roadmap's Skills tab">100/100</span></div>
+<a class="src" href="https://github.com/wshobson/agents/blob/HEAD/plugins/cicd-automation/skills/github-actions-templates/SKILL.md">wshobson/agents</a><p>Build GitHub Actions workflows for test, build, push image and deploy.</p><span class="fits">Matches <b>GitHub Actions</b> (expert)</span></div><div class="skill"><div class="top"><code>flisk-e2e-author</code><span class="stag good" title="Haiku's score on roadmap's Skills tab">100/100</span></div>
+<a class="src" href="https://github.com/flisk-sh/flisk/blob/HEAD/.claude/skills/flisk-e2e-author/SKILL.md">flisk-sh/flisk</a><p>Add or change a Flisk end-to-end test: decide if needed, scaffold from the agent suite, show pass and break.</p><span class="fits">Matches <b>Flisk</b> (expert)</span></div><div class="skill"><div class="top"><code>git-guardrails-claude-code</code><span class="stag good" title="Haiku's score on roadmap's Skills tab">100/100</span></div>
+<a class="src" href="https://github.com/mattpocock/skills/blob/HEAD/skills/misc/git-guardrails-claude-code/SKILL.md">mattpocock/skills</a><p>Add a Claude Code hook that blocks git push, reset --hard, clean -f, branch -D and similar.</p><span class="fits">Matches <b>Claude Code</b> (use often)</span></div></div></section>
+<section><div class="sh"><h2>Toolkit</h2><p>All 95 tools I rated, by level.</p></div><div class="panel"><div class="lvlhead"><i>●●●</i><h3>Expert</h3><small>27</small></div><div class="evidence"><div class="ev"><span class="chip l3" style="--c:#eab308" title="Bun: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/bun.svg)"></b></span><span>Bun</span><i>●●●</i></span><p>JavaScript runtime, package manager and bundler in one</p></div><div class="ev"><span class="chip l3" style="--c:#eab308" title="npm: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/npm.svg)"></b></span><span>npm</span><i>●●●</i></span><p>The package manager bundled with Node.js</p></div><div class="ev"><span class="chip l3" style="--c:#eab308" title="nvm: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/nvm.svg)"></b></span><span>nvm</span><i>●●●</i></span><p>Shell script to manage Node.js versions</p></div><div class="ev"><span class="chip l3" style="--c:#eab308" title="Yarn: expert"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/yarn.svg)"></b></span><span>Yarn</span><i>●●●</i></span><p>Node package manager with workspaces and Plug&#39;n&#39;Play</p></div><div class="ev"><span class="chip l3" style="--c:#0ea5e9" title="Docker Compose: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-compose.svg)"></b></span><span>Docker Compose</span><i>●●●</i></span><p>Define and run multi-container apps from YAML</p></div><div class="ev"><span class="chip l3" style="--c:#0ea5e9" title="Kubernetes: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/kubernetes.svg)"></b></span><span>Kubernetes</span><i>●●●</i></span><p>Upstream container orchestration, as a reference point</p></div><div class="ev"><span class="chip l3" style="--c:#0ea5e9" title="Podman: expert"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/podman.svg)"></b></span><span>Podman</span><i>●●●</i></span><p>Daemonless, rootless container engine</p></div><div class="ev"><span class="chip l3" style="--c:#22c55e" title="Flisk: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/flisk.png" alt="" loading="lazy"></span><span>Flisk</span><i>●●●</i></span><p>Local dev loop for microservices and multi-agent stacks</p></div><div class="ev"><span class="chip l3" style="--c:#22c55e" title="k9s: expert"><span class="mk sym " style="--c:#22c55e">K9</span><span>k9s</span><i>●●●</i></span><p>Terminal UI for navigating and managing clusters</p></div><div class="ev"><span class="chip l3" style="--c:#22c55e" title="nodemon: expert"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/nodemon.svg)"></b></span><span>nodemon</span><i>●●●</i></span><p>Restarts a Node.js process when files change</p></div><div class="ev"><span class="chip l3" style="--c:#22c55e" title="Tilt: expert"><span class="mk png " style="--c:#22c55e"><img src="logos/tilt.png" alt="" loading="lazy"></span><span>Tilt</span><i>●●●</i></span><p>Live-update loop for multi-service apps</p></div><div class="ev"><span class="chip l3" style="--c:#ec4899" title="Serverless Framework: expert"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/serverless-framework.svg)"></b></span><span>Serverless Framework</span><i>●●●</i></span><p>Deploy and develop AWS Lambda apps from YAML</p></div><div class="ev"><span class="chip l3" style="--c:#ec4899" title="Yeoman: expert"><span class="mk png " style="--c:#ec4899"><img src="logos/yeoman.png" alt="" loading="lazy"></span><span>Yeoman</span><i>●●●</i></span><p>Generator ecosystem for scaffolding projects</p></div><div class="ev"><span class="chip l3" style="--c:#14b8a6" title="Prisma: expert"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/prisma.svg)"></b></span><span>Prisma</span><i>●●●</i></span><p>TypeScript ORM with schema migrations and Studio</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="Codex: expert"><span class="mk sym " style="--c:#f97316">Cx</span><span>Codex</span><i>●●●</i></span><p>OpenAI&#39;s coding agent for terminal, IDE and cloud</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="Cursor: expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/cursor.svg)"></b></span><span>Cursor</span><i>●●●</i></span><p>AI-first code editor forked from VS Code</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="Devin: expert"><span class="mk sym " style="--c:#f97316">Du</span><span>Devin</span><i>●●●</i></span><p>Cognition&#39;s autonomous cloud software engineer</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="Devin Desktop (formerly Windsurf): expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/windsurf.svg)"></b></span><span>Devin Desktop (formerly Windsurf)</span><i>●●●</i></span><p>Cognition&#39;s agentic IDE, renamed from Windsurf</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="GitHub Copilot: expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/github-copilot.svg)"></b></span><span>GitHub Copilot</span><i>●●●</i></span><p>GitHub&#39;s AI pair programmer, agent mode and cloud agent</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="MCP Registry: expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/mcp-registry.svg)"></b></span><span>MCP Registry</span><i>●●●</i></span><p>Official community registry of public MCP servers</p></div><div class="ev"><span class="chip l3" style="--c:#f97316" title="OpenCode: expert"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/opencode.svg)"></b></span><span>OpenCode</span><i>●●●</i></span><p>Open-source terminal coding agent for any model</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="AWS CloudFormation: expert"><span class="mk sym " style="--c:#64748b">Aj</span><span>AWS CloudFormation</span><i>●●●</i></span><p>AWS&#39;s native declarative infrastructure templates</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="Backstage: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/backstage.svg)"></b></span><span>Backstage</span><i>●●●</i></span><p>Open-source developer portal framework by Spotify</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="Dependabot: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/dependabot.svg)"></b></span><span>Dependabot</span><i>●●●</i></span><p>GitHub&#39;s built-in dependency and security updates</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="GitHub Actions: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/github-actions.svg)"></b></span><span>GitHub Actions</span><i>●●●</i></span><p>CI/CD workflows built into GitHub</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="Terraform: expert"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/terraform.svg)"></b></span><span>Terraform</span><i>●●●</i></span><p>HashiCorp&#39;s declarative infrastructure as code in HCL</p></div><div class="ev"><span class="chip l3" style="--c:#64748b" title="Terragrunt: expert"><span class="mk sym " style="--c:#64748b">Tg</span><span>Terragrunt</span><i>●●●</i></span><p>Orchestration wrapper for Terraform and OpenTofu stacks</p></div></div><div class="lvlhead"><i>●●○</i><h3>Use often</h3><small>25</small></div><div class="evidence"><div class="ev"><span class="chip l2" style="--c:#eab308" title="pnpm: use often"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/pnpm.svg)"></b></span><span>pnpm</span><i>●●○</i></span><p>Fast, disk-efficient Node package manager</p></div><div class="ev"><span class="chip l2" style="--c:#eab308" title="webpack: use often"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/webpack.svg)"></b></span><span>webpack</span><i>●●○</i></span><p>Configurable module bundler for JavaScript</p></div><div class="ev"><span class="chip l2" style="--c:#0ea5e9" title="Docker Desktop: use often"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-desktop.svg)"></b></span><span>Docker Desktop</span><i>●●○</i></span><p>Docker Engine, Compose and Kubernetes in a desktop app</p></div><div class="ev"><span class="chip l2" style="--c:#0ea5e9" title="Docker Engine: use often"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/docker-engine.svg)"></b></span><span>Docker Engine</span><i>●●○</i></span><p>The open-source Docker daemon and CLI for Linux</p></div><div class="ev"><span class="chip l2" style="--c:#0ea5e9" title="Lima: use often"><span class="mk png " style="--c:#0ea5e9"><img src="logos/lima.png" alt="" loading="lazy"></span><span>Lima</span><i>●●○</i></span><p>Linux VMs with containerd for macOS and Linux</p></div><div class="ev"><span class="chip l2" style="--c:#0ea5e9" title="OrbStack: use often"><span class="mk sym " style="--c:#0ea5e9">Ob</span><span>OrbStack</span><i>●●○</i></span><p>Fast, light Docker and Linux VMs for macOS</p></div><div class="ev"><span class="chip l2" style="--c:#22c55e" title="Helm: use often"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/helm.svg)"></b></span><span>Helm</span><i>●●○</i></span><p>Package manager and templating for Kubernetes</p></div><div class="ev"><span class="chip l2" style="--c:#22c55e" title="kubectl: use often"><span class="mk sym " style="--c:#22c55e">Kc</span><span>kubectl</span><i>●●○</i></span><p>The official Kubernetes command-line client</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="AWS SAM: use often"><span class="mk sym " style="--c:#ec4899">Sa</span><span>AWS SAM</span><i>●●○</i></span><p>AWS CLI to build and run Lambda apps locally</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="Hono: use often"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/hono.svg)"></b></span><span>Hono</span><i>●●○</i></span><p>Small web framework for any JavaScript runtime</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="NestJS: use often"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/nestjs.svg)"></b></span><span>NestJS</span><i>●●○</i></span><p>Structured Node.js framework for server apps</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="Netlify CLI: use often"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/netlify-cli.svg)"></b></span><span>Netlify CLI</span><i>●●○</i></span><p>Run Netlify sites and functions locally</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="React Router: use often"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/react-router.svg)"></b></span><span>React Router</span><i>●●○</i></span><p>React framework mode, successor to Remix</p></div><div class="ev"><span class="chip l2" style="--c:#ec4899" title="Wrangler: use often"><span class="mk sym " style="--c:#ec4899">Wr</span><span>Wrangler</span><i>●●○</i></span><p>Cloudflare Workers CLI with local workerd dev</p></div><div class="ev"><span class="chip l2" style="--c:#14b8a6" title="Cloudflare Tunnel: use often"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/cloudflare-tunnel.svg)"></b></span><span>Cloudflare Tunnel</span><i>●●○</i></span><p>Expose local services through Cloudflare via cloudflared</p></div><div class="ev"><span class="chip l2" style="--c:#14b8a6" title="Sequelize: use often"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/sequelize.svg)"></b></span><span>Sequelize</span><i>●●○</i></span><p>Promise-based ORM for Node.js</p></div><div class="ev"><span class="chip l2" style="--c:#14b8a6" title="TypeORM: use often"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/typeorm.svg)"></b></span><span>TypeORM</span><i>●●○</i></span><p>Decorator-based ORM for TypeScript</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="Claude Code: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/claude-code.svg)"></b></span><span>Claude Code</span><i>●●○</i></span><p>Anthropic&#39;s agentic coding tool for the terminal and IDEs</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="Cline: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/cline.svg)"></b></span><span>Cline</span><i>●●○</i></span><p>Open-source coding agent for VS Code and the terminal</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="Gemini CLI: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/gemini-cli.svg)"></b></span><span>Gemini CLI</span><i>●●○</i></span><p>Google&#39;s open-source terminal agent for Gemini</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="Model Context Protocol: use often"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/model-context-protocol.svg)"></b></span><span>Model Context Protocol</span><i>●●○</i></span><p>Open protocol and SDKs connecting agents to tools and data</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="Roo Code: use often"><span class="mk png " style="--c:#f97316"><img src="logos/roo-code.png" alt="" loading="lazy"></span><span>Roo Code</span><i>●●○</i></span><p>VS Code agent forked from Cline, now discontinued</p></div><div class="ev"><span class="chip l2" style="--c:#f97316" title="skills.sh: use often"><span class="mk sym " style="--c:#f97316">Sj</span><span>skills.sh</span><i>●●○</i></span><p>Directory and CLI for installing agent skills</p></div><div class="ev"><span class="chip l2" style="--c:#64748b" title="AWS CDK: use often"><span class="mk sym " style="--c:#64748b">Ak</span><span>AWS CDK</span><i>●●○</i></span><p>AWS infrastructure in code, synthesized to CloudFormation</p></div><div class="ev"><span class="chip l2" style="--c:#64748b" title="GitLab CI/CD: use often"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/gitlab-ci.svg)"></b></span><span>GitLab CI/CD</span><i>●●○</i></span><p>Pipelines built into GitLab, hosted or self-managed</p></div></div><div class="lvlhead"><i>●○○</i><h3>Have used</h3><small>43</small></div><div class="chips"><span class="chip l1" style="--c:#eab308" title="Composer: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/composer.svg)"></b></span><span>Composer</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="Deno: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/deno.svg)"></b></span><span>Deno</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="esbuild: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/esbuild.svg)"></b></span><span>esbuild</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="Homebrew: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/homebrew.svg)"></b></span><span>Homebrew</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="SWC: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/swc.svg)"></b></span><span>SWC</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="Turbopack: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/turbopack.svg)"></b></span><span>Turbopack</span><i>●○○</i></span><span class="chip l1" style="--c:#eab308" title="Vite: have used"><span class="mk " style="--c:#eab308"><b class="glyph" style="--logo:url(logos/vite.svg)"></b></span><span>Vite</span><i>●○○</i></span><span class="chip l1" style="--c:#0ea5e9" title="Colima: have used"><span class="mk sym " style="--c:#0ea5e9">Co</span><span>Colima</span><i>●○○</i></span><span class="chip l1" style="--c:#0ea5e9" title="k3s: have used"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/k3s.svg)"></b></span><span>k3s</span><i>●○○</i></span><span class="chip l1" style="--c:#0ea5e9" title="minikube: have used"><span class="mk sym " style="--c:#0ea5e9">Mn</span><span>minikube</span><i>●○○</i></span><span class="chip l1" style="--c:#0ea5e9" title="Podman Desktop: have used"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/podman-desktop.svg)"></b></span><span>Podman Desktop</span><i>●○○</i></span><span class="chip l1" style="--c:#0ea5e9" title="Portainer: have used"><span class="mk " style="--c:#0ea5e9"><b class="glyph" style="--logo:url(logos/portainer.svg)"></b></span><span>Portainer</span><i>●○○</i></span><span class="chip l1" style="--c:#22c55e" title="Kubernetes Dashboard: have used"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/kubernetes-dashboard.svg)"></b></span><span>Kubernetes Dashboard</span><i>●○○</i></span><span class="chip l1" style="--c:#22c55e" title="PM2: have used"><span class="mk " style="--c:#22c55e"><b class="glyph" style="--logo:url(logos/pm2.svg)"></b></span><span>PM2</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="Dev Containers: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/dev-containers.svg)"></b></span><span>Dev Containers</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="Firebase Studio: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/firebase-studio.svg)"></b></span><span>Firebase Studio</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="GitHub Codespaces: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/codespaces.svg)"></b></span><span>GitHub Codespaces</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="Replit: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/replit.svg)"></b></span><span>Replit</span><i>●○○</i></span><span class="chip l1" style="--c:#a855f7" title="StackBlitz: have used"><span class="mk " style="--c:#a855f7"><b class="glyph" style="--logo:url(logos/stackblitz.svg)"></b></span><span>StackBlitz</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="create-t3-app: have used"><span class="mk sym " style="--c:#ec4899">T3</span><span>create-t3-app</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="create-vite: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/create-vite.svg)"></b></span><span>create-vite</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="Next.js: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/nextjs.svg)"></b></span><span>Next.js</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="Nx: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/nx.svg)"></b></span><span>Nx</span><i>●○○</i></span><span class="chip l1" style="--c:#ec4899" title="Vercel CLI: have used"><span class="mk " style="--c:#ec4899"><b class="glyph" style="--logo:url(logos/vercel-cli.svg)"></b></span><span>Vercel CLI</span><i>●○○</i></span><span class="chip l1" style="--c:#14b8a6" title="Neon: have used"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/neon.svg)"></b></span><span>Neon</span><i>●○○</i></span><span class="chip l1" style="--c:#14b8a6" title="ngrok: have used"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/ngrok.svg)"></b></span><span>ngrok</span><i>●○○</i></span><span class="chip l1" style="--c:#14b8a6" title="Pact: have used"><span class="mk png " style="--c:#14b8a6"><img src="logos/pact.png" alt="" loading="lazy"></span><span>Pact</span><i>●○○</i></span><span class="chip l1" style="--c:#14b8a6" title="Supabase CLI: have used"><span class="mk " style="--c:#14b8a6"><b class="glyph" style="--logo:url(logos/supabase-cli.svg)"></b></span><span>Supabase CLI</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="Docker MCP Toolkit: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/docker-mcp-toolkit.svg)"></b></span><span>Docker MCP Toolkit</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="Kiro: have used"><span class="mk sym " style="--c:#f97316">Kr</span><span>Kiro</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="LangChain: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/langchain.svg)"></b></span><span>LangChain</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="LangGraph: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/langgraph.svg)"></b></span><span>LangGraph</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="Ollama: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/ollama.svg)"></b></span><span>Ollama</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="Playwright MCP: have used"><span class="mk sym " style="--c:#f97316">Pw</span><span>Playwright MCP</span><i>●○○</i></span><span class="chip l1" style="--c:#f97316" title="Zed: have used"><span class="mk " style="--c:#f97316"><b class="glyph" style="--logo:url(logos/zed.svg)"></b></span><span>Zed</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="Argo CD: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/argo-cd.svg)"></b></span><span>Argo CD</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="CDK for Terraform: have used"><span class="mk sym " style="--c:#64748b">Ckt</span><span>CDK for Terraform</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="CircleCI: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/circleci.svg)"></b></span><span>CircleCI</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="Jenkins: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/jenkins.svg)"></b></span><span>Jenkins</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="OpenTelemetry: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/opentelemetry.svg)"></b></span><span>OpenTelemetry</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="Pulumi: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/pulumi.svg)"></b></span><span>Pulumi</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="Sentry: have used"><span class="mk " style="--c:#64748b"><b class="glyph" style="--logo:url(logos/sentry.svg)"></b></span><span>Sentry</span><i>●○○</i></span><span class="chip l1" style="--c:#64748b" title="SigNoz: have used"><span class="mk png " style="--c:#64748b"><img src="logos/signoz.png" alt="" loading="lazy"></span><span>SigNoz</span><i>●○○</i></span></div></div></section>
+<footer><p>Ratings are self-reported. Tools, roles and skills are scored by the public checklist on <a href="https://roadmap.flisk.si/">roadmap.flisk.si</a>.</p><p>Published with <a href="https://pages.flisk.si/">pages.flisk.si</a></p></footer>
+</div></body></html>
