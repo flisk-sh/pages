@@ -17,6 +17,8 @@ export interface RoadmapData {
 			sym: string;
 			cat: string;
 			tagline?: string;
+			/** The tool's own website. */
+			url?: string;
 			ring?: string;
 			dx?: string[];
 			parity?: string[];
@@ -26,6 +28,8 @@ export interface RoadmapData {
 		roles: {
 			id: string;
 			name: string;
+			/** roadmap's Roles tab groups roles; /roles/<group>/ lists them. */
+			group?: string;
 			what: string;
 			core?: string[];
 			daily?: string[];
@@ -147,6 +151,16 @@ const SLOTS = [
 	["daily", "Every day", 2],
 	["nice", "Good to know", 1],
 ] as const;
+const ROADMAP = "https://roadmap.flisk.si";
+/** A link target we will write into the page: https only, no quotes or spaces. */
+const httpsUrl = (u?: string) =>
+	/^https:\/\/[^\s"'<>]+$/.test(u ?? "") ? (u as string) : "";
+const RING_HELP: Record<string, string> = {
+	adopt: "Adopt: use it",
+	trial: "Trial: try it",
+	assess: "Assess: watch it",
+	hold: "Hold: avoid for now",
+};
 const FIT_LABELS = ["Best fit", "Second fit", "Third fit"];
 
 /** The page, and the logo files (from roadmap's assets/logos/) it points at under logos/. */
@@ -221,7 +235,18 @@ export function cvPage(
 		const t = BY[id];
 		if (!t) return "";
 		const l = lv(id);
-		return `<span class="chip l${l}${l ? "" : " off"}" style="--c:${col(id)}" title="${e(`${t.name}: ${LEVEL[l]}`)}">${mark(id)}<span>${e(t.name)}</span>${l ? `<i>${DOTS[l]}</i>` : ""}</span>`;
+		const href = httpsUrl(t.url);
+		const tip = [
+			`${t.name}: ${LEVEL[l]}`,
+			t.tagline,
+			t.ring ? RING_HELP[t.ring] : "",
+		]
+			.filter(Boolean)
+			.join(". ");
+		const open = href
+			? `<a class="chip l${l}${l ? "" : " off"}" href="${e(href)}" rel="noopener"`
+			: `<span class="chip l${l}${l ? "" : " off"}"`;
+		return `${open} style="--c:${col(id)}" title="${e(tip)}">${mark(id)}<span>${e(t.name)}</span>${l ? `<i>${DOTS[l]}</i>` : ""}${href ? "</a>" : "</span>"}`;
 	};
 
 	const spider = (size = 340) => {
@@ -281,7 +306,7 @@ export function cvPage(
 			if (!ids.length) return "";
 			return `<div class="rgroup"><span class="lbl ${key}">${label}<b>${ids.filter((id) => lv(id)).length}/${ids.length}</b></span><div class="chips">${ids.map(chip).join("")}</div></div>`;
 		}).join("");
-		return `<div class="rolecard${k ? "" : " best"}"><div class="rhead"><div><p class="lbl">${FIT_LABELS[k]}</p><h3>${e(r.name)}</h3></div><div class="pctbig"><b>${pct}<small>%</small></b><span>match</span></div></div><p class="rwhat">${e(r.what)}</p><div class="fbar">${fbar}</div>${groups}</div>`;
+		return `<div class="rolecard${k ? "" : " best"}"><div class="rhead"><div><p class="lbl">${FIT_LABELS[k]}</p><h3><a href="${ROADMAP}/roles/${/^[a-z0-9-]+$/.test(r.group ?? "") ? `${r.group}/` : ""}" rel="noopener" title="${e(`${r.name}: ${r.what} See every role on roadmap.`)}">${e(r.name)}</a></h3></div><div class="pctbig"><b>${pct}<small>%</small></b><span>match</span></div></div><p class="rwhat">${e(r.what)}</p><div class="fbar">${fbar}</div>${groups}</div>`;
 	};
 	const roleCards = fit.slice(0, 3).map(roleCard).join("");
 	const others = fit
@@ -320,7 +345,7 @@ export function cvPage(
 				ids.length
 					? `<div class="rrow"><span class="lbl">${label}</span><div class="chips">${ids.map(chip).join("")}</div></div>`
 					: "";
-			return `<li class="step ${state}"><span class="num">${n}</span><div class="card"><p class="lbl lvl">Level ${n}<b>${known}/${main.length + side.length} known</b></p><h3>${e(L.name)}</h3><p class="goal">${e(L.goal)}</p>
+			return `<li class="step ${state}"><span class="num">${n}</span><div class="card"><p class="lbl lvl">Level ${n}<b>${known}/${main.length + side.length} known</b></p><h3><a href="${ROADMAP}/journeys/${/^[a-z0-9-]+$/.test(track.id) ? `${track.id}/` : ""}" rel="noopener" title="${e(`${L.name}: ${L.goal} See the whole journey on roadmap.`)}">${e(L.name)}</a></h3><p class="goal">${e(L.goal)}</p>
 ${row("On the line", main)}${row("Branches", side)}${stop.tip ? `<p class="note">${e(stop.tip)}</p>` : ""}</div></li>`;
 		})
 		.join("");
@@ -365,7 +390,7 @@ ${row("On the line", main)}${row("Branches", side)}${stop.tip ? `<p class="note"
 			const ring = /^(adopt|trial|assess|hold)$/.test(t.ring ?? "")
 				? (t.ring as string)
 				: "";
-			return `<div class="tcard" style="--c:${col(id)}"><div class="thead">${mark(id, "big")}<div><b>${e(t.name)}</b><span>${e(FAM[t.fam]?.name ?? "")} · ${e(t.cat)}</span></div>${ring ? `<em class="ring ${ring}">${ring}</em>` : ""}</div>
+			return `<div class="tcard" style="--c:${col(id)}"><div class="thead">${mark(id, "big")}<div><b>${httpsUrl(t.url) ? `<a href="${e(httpsUrl(t.url))}" rel="noopener" title="${e(`Open ${t.name}'s website`)}">${e(t.name)}</a>` : e(t.name)}</b><span>${/^[a-z0-9-]+$/.test(t.fam) ? `<a href="${ROADMAP}/radar/${t.fam}/" rel="noopener" title="${e(`See every ${FAM[t.fam]?.name ?? "tool"} tool on roadmap's radar`)}">${e(FAM[t.fam]?.name ?? "")}</a>` : e(FAM[t.fam]?.name ?? "")} · ${e(t.cat)}</span></div>${ring ? `<em class="ring ${ring}" title="${e(RING_HELP[ring] ?? "")}">${ring}</em>` : ""}</div>
 <p class="tag">${e(t.tagline ?? "")}</p>
 <div class="sc"><span>Easy to use</span><b>${dx}</b><span class="pbar"><i style="width:${dx}%"></i></span></div>
 <div class="sc"><span>Big real systems</span><b>${par}</b><span class="pbar"><i style="width:${par}%"></i></span></div>
@@ -444,7 +469,7 @@ ${row("On the line", main)}${row("Branches", side)}${stop.tip ? `<p class="note"
 			const fits = by
 				.map((id) => `<b>${e(BY[id]?.name ?? id)}</b> (${LEVEL[lv(id)]})`)
 				.join(", ");
-			return `<div class="skill"><div class="top"><code>${e(s.name)}</code>${v < 0 ? `<span class="stag">not tested</span>` : `<span class="stag ${grade}" title="Haiku's score on roadmap's Skills tab">${v}/100</span>`}</div>
+			return `<div class="skill"><div class="top">${repo ? `<a class="sname" href="https://github.com/${e(repo + file)}" rel="noopener" title="Open this skill on GitHub"><code>${e(s.name)}</code></a>` : `<code>${e(s.name)}</code>`}${v < 0 ? `<span class="stag">not tested</span>` : `<span class="stag ${grade}" title="Haiku's score on roadmap's Skills tab">${v}/100</span>`}</div>
 ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}</a>` : ""}<p>${e(s.what)}</p><span class="fits">Matches ${fits}</span></div>`;
 		})
 		.join("");
