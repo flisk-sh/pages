@@ -173,6 +173,17 @@ function featured(spaces: Space[]): Space | undefined {
 	);
 }
 
+/** How many spaces the home page shows. The rest are one click away in spaces.json and on each handle's page. */
+export const SHOWCASE_MAX = 9;
+
+/**
+ * The shelf on the home page: the newest spaces people published under their own GitHub handle. One-click anonymous
+ * spaces (a visitor's CV, a note) are not a showcase and stay off it; they are still reachable by their link.
+ */
+export function showcase(spaces: Space[]): Space[] {
+	return spaces.filter((s) => s.handle !== "anon").slice(0, SHOWCASE_MAX);
+}
+
 export function homePage(
 	base: string,
 	spaces: Space[],
@@ -224,7 +235,7 @@ export function homePage(
 </ul></div>
 <div class="wrap">
 <section id="spaces"><div class="head"><div><p class="eyebrow">Made with ${esc(SITE.name)}</p><h2>Real pages, live right now</h2><p class="sub">Each one was built by an agent and published with one command. Click any to open it.</p></div><a class="btn" href="${root}/spaces.json">All spaces as JSON</a></div>
-${cards(base, spaces.slice(0, 48), now)}</section>
+${cards(base, showcase(spaces), now)}</section>
 <section id="how"><p class="eyebrow">How it works</p><h2>From a folder to a link in three steps</h2><p class="sub">No build step, no hosting account, no API key. The whole pipeline is GitHub Pages and a pull request.</p>
 <ol class="steps">
 <li><b>Your agent builds it</b>One folder with an <code>index.html</code> and its scripts, data and images, or just an <code>index.md</code>.</li>

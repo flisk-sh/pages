@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import { createApp } from "../src/app";
 import { csp } from "../src/check.mjs";
+import { SHOWCASE_MAX, showcase } from "../src/pages";
 import { preparePage, readSpaces, type Space } from "../src/spaces";
 
 const skipped: string[] = [];
@@ -166,5 +167,34 @@ describe("the demo video", () => {
 		expect((await get("/demo.vtt")).headers.get("content-type")).toContain(
 			"text/vtt",
 		);
+	});
+});
+
+describe("the home page showcase", () => {
+	const mk = (handle: string, slug: string) =>
+		({
+			handle,
+			slug,
+			kind: "html",
+			title: slug,
+			description: "",
+			dir: "",
+		}) as unknown as Space;
+
+	it("leaves out one-click anonymous spaces", () => {
+		const out = showcase([
+			mk("anon", "rvhja8ayuk"),
+			mk("odykyi", "flisk-up"),
+			mk("anon", "n8vtrqpn68"),
+		]);
+		expect(out.map((s) => s.slug)).toEqual(["flisk-up"]);
+	});
+
+	it("shows at most nine, newest first as given", () => {
+		const many = Array.from({ length: 20 }, (_, i) => mk("odykyi", `p${i}`));
+		const out = showcase(many);
+		expect(out).toHaveLength(SHOWCASE_MAX);
+		expect(SHOWCASE_MAX).toBe(9);
+		expect(out[0].slug).toBe("p0");
 	});
 });
