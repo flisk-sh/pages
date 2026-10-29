@@ -102,7 +102,10 @@ describe("the developer CV", () => {
 
 	it("scores roles like roadmap and leads with the best fit", () => {
 		expect(html).toContain(
-			"<title>Sam b · Backend Engineer · Developer CV</title>",
+			"<title>Sam b · Developer CV · Recommended role: Backend Engineer</title>",
+		);
+		expect(html).toContain(
+			'<p class="lbl">Recommended role, from DevEx analysis</p>',
 		);
 		expect(html).toContain("63% MATCH");
 		expect(html).toContain("Frontend Engineer");

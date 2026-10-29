@@ -511,16 +511,16 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 		)
 		.join("");
 
-	const desc = `${name}, ${top.r.name}: ${rated} developer tools rated, ${count(3)} at expert level, across ${families} tool families.`;
+	const desc = `${name}: recommended role ${top.r.name}, from a DevEx analysis of ${rated} rated developer tools, ${count(3)} at expert level, across ${families} tool families.`;
 	const make = links.make ?? MAKE_URL;
 	const makeBar = `<aside class="make"><p><b>Want a page like this?</b> Click the tools you use, then publish. About a minute, no account needed.</p><a class="btn p" href="${e(make)}">Make my own CV →</a></aside>`;
-	const pageTitle = `${name} · ${top.r.name} · Developer CV`;
+	const pageTitle = `${name} · Developer CV · Recommended role: ${top.r.name}`;
 	const preview = links.url
 		? `<meta property="og:type" content="profile"><meta property="og:title" content="${e(pageTitle)}"><meta property="og:description" content="${e(desc)}"><meta property="og:url" content="${e(links.url)}"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="${e(pageTitle)}"><meta name="twitter:description" content="${e(desc)}">`
 		: "";
 	const share = links.url
 		? (() => {
-				const text = `${name}: ${top.r.name}. My developer toolkit, ${rated} tools rated.`;
+				const text = `${name}: recommended role ${top.r.name}, from a DevEx analysis of my developer toolkit, ${rated} tools rated.`;
 				const badge = `[![DevEx CV](https://img.shields.io/badge/${badgeText("DevEx CV")}-${badgeText(`${top.r.name} ${top.pct}%`)}-22c55e?style=for-the-badge)](${links.url})`;
 				const html = `<a href="${links.url}"><img alt="DevEx CV" src="https://img.shields.io/badge/${badgeText("DevEx CV")}-${badgeText(`${top.r.name} ${top.pct}%`)}-22c55e?style=for-the-badge"></a>`;
 				const snippets = [
@@ -553,6 +553,7 @@ ${makeBar}
 <div class="hero"><div>
 <span class="badge">Developer CV</span>
 <h1><span>${e(name)}</span></h1>
+<p class="lbl">Recommended role, from DevEx analysis</p>
 <p class="role">${e(top.r.name)} <span class="pill">${top.pct}% MATCH</span></p>
 <p class="what">${e(top.r.what)}</p>
 <div class="stats"><div><b>${rated}</b><span>tools rated</span></div><div><b>${count(3)}</b><span>expert</span></div><div><b>${count(2)}</b><span>use often</span></div><div><b>${families}/${fams.length}</b><span>families</span></div></div>
