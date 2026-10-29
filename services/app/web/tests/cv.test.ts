@@ -250,4 +250,27 @@ describe("sharing a published CV", () => {
 			);
 		expect(checkSpace(dir).errors).toEqual([]);
 	});
+
+	it("invites a visitor to make their own CV, at the top and the bottom, with nobody's ratings in the link", () => {
+		expect(html.match(/class="make"/g)).toHaveLength(2);
+		expect(html).toContain(
+			'href="https://roadmap.flisk.si/portfolio/?from=cv"',
+		);
+		expect(html).toContain("Make my own CV");
+		const makeLinks = [
+			...html.matchAll(/<aside class="make">.*?href="([^"]+)"/g),
+		].map((m) => m[1]);
+		for (const href of makeLinks) expect(href).not.toContain("me=");
+	});
+
+	it("lets the caller point the invitation elsewhere, escaped", () => {
+		const out = cvPage(
+			data,
+			parseMe("bun3"),
+			"Sam",
+			{ ...links, make: 'https://x.test/?a=1&b="2"' },
+			new Date("2026-10-28"),
+		).html;
+		expect(out).toContain("https://x.test/?a=1&amp;b=&quot;2&quot;");
+	});
 });
