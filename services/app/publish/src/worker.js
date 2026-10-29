@@ -1,13 +1,14 @@
 // publish.flisk.si: one-click publishing to pages.flisk.si with no account and no key for the visitor.
 //
-//   POST   /v1/spaces        {markdown | cv, source?}  → 202 {id, url, token, manage}   a new space at /@anon/<id>/
+//   POST   /v1/spaces        {markdown, source?}  → 202 {id, url, token, manage}   a new space at /@anon/<id>/
 //   PUT    /v1/spaces/<id>   {markdown | cv}  Bearer <token>  → 202 {id, url}           a new version
 // cv is {me: "bun3,helm2", name?}: roadmap's ratings. The workflow builds the developer CV page from them and
 // roadmap's own data, so a visitor only ever sends Markdown or ratings, never markup of their own.
 //   DELETE /v1/spaces/<id>   Bearer <token>  → 202 {id}                            take it down
 //   GET    /manage/<id>#<token>   a page with the link and a delete button (the token stays in the fragment)
 //
-// Signing in with GitHub is optional and lets a CV live at /@<login>/cv/ instead of /@anon/<id>/:
+// A developer CV needs a GitHub sign-in: one CV per account, at /@<login>/cv/. (Anonymous CVs are refused; the ones
+// published before that rule can still be updated or deleted with their key.)
 //   GET    /auth/github?return=<url>   send the visitor to GitHub (no scope: public profile only)
 //   GET    /auth/callback              GitHub sends them back; we read their login, keep no token, and return them
 //                                      to <url>#gh=<session>, a signed one-hour session that holds only the login
@@ -291,6 +292,10 @@ export async function handle(request, env, fetcher = fetch) {
 	const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
 	if (request.method === "POST" && url.pathname === "/v1/spaces") {
 		const body = await readJson(request);
+		// One CV per GitHub account: a developer CV is only published under a sign-in (PUT /v1/me/space), so nobody can
+		// pile up copies. Anonymous publishing stays for Markdown.
+		if (body && body.cv !== undefined)
+			return json({ error: "A CV needs a GitHub sign-in: you get one CV per GitHub account.", sign_in: `${env.PUBLISH_ORIGIN}/auth/github` }, 403, headers);
 		const [content, problem] = readContent(body);
 		if (problem) return json({ error: problem }, 400, headers);
 		if (await overLimit(env, origin, ip)) return json({ error: "Too many publishes from here; try again in an hour." }, 429, headers);
