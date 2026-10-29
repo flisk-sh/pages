@@ -79,7 +79,11 @@ const run = (args: string[], env: Record<string, string> = {}) =>
 	}).trim();
 
 /** The CV page and its logos, from roadmap's live data. */
-async function writeCv(dir: string, cv: { me: string; name?: string }) {
+async function writeCv(
+	dir: string,
+	cv: { me: string; name?: string },
+	url: string,
+) {
 	const get = async (path: string) => {
 		const res = await fetch(`${ROADMAP}${path}`);
 		if (!res.ok) throw new Error(`${path} answered ${res.status}`);
@@ -92,6 +96,7 @@ async function writeCv(dir: string, cv: { me: string; name?: string }) {
 	const { html, logos } = cvPage(data, parseMe(cv.me), name, {
 		portfolio: `${ROADMAP}/portfolio/?${q}`,
 		radar: `${ROADMAP}/radar/?${q}`,
+		url,
 	});
 	writeFileSync(join(dir, "index.html"), html);
 	mkdirSync(join(dir, "logos"));
@@ -142,7 +147,7 @@ async function main() {
 		try {
 			const dir = join(work, "space");
 			mkdirSync(dir);
-			if (p.cv) await writeCv(dir, p.cv);
+			if (p.cv) await writeCv(dir, p.cv, `https://pages.flisk.si/@${handle}/`);
 			else writeFileSync(join(dir, "index.md"), p.markdown as string);
 			const result = checkSpace(dir);
 			console.log(formatReport(result));

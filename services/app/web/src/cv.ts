@@ -59,6 +59,52 @@ export interface CvLinks {
 	portfolio: string;
 	radar: string;
 	github?: string;
+	/** The page's own public address. With it the page gets share links, README badge snippets and link-preview tags. */
+	url?: string;
+}
+
+/** shields.io static-badge text: a dash is written twice, an underscore twice, a space as an underscore. */
+const badgeText = (t: string) =>
+	encodeURIComponent(
+		t.replace(/-/g, "--").replace(/_/g, "__").replace(/ /g, "_"),
+	);
+
+/** Share intents are plain links, so they work with no script on the page. Each opens that network's own composer. */
+export function shareLinks(
+	url: string,
+	text: string,
+): { name: string; href: string }[] {
+	const u = encodeURIComponent(url);
+	const t = encodeURIComponent(text);
+	return [
+		{ name: "X", href: `https://twitter.com/intent/tweet?text=${t}&url=${u}` },
+		{
+			name: "LinkedIn",
+			href: `https://www.linkedin.com/sharing/share-offsite/?url=${u}`,
+		},
+		{
+			name: "Bluesky",
+			href: `https://bsky.app/intent/compose?text=${encodeURIComponent(`${text} ${url}`)}`,
+		},
+		{
+			name: "Reddit",
+			href: `https://www.reddit.com/submit?url=${u}&title=${t}`,
+		},
+		{
+			name: "Hacker News",
+			href: `https://news.ycombinator.com/submitlink?u=${u}&t=${t}`,
+		},
+		{
+			name: "Facebook",
+			href: `https://www.facebook.com/sharer/sharer.php?u=${u}`,
+		},
+		{
+			name: "WhatsApp",
+			href: `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`,
+		},
+		{ name: "Telegram", href: `https://t.me/share/url?url=${u}&text=${t}` },
+		{ name: "Email", href: `mailto:?subject=${t}&body=${u}` },
+	];
 }
 
 /** Ratings as roadmap writes them in ?me=: "bun3,helm2,k9s3". At most 400 tools, levels 1 to 3. */
@@ -437,8 +483,40 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 		.join("");
 
 	const desc = `${name}, ${top.r.name}: ${rated} developer tools rated, ${count(3)} at expert level, across ${families} tool families.`;
+	const pageTitle = `${name} · ${top.r.name} · Developer CV`;
+	const preview = links.url
+		? `<meta property="og:type" content="profile"><meta property="og:title" content="${e(pageTitle)}"><meta property="og:description" content="${e(desc)}"><meta property="og:url" content="${e(links.url)}"><meta name="twitter:card" content="summary"><meta name="twitter:title" content="${e(pageTitle)}"><meta name="twitter:description" content="${e(desc)}">`
+		: "";
+	const share = links.url
+		? (() => {
+				const text = `${name}: ${top.r.name}. My developer toolkit, ${rated} tools rated.`;
+				const badge = `[![DevEx CV](https://img.shields.io/badge/${badgeText("DevEx CV")}-${badgeText(`${top.r.name} ${top.pct}%`)}-22c55e?style=for-the-badge)](${links.url})`;
+				const html = `<a href="${links.url}"><img alt="DevEx CV" src="https://img.shields.io/badge/${badgeText("DevEx CV")}-${badgeText(`${top.r.name} ${top.pct}%`)}-22c55e?style=for-the-badge"></a>`;
+				const snippets = [
+					["Markdown, for a README", badge],
+					["HTML", html],
+					["Plain link", links.url],
+				]
+					.map(
+						([label, code]) =>
+							`<div class="snip"><span class="lbl">${e(label)}</span><pre><code>${e(code)}</code></pre></div>`,
+					)
+					.join("");
+				return `<section class="share" id="share"><div class="sh"><h2>Share this CV</h2><p>One click opens each network's own post box.</p></div><div class="panel"><div class="sharebtns">${shareLinks(
+					links.url,
+					text,
+				)
+					.map(
+						(l) =>
+							`<a class="btn" rel="noopener" href="${e(l.href)}">${e(l.name)}</a>`,
+					)
+					.join(
+						"",
+					)}</div><details class="badges"><summary>Add a badge to your README or site</summary>${snippets}<p class="fine">Select a snippet and copy it. The badge image comes from shields.io when someone views your README, not from this page.</p></details></div></section>`;
+			})()
+		: "";
 	const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${e(name)} · ${e(top.r.name)} · Developer CV</title><meta name="description" content="${e(desc)}"><style>${CSS}</style></head><body><div class="wrap">
+<title>${e(pageTitle)}</title><meta name="description" content="${e(desc)}">${preview}<style>${CSS}</style></head><body><div class="wrap">
 <nav class="top"><a class="brand" href="https://roadmap.flisk.si/"><i>&gt;_</i>DevEx CV</a><div class="links"><a href="${e(links.portfolio)}">Portfolio</a><a href="${e(links.radar)}">Radar</a>${links.github ? `<a href="${e(links.github)}">GitHub</a>` : ""}</div></nav>
 <div class="hero"><div>
 <span class="badge">Developer CV</span>
@@ -446,7 +524,7 @@ ${repo ? `<a class="src" href="https://github.com/${e(repo + file)}">${e(repo)}<
 <p class="role">${e(top.r.name)} <span class="pill">${top.pct}% MATCH</span></p>
 <p class="what">${e(top.r.what)}</p>
 <div class="stats"><div><b>${rated}</b><span>tools rated</span></div><div><b>${count(3)}</b><span>expert</span></div><div><b>${count(2)}</b><span>use often</span></div><div><b>${families}/${fams.length}</b><span>families</span></div></div>
-<div class="btns"><a class="btn p" href="${e(links.portfolio)}">Interactive portfolio →</a><a class="btn" href="${e(links.radar)}">My tools on the radar</a>${links.github ? `<a class="btn" href="${e(links.github)}">GitHub</a>` : ""}</div>
+<div class="btns"><a class="btn p" href="${e(links.portfolio)}">Interactive portfolio →</a><a class="btn" href="${e(links.radar)}">My tools on the radar</a>${links.github ? `<a class="btn" href="${e(links.github)}">GitHub</a>` : ""}${links.url ? `<a class="btn" href="#share">Share</a>` : ""}</div>
 <div class="trust"><span><b>Self-reported</b> ratings</span><span><b>Scored</b> by a public checklist</span><span><b>No scripts</b>, no tracking</span></div>
 </div><div>${spider()}</div></div>
 ${
@@ -476,6 +554,7 @@ ${
 		? `<section><div class="sh"><h2>Toolkit</h2><p>All ${rated === 1 ? "one tool" : `${rated} tools`} I rated, by level.</p></div><div class="panel">${toolkit}</div></section>`
 		: ""
 }
+${share}
 <footer><p>Ratings are self-reported. Tools, roles and skills are scored by the public checklist on <a href="https://roadmap.flisk.si/">roadmap.flisk.si</a>.</p><p>Published with <a href="https://pages.flisk.si/">pages.flisk.si</a></p></footer>
 </div></body></html>`;
 	return { html, logos: [...used] };

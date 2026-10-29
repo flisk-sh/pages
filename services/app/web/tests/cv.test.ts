@@ -188,4 +188,66 @@ describe("the developer CV", () => {
 		expect(cleanName("  Sam\n<img src=x>  Doe ")).toBe("Sam img src=x Doe");
 		expect(cleanName("x".repeat(80))).toHaveLength(60);
 	});
+
+	it("has no share section or preview tags without the page's own address", () => {
+		expect(html).not.toContain('id="share"');
+		expect(html).not.toContain("og:title");
+	});
+});
+
+describe("sharing a published CV", () => {
+	const url = "https://pages.flisk.si/@sam/cv/";
+	const { html } = cvPage(
+		data,
+		parseMe("bun3,helm2"),
+		"Sam <b>",
+		{ ...links, url },
+		new Date("2026-10-28"),
+	);
+
+	it("links to each network's own post box, with the address encoded and no script", () => {
+		for (const net of [
+			"twitter.com/intent/tweet",
+			"linkedin.com/sharing/share-offsite",
+			"bsky.app/intent/compose",
+			"reddit.com/submit",
+			"news.ycombinator.com/submitlink",
+			"facebook.com/sharer",
+			"wa.me/",
+			"t.me/share/url",
+			"mailto:?subject=",
+		])
+			expect(html).toContain(net);
+		expect(html).toContain(`url=${encodeURIComponent(url)}`);
+		expect(html).toContain('href="#share"');
+		expect(html).not.toMatch(/<script/i);
+	});
+
+	it("offers README badge snippets that escape the text and link to the CV", () => {
+		expect(html).toContain(
+			"img.shields.io/badge/DevEx_CV-Backend_Engineer_63%25-22c55e",
+		);
+		expect(html).toContain(`](${url})`);
+		expect(html).toContain("Markdown, for a README");
+		expect(html).not.toContain("Sam <b>"); // a name is cleaned of markup before it reaches any snippet or tag
+	});
+
+	it("adds link-preview tags for X, LinkedIn and chat apps", () => {
+		expect(html).toContain(
+			'property="og:url" content="https://pages.flisk.si/@sam/cv/"',
+		);
+		expect(html).toContain('name="twitter:card" content="summary"');
+	});
+
+	it("still passes the same check as every space", () => {
+		const dir = mkdtempSync(join(tmpdir(), "cv-share-"));
+		writeFileSync(join(dir, "index.html"), html);
+		mkdirSync(join(dir, "logos"));
+		for (const f of ["bun.svg", "helm.png"])
+			writeFileSync(
+				join(dir, "logos", f),
+				f.endsWith("svg") ? '<svg xmlns="http://www.w3.org/2000/svg"/>' : "png",
+			);
+		expect(checkSpace(dir).errors).toEqual([]);
+	});
 });
