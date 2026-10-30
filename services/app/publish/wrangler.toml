@@ -8,7 +8,7 @@ routes = [{ pattern = "publish.flisk.si", custom_domain = true }]
 PAGES_REPO = "flisk-sh/pages"
 PAGES_ORIGIN = "https://pages.flisk.si"
 PUBLISH_ORIGIN = "https://publish.flisk.si"
-ALLOWED_ORIGINS = "https://roadmap.flisk.si,https://pages.flisk.si"
+ALLOWED_ORIGINS = "https://roadmap.flisk.si,https://pages.flisk.si,https://tools.flisk.si"
 GITHUB_CLIENT_ID = "Ov23liQT0l2ro3Ajvwk5" # the OAuth app's client id (Settings → Developer settings → OAuth Apps)
 MAX_PER_IP_HOUR = "5"
 MAX_PER_IP_DAY = "20"
