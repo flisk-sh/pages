@@ -349,6 +349,59 @@ export function checkSpace(dir) {
 	};
 }
 
+/**
+ * Checks one file given as text, with no filesystem: for a remote check of a pasted page. `name` decides the kind
+ * (index.html, app.js, logo.svg); the rules are the ones checkSpace applies to that kind of file. Returns
+ * { ok, errors, warnings, files: 1, bytes }.
+ */
+export function checkText(name, text) {
+	const findings = [];
+	const report = (severity, rule, file, message) =>
+		findings.push({ severity, rule, file, message });
+	const ext = extname(name).toLowerCase();
+	const bytes = new TextEncoder().encode(text).length;
+	if (!EXTENSIONS.has(ext))
+		report(
+			"error",
+			"extension",
+			name,
+			`${ext || "no extension"}: not a file type pages serves`,
+		);
+	else if (bytes > LIMITS.fileBytes)
+		report(
+			"error",
+			"size",
+			name,
+			`${(bytes / 1048576).toFixed(1)} MB: one file may be ${LIMITS.fileBytes / 1048576} MB`,
+		);
+	else if (ext === ".html" || ext === ".htm") {
+		checkHtml(name, text, report);
+		if (!/<title>[^<]+<\/title>/i.test(text))
+			report(
+				"warn",
+				"title",
+				name,
+				"no <title>: the gallery and link previews use it",
+			);
+		if (!tags(text, "meta").some((m) => m.name === "description"))
+			report(
+				"warn",
+				"description",
+				name,
+				'no <meta name="description">: link previews use it',
+			);
+	} else if (ext === ".js" || ext === ".mjs") checkScript(name, text, report);
+	else if (ext === ".svg") checkSvg(name, text, report);
+	const errors = findings.filter((f) => f.severity === "error");
+	return {
+		ok: errors.length === 0,
+		errors,
+		warnings: findings.filter((f) => f.severity === "warn"),
+		files: 1,
+		bytes,
+	};
+}
+
 /** The report as lines a person or an agent reads. */
 export function formatReport(result) {
 	const lines = [...result.errors, ...result.warnings].map(

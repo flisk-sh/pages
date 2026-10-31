@@ -1,0 +1,28 @@
+{
+  "name": "put-my-page-online",
+  "displayName": "Put My Page Online",
+  "version": "1.0.0",
+  "description": "Put your page online. Check it, then get a free public link to share. No account setup, no server to run.",
+  "author": {
+    "name": "Flisk",
+    "url": "https://flisk.sh"
+  },
+  "homepage": "https://pages.flisk.si",
+  "repository": "https://github.com/flisk-sh/pages",
+  "license": "MIT",
+  "keywords": [
+    "put page online",
+    "publish html",
+    "host html",
+    "share a page",
+    "make a link",
+    "free hosting",
+    "dashboard",
+    "github pages",
+    "mcp"
+  ],
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/flisk-sh/pages#readme",
+  "supportUrl": "https://github.com/flisk-sh/pages/issues",
+  "privacyPolicyUrl": "https://pages.flisk.si/about"
+}
