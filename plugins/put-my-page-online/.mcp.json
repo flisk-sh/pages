@@ -2,7 +2,7 @@
   "mcpServers": {
     "put-my-page-online": {
       "type": "http",
-      "url": "https://mcp.flisk.si/mcp"
+      "url": "https://mcp.pages.flisk.si/mcp"
     }
   }
 }

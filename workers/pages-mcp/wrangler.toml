@@ -5,7 +5,7 @@ compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Needs no KV, no database and no secrets.
-routes = [{ pattern = "mcp.flisk.si", custom_domain = true }]
+routes = [{ pattern = "mcp.pages.flisk.si", custom_domain = true }]
 
 [vars]
 # Per caller IP, counted in the Cache API (approximate per data center), like the demo worker. See src/limits.js.
