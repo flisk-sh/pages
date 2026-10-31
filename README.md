@@ -56,7 +56,7 @@ like, a `slug`. The Action runs the CLI from its own tagged checkout, so the ver
 
 ## Put My Page Online (Claude directory)
 
-For people who just want a link: the `put-my-page-online` plugin (`plugins/put-my-page-online`) and a remote, read-only MCP server at `https://mcp.flisk.si/mcp` (`workers/pages-mcp`, no key, nothing stored). `check_page` runs the same rules as the publish on a pasted page and says what to fix in plain words; `how_to_put_page_online` gives the steps and the one command. Publishing itself stays `npx -y @flisk-sh/pages publish page.html --wait`, because it needs your own GitHub login. Limits: 30 calls per IP per minute and 300 per hour (`src/limits.js`, Cache API counters like the demo worker), 256 KB per request.
+For people who just want a link: the `put-my-page-online` plugin (`plugins/put-my-page-online`) and a remote, read-only MCP server at `https://mcp.pages.flisk.si/mcp` (`workers/pages-mcp`, no key, nothing stored). `check_page` runs the same rules as the publish on a pasted page and says what to fix in plain words; `how_to_put_page_online` gives the steps and the one command. Publishing itself stays `npx -y @flisk-sh/pages publish page.html --wait`, because it needs your own GitHub login. Limits: 30 calls per IP per minute and 300 per hour (`src/limits.js`, Cache API counters like the demo worker), 256 KB per request.
 
 ## How it works
 

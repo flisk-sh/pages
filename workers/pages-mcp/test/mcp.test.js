@@ -6,7 +6,7 @@ import { TOOLS } from "../src/mcp.js";
 globalThis.caches ??= { default: { async match() {}, async put() {}, async delete() {} } };
 
 const env = {};
-const rpcReq = (body, ip = "9.9.9.9") => new Request("https://mcp.flisk.si/mcp", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": ip }, body: typeof body === "string" ? body : JSON.stringify(body) });
+const rpcReq = (body, ip = "9.9.9.9") => new Request("https://mcp.pages.flisk.si/mcp", { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": ip }, body: typeof body === "string" ? body : JSON.stringify(body) });
 const post = (body, e = env) => worker.fetch(rpcReq(body), e, { waitUntil() {} });
 const call = async (name, args, id = 1) => (await post({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } })).json();
 const text = (r) => JSON.parse(r.result.content[0].text);
@@ -68,11 +68,11 @@ test("unknown tools, methods and notifications; only POST; preflight; icons", as
   assert.equal((await (await post({ jsonrpc: "2.0", id: 3, method: "resources/list" })).json()).error.code, -32601);
   assert.equal((await post({ jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
   assert.equal((await post("not json")).status, 400);
-  assert.equal((await worker.fetch(new Request("https://mcp.flisk.si/mcp"), env, { waitUntil() {} })).status, 405);
-  const opt = await worker.fetch(new Request("https://mcp.flisk.si/mcp", { method: "OPTIONS" }), env, { waitUntil() {} });
+  assert.equal((await worker.fetch(new Request("https://mcp.pages.flisk.si/mcp"), env, { waitUntil() {} })).status, 405);
+  const opt = await worker.fetch(new Request("https://mcp.pages.flisk.si/mcp", { method: "OPTIONS" }), env, { waitUntil() {} });
   assert.equal(opt.status, 204);
   for (const [path, type] of [["/favicon.ico", "image/x-icon"], ["/icon-512.png", "image/png"], ["/apple-touch-icon.png", "image/png"], ["/icon.svg", "image/svg+xml"]]) {
-    const res = await worker.fetch(new Request(`https://mcp.flisk.si${path}`), env, { waitUntil() {} });
+    const res = await worker.fetch(new Request(`https://mcp.pages.flisk.si${path}`), env, { waitUntil() {} });
     assert.equal(res.headers.get("content-type"), type, path);
     assert.ok((await res.arrayBuffer()).byteLength > 100, path);
   }
@@ -103,6 +103,6 @@ test("a caller over the per-minute cap gets 429 with retry-after; another addres
 }));
 
 test("a body larger than a page can be is refused", async () => {
-  const res = await worker.fetch(new Request("https://mcp.flisk.si/mcp", { method: "POST", headers: { "content-type": "application/json", "content-length": "999999" }, body: "{}" }), env, { waitUntil() {} });
+  const res = await worker.fetch(new Request("https://mcp.pages.flisk.si/mcp", { method: "POST", headers: { "content-type": "application/json", "content-length": "999999" }, body: "{}" }), env, { waitUntil() {} });
   assert.equal(res.status, 413);
 });

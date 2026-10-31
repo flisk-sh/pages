@@ -1,4 +1,4 @@
-// Put My Page Online: a remote, read-only, keyless MCP server at https://mcp.flisk.si/mcp for the Claude directory.
+// Put My Page Online: a remote, read-only, keyless MCP server at https://mcp.pages.flisk.si/mcp for the Claude directory.
 // Paste a page, get the publish check's verdict. No storage, no model, nothing is published from here.
 import { APPLE_TOUCH_PNG_BASE64, FAVICON_ICO_BASE64, ICON_512_PNG_BASE64, ICON_SVG } from "./icons.js";
 import { MAX_BODY_BYTES, overLimit } from "./limits.js";
@@ -12,7 +12,7 @@ const PAGE = `Put My Page Online (MCP)
 
 Check your web page, then put it online as a free public link on pages.flisk.si.
 
-MCP server (Streamable HTTP, no key, read-only): https://mcp.flisk.si/mcp
+MCP server (Streamable HTTP, no key, read-only): https://mcp.pages.flisk.si/mcp
 Tools: check_page, how_to_put_page_online
 Put a page online: npx -y @flisk-sh/pages publish page.html --wait
 Source: https://github.com/flisk-sh/pages/tree/main/workers/pages-mcp
