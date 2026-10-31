@@ -5,7 +5,10 @@ compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 
 # Needs no KV, no database and no secrets.
-routes = [{ pattern = "mcp.pages.flisk.si", custom_domain = true }]
+# The MCP server lives at pages.flisk.si/mcp, like citable.flisk.si/mcp and readme.flisk.si/mcp. The route covers /mcp only:
+# every other path on pages.flisk.si stays the static site (GitHub Pages). It needs the pages.flisk.si DNS record
+# proxied through Cloudflare (SSL/TLS mode Full).
+routes = [{ pattern = "pages.flisk.si/mcp*", zone_name = "flisk.si" }]
 
 [vars]
 # Per caller IP, counted in the Cache API (approximate per data center), like the demo worker. See src/limits.js.
