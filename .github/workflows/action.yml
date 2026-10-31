@@ -1,0 +1,33 @@
+name: Action
+
+on:
+  pull_request:
+    paths:
+      - action.yml
+      - bin/**
+      - .github/workflows/action.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: A small page
+        run: |
+          mkdir -p sample
+          printf '# Hello\n\nA page that passes the check.\n' > sample/index.md
+      - id: pages
+        uses: ./
+        with:
+          path: sample
+      - name: The result is an output
+        env:
+          OK: ${{ steps.pages.outputs.ok }}
+        run: test "$OK" = "true"

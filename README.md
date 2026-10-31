@@ -39,6 +39,21 @@ The npm package is released by `.github/workflows/release-cli.yml` when a `cli-v
 Or by hand in the browser: [add a file](https://github.com/flisk-sh/pages/new/main?filename=spaces/YOUR-LOGIN/my-page/index.md)
 at `spaces/<your login>/<name>/index.md` and propose the change. GitHub makes the fork and the pull request for you.
 
+## GitHub Action
+
+Check a page in CI with the same rules the publish runs, and publish it when you want. The check needs no keys and
+puts the result on the job summary; the job fails when the page has problems.
+
+```yaml
+- uses: actions/checkout@v4
+- uses: flisk-sh/pages@v1
+  with:
+    path: my-page            # a folder with index.html or index.md, or one .html or .md file
+```
+
+For `command: publish`, give a `token` (a personal access token that can fork and open pull requests) and, if you
+like, a `slug`. The Action runs the CLI from its own tagged checkout, so the version you pin is the version that runs.
+
 ## Put My Page Online (Claude directory)
 
 For people who just want a link: the `put-my-page-online` plugin (`plugins/put-my-page-online`) and a remote, read-only MCP server at `https://mcp.flisk.si/mcp` (`workers/pages-mcp`, no key, nothing stored). `check_page` runs the same rules as the publish on a pasted page and says what to fix in plain words; `how_to_put_page_online` gives the steps and the one command. Publishing itself stays `npx -y @flisk-sh/pages publish page.html --wait`, because it needs your own GitHub login. Limits: 30 calls per IP per minute and 300 per hour (`src/limits.js`, Cache API counters like the demo worker), 256 KB per request.
