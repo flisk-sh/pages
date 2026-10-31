@@ -30,6 +30,24 @@ export const TOOLS = [
   },
 ];
 
+export const PROMPTS = [
+  {
+    name: "put_my_page_online",
+    title: "Put my page online",
+    description: "Check a page, fix what it lists, then give the one command that puts it online.",
+    arguments: [],
+  },
+];
+
+function getPrompt(name) {
+  if (name !== "put_my_page_online") return null;
+  return {
+    description: "Check a page and put it online.",
+    messages: [{ role: "user", content: { type: "text", text: "Check my page with check_page. Fix every problem it lists and check again until it passes. Then call how_to_put_page_online and give me the one command to put it online." } }],
+  };
+}
+
+
 const rpc = (id, result) => ({ jsonrpc: "2.0", id, result });
 const fail = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 const reply = (value, isError = false) => ({ isError, content: [{ type: "text", text: JSON.stringify(value) }] });
@@ -83,10 +101,16 @@ export async function pagesMcpRoute(request, json) {
   const { id, method, params } = msg;
   if (id === undefined) return new Response(null, { status: 202, headers: cors });
   if (method === "initialize") {
-    return json(rpc(id, { protocolVersion: PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: "flisk-pages", version: "1.0.0" }, instructions: "check_page tells you what to fix before a page can go online. how_to_put_page_online gives the steps and the one command." }));
+    return json(rpc(id, { protocolVersion: PROTOCOL, capabilities: { tools: {}, prompts: {} }, serverInfo: { name: "flisk-pages", version: "1.0.0" }, instructions: "check_page tells you what to fix before a page can go online. how_to_put_page_online gives the steps and the one command." }));
   }
   if (method === "ping") return json(rpc(id, {}));
   if (method === "tools/list") return json(rpc(id, { tools: TOOLS }));
+  if (method === "prompts/list") return json(rpc(id, { prompts: PROMPTS }));
+  if (method === "prompts/get") {
+    const prompt = getPrompt(params?.name);
+    if (!prompt) return json(fail(id, -32602, `Unknown prompt: ${params?.name}`));
+    return json(rpc(id, prompt));
+  }
   if (method === "tools/call") {
     if (params?.name === "check_page") return json(rpc(id, checkPage(params?.arguments)));
     if (params?.name === "how_to_put_page_online") return json(rpc(id, howTo()));
