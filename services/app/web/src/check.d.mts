@@ -23,4 +23,6 @@ export function csp(options?: { scripts?: boolean }): string;
 export function tags(html: string, name: string): Record<string, string>[];
 export function hostOf(url: string): string | null;
 export function checkSpace(dir: string): CheckResult;
+/** One file given as text, with no filesystem: the rules checkSpace applies to that kind of file (by name). */
+export function checkText(name: string, text: string): CheckResult;
 export function formatReport(result: CheckResult): string;

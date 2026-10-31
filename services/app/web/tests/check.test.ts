@@ -211,7 +211,7 @@ describe("warnings", () => {
 	it("a page with no title or description still publishes", () => {
 		const r = checkSpace(space({ "index.html": "<h1>hi</h1>" }));
 		expect(r.ok).toBe(true);
-		expect(r.warnings.map((w) => w.rule).sort()).toEqual([
+		expect(r.warnings.map((w: { rule: string }) => w.rule).sort()).toEqual([
 			"description",
 			"title",
 		]);
