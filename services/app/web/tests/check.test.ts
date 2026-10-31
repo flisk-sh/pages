@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkSpace, csp, hostOf, validId } from "../src/check.mjs";
+import { checkSpace, checkText, csp, hostOf, validId } from "../src/check.mjs";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -247,5 +247,51 @@ describe("helpers", () => {
 	it("one-click spaces get a policy that runs nothing", () => {
 		expect(csp({ scripts: false })).toContain("script-src 'none'");
 		expect(csp({ scripts: false })).not.toMatch(/script-src[^;]*https:/);
+	});
+});
+
+describe("checkText (a pasted file, no folder)", () => {
+	const cases: Record<string, [string, string]> = {
+		"a clean page": ["index.html", page("<p>hi</p>")],
+		"a script from a host that is not allowed": [
+			"index.html",
+			page("", '<script src="https://evil.example/x.js"></script>'),
+		],
+		"a fetch to another host": [
+			"app.js",
+			'fetch("https://api.evil.example/data")',
+		],
+		"a wallet prompt": [
+			"app.js",
+			"ethereum.request({method:'eth_requestAccounts'})",
+		],
+		"an SVG with a script": ["logo.svg", "<svg><script>1</script></svg>"],
+		"a file type pages does not serve": ["run.exe", "MZ"],
+	};
+	for (const [label, [name, text]] of Object.entries(cases)) {
+		it(`gives the same rules as checkSpace for ${label}`, () => {
+			const files: Record<string, string> =
+				name === "index.html"
+					? { [name]: text }
+					: { "index.html": page("<p>x</p>"), [name]: text };
+			const folder = checkSpace(space(files));
+			const single = checkText(name, text);
+			const rules = (r: { errors: { rule: string; file: string }[] }) =>
+				r.errors
+					.filter((e) => e.file === name)
+					.map((e) => e.rule)
+					.sort();
+			expect(rules(single)).toEqual(rules(folder));
+			expect(single.ok).toBe(rules(folder).length === 0);
+		});
+	}
+
+	it("warns, without stopping, when a page has no title or description", () => {
+		const r = checkText("index.html", "<!doctype html><p>hi</p>");
+		expect(r.ok).toBe(true);
+		expect(r.warnings.map((w) => w.rule).sort()).toEqual([
+			"description",
+			"title",
+		]);
 	});
 });

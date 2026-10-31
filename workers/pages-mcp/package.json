@@ -1,0 +1,9 @@
+{
+  "name": "flisk-pages-mcp",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "deploy": "npx wrangler@4 deploy"
+  }
+}

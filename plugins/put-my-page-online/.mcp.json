@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "put-my-page-online": {
+      "type": "http",
+      "url": "https://mcp.flisk.si/mcp"
+    }
+  }
+}

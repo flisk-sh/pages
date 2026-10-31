@@ -10,6 +10,11 @@
       "name": "pages",
       "source": "./",
       "description": "Publish the pages your agent builds to pages.flisk.si/@you/name: free, public, one git branch per space."
+    },
+    {
+      "name": "put-my-page-online",
+      "source": "./plugins/put-my-page-online",
+      "description": "Put your page online. Check it, then get a free public link to share."
     }
   ]
 }

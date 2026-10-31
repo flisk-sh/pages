@@ -1,0 +1,13 @@
+name = "flisk-pages-mcp"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+# check.mjs imports node:fs and node:path (the folder check); the remote check only calls checkText, which uses neither.
+compatibility_flags = ["nodejs_compat"]
+
+# Needs no KV, no database and no secrets.
+routes = [{ pattern = "mcp.flisk.si", custom_domain = true }]
+
+[vars]
+# Per caller IP, counted in the Cache API (approximate per data center), like the demo worker. See src/limits.js.
+MAX_CALLS_PER_IP_MINUTE = "30"
+MAX_CALLS_PER_IP_HOUR = "300"
