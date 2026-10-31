@@ -15,7 +15,7 @@ const page = (body, head = "") => `<!doctype html><html><head><title>Demo</title
 test("initialize names the server and offers tools only", async () => {
   const body = await (await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "t", version: "1" } } })).json();
   assert.equal(body.result.serverInfo.name, "flisk-pages");
-  assert.deepEqual(body.result.capabilities, { tools: {} });
+  assert.deepEqual(body.result.capabilities, { tools: {}, prompts: {} });
 });
 
 test("both tools are read-only, titled, and publish nothing", async () => {
@@ -105,4 +105,12 @@ test("a caller over the per-minute cap gets 429 with retry-after; another addres
 test("a body larger than a page can be is refused", async () => {
   const res = await worker.fetch(new Request("https://pages.flisk.si/mcp", { method: "POST", headers: { "content-type": "application/json", "content-length": "999999" }, body: "{}" }), env, { waitUntil() {} });
   assert.equal(res.status, 413);
+});
+
+test("prompts/list offers put_my_page_online and prompts/get fills it", async () => {
+  const list = await (await post({ jsonrpc: "2.0", id: 9, method: "prompts/list" })).json();
+  assert.deepEqual(list.result.prompts.map((p) => p.name), ["put_my_page_online"]);
+  const got = await (await post({ jsonrpc: "2.0", id: 10, method: "prompts/get", params: { name: "put_my_page_online" } })).json();
+  assert.match(got.result.messages[0].content.text, /check_page/);
+  assert.match(got.result.messages[0].content.text, /how_to_put_page_online/);
 });
