@@ -312,7 +312,19 @@ export function sharePage(base: string, integrity: string): string {
 			jsonLd: [],
 			crumbs: [{ name: "Share", path: "share" }],
 		},
-		`<div class="wrap page"><p class="eyebrow">Private</p><h1>Make a private file</h1>
+		`<style>
+#f label{display:block;margin:16px 0 0;font-size:1rem}
+#f input,#f textarea{display:block;width:100%;box-sizing:border-box;min-height:44px;margin-top:8px;padding:10px;font:inherit;border:1px solid var(--line2);border-radius:8px;background:var(--card);color:var(--fg)}
+#f textarea{min-height:110px}
+#f button,.card a.btn{display:block;width:100%;box-sizing:border-box;min-height:48px;margin-top:16px;padding:12px;font:inherit;font-weight:600;border:0;border-radius:10px;background:var(--fg);color:var(--bg);text-align:center;text-decoration:none;cursor:pointer}
+.card{border:1px solid var(--line);border-radius:12px;padding:16px;margin:16px 0;background:var(--card)}
+.card .pass{font:600 1.25rem ui-monospace,monospace;letter-spacing:.06em;overflow-wrap:anywhere}
+.card label{display:flex;gap:10px;align-items:flex-start;margin:12px 0;font-size:.95rem}
+.card label input{width:22px;height:22px;min-height:0;margin:2px 0 0;flex:none}
+.card a.btn[aria-disabled="true"]{opacity:.45;pointer-events:none}
+.card button{display:block;width:100%;min-height:48px;margin-top:10px;border-radius:10px;border:1px solid var(--line2);background:var(--card);color:var(--fg);font:inherit;font-weight:600}
+</style>
+<div class="wrap page"><p class="eyebrow">Private</p><h1>Make a private file</h1>
 <p class="lede">Choose a page and the people it is for. Each person gets their own file and passphrase. This runs in your browser: the page is never uploaded, and nothing is stored. Send each file and its passphrase by different channels.</p>
 <form id="f"><label>Page (.html) <input id="page" type="file" accept=".html,text/html" required></label>
 <label>Names, one per line or separated by commas <textarea id="names" rows="3" required></textarea></label>
