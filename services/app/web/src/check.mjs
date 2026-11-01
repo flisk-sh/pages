@@ -224,6 +224,58 @@ function checkHtml(file, html, report) {
 }
 
 /** Checks script text: where it fetches from, and the prompts phishing and mining pages are made of. */
+const TEXT_EXTENSIONS = new Set(
+	".html .htm .md .css .js .mjs .json .csv .tsv .txt .xml .svg".split(" "),
+);
+
+/** Keys and tokens a public page must never carry: each is a fixed, well-known format, so a match is a real secret. */
+const SECRETS = [
+	[
+		"a GitHub token",
+		/\b(?:gh[pousr]_[A-Za-z0-9]{36,}|github_pat_[A-Za-z0-9_]{50,})/g,
+	],
+	["an AWS access key", /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g],
+	["a private key", /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/g],
+	["a Slack token", /\bxox[abprs]-[A-Za-z0-9-]{10,}/g],
+	["an API key (sk-)", /\bsk-(?:ant-|proj-)?[A-Za-z0-9_-]{32,}/g],
+	["a live Stripe key", /\b[sr]k_live_[A-Za-z0-9]{20,}/g],
+	["a Google API key", /\bAIza[0-9A-Za-z_-]{35}\b/g],
+];
+const JWT = /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g;
+// A zip embedded as a data URI (a Playwright report keeps every request and response of the run in one): its content
+// is not opened here, so say so.
+const EMBEDDED_ZIP = /base64,UEsDB[A-Za-z0-9+/=]{4000,}/;
+
+/** Secrets in a text file. Only the first characters of a match are shown, never the whole value. */
+function checkSecrets(file, text, report) {
+	const hint = (m) => `${m.slice(0, 6)}…`;
+	for (const [label, re] of SECRETS) {
+		const found = text.match(re);
+		if (found)
+			report(
+				"error",
+				"secret",
+				file,
+				`${found.length > 1 ? `${found.length} matches` : "a match"} for ${label} (${hint(found[0])}): spaces are public, so it would be too; remove it and revoke the key`,
+			);
+	}
+	const jwts = text.match(JWT);
+	if (jwts)
+		report(
+			"warn",
+			"jwt",
+			file,
+			`${jwts.length} JSON Web Token${jwts.length > 1 ? "s" : ""} (${hint(jwts[0])}): one that is still valid lets anyone act as its user; test-run reports often hold them`,
+		);
+	if (EMBEDDED_ZIP.test(text))
+		report(
+			"warn",
+			"embedded-zip",
+			file,
+			"a zip embedded in the page (a Playwright report?) holds data this check cannot open: look inside it for tokens and e-mail addresses before publishing",
+		);
+}
+
 function checkScript(file, text, report) {
 	// XMLHttpRequest's open(method, url) counts; window.open(url) is a link and does not.
 	for (const m of text.matchAll(
@@ -342,12 +394,14 @@ export function checkSpace(dir) {
 				`${(f.bytes / 1048576).toFixed(1)} MB: one file may be ${LIMITS.fileBytes / 1048576} MB`,
 			);
 		if (f.bytes > LIMITS.fileBytes) continue;
-		if (ext === ".html" || ext === ".htm")
-			checkHtml(f.rel, readFileSync(f.path, "utf8"), report);
-		else if (ext === ".js" || ext === ".mjs")
-			checkScript(f.rel, readFileSync(f.path, "utf8"), report);
-		else if (ext === ".svg")
-			checkSvg(f.rel, readFileSync(f.path, "utf8"), report);
+		const text = TEXT_EXTENSIONS.has(ext)
+			? readFileSync(f.path, "utf8")
+			: undefined;
+		if (text === undefined) continue;
+		if (ext === ".html" || ext === ".htm") checkHtml(f.rel, text, report);
+		else if (ext === ".js" || ext === ".mjs") checkScript(f.rel, text, report);
+		else if (ext === ".svg") checkSvg(f.rel, text, report);
+		checkSecrets(f.rel, text, report);
 	}
 	if (names.has("index.html")) {
 		const html = readFileSync(join(dir, "index.html"), "utf8");
@@ -419,6 +473,8 @@ export function checkText(name, text) {
 			);
 	} else if (ext === ".js" || ext === ".mjs") checkScript(name, text, report);
 	else if (ext === ".svg") checkSvg(name, text, report);
+	if (TEXT_EXTENSIONS.has(ext) && bytes <= LIMITS.fileBytes)
+		checkSecrets(name, text, report);
 	const errors = findings.filter((f) => f.severity === "error");
 	return {
 		ok: errors.length === 0,
