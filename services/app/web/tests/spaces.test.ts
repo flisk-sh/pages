@@ -235,7 +235,7 @@ describe("the bar's source link", () => {
 		expect(html).toContain('href="mailto:?subject=How%20GPUs%20work&body=');
 		expect(html).toContain("share-only-the-people-you-name");
 		expect(html).toContain("data-tip=");
-		expect(html).toContain("a[data-tip]:hover::after");
+		expect(html).toContain("[data-tip]:hover::after");
 	});
 	it("opens the publishing run, or the files when there is none", () => {
 		const s = { ...(spaces[0] as Space), origin: run };
@@ -244,6 +244,18 @@ describe("the bar's source link", () => {
 		);
 		expect(bar("https://pages.test", spaces[0] as Space)).toContain(
 			"tree/space/sam/gpu-explainer",
+		);
+	});
+});
+
+describe("bar visibility badge", () => {
+	it("says public for a normal page and private for a locked one", () => {
+		const pub = bar("https://pages.test", spaces[0] as Space);
+		expect(pub).toContain("Public: anyone with the link");
+		const locked = spaces.find((s) => s.slug === "for-bob") as Space;
+		expect(locked.locked).toBe(true);
+		expect(bar("https://pages.test", locked)).toContain(
+			"Private: only people with their own link",
 		);
 	});
 });
