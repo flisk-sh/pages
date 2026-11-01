@@ -24,4 +24,6 @@ export function savedSpace(path: string, file?: string): AnonSpace | undefined;
 export function saveSpace(path: string, space: AnonSpace | undefined, file?: string): void;
 export function publishAnon(api: string, markdown: string, saved?: AnonSpace, fetcher?: Fetcher): Promise<AnonSpace>;
 export function removeAnon(api: string, saved: AnonSpace, fetcher?: Fetcher): Promise<void>;
+export function readFolder(dir: string): { path: string; base64: string }[];
+export function publishFromActions(api: string, slug: string, dir: string, env?: Record<string, string | undefined>, fetcher?: Fetcher): Promise<{ url: string; runs: string }>;
 export function waitLive(url: string, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;

@@ -13,6 +13,8 @@ GITHUB_CLIENT_ID = "Ov23liQT0l2ro3Ajvwk5" # the OAuth app's client id (Settings 
 MAX_PER_IP_HOUR = "5"
 MAX_PER_IP_DAY = "20"
 MAX_PER_HOUR = "120"
+MAX_CI_PER_HOUR = "20"   # per repository owner, for POST /v1/ci/spaces
+MAX_CI_PER_DAY = "100"
 
 # Secret (set once): bunx wrangler@4 secret put GITHUB_TOKEN
 #   a fine-grained token for flisk-sh/pages only, "Contents: read and write" (repository_dispatch needs it)

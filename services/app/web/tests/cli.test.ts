@@ -14,6 +14,8 @@ import { join } from "node:path";
 import {
 	type AnonSpace,
 	publishAnon,
+	publishFromActions,
+	readFolder,
 	removeAnon,
 	savedSpace,
 	saveSpace,
@@ -308,5 +310,55 @@ describe("pages publish, end to end", () => {
 		expect(p.stdout.toString()).toContain(
 			"https://pages.flisk.si/@sam/gpu-explainer/",
 		);
+	});
+});
+
+describe("publishing from GitHub Actions", () => {
+	it("asks the job for an OIDC token for publish.flisk.si and sends the folder with it", async () => {
+		const dir = tmp();
+		mkdirSync(join(dir, "data"));
+		write(dir, "index.html", "<h1>hi</h1>");
+		write(join(dir, "data"), "r.json", "{}");
+		expect(readFolder(dir)).toEqual([
+			{ path: "data/r.json", base64: btoa("{}") },
+			{ path: "index.html", base64: btoa("<h1>hi</h1>") },
+		]);
+		const calls: { url: string; init?: RequestInit }[] = [];
+		const fetcher = (async (url: string, init?: RequestInit) => {
+			calls.push({ url, init });
+			if (url.startsWith("https://actions.test"))
+				return Response.json({ value: "jwt" });
+			return Response.json(
+				{ url: "https://pages.test/@org/bench/", runs: "https://runs" },
+				{ status: 202 },
+			);
+		}) as unknown as typeof fetch;
+		const env = {
+			ACTIONS_ID_TOKEN_REQUEST_URL: "https://actions.test/token?x=1",
+			ACTIONS_ID_TOKEN_REQUEST_TOKEN: "req",
+		};
+		const sent = await publishFromActions(
+			"https://publish.test",
+			"bench",
+			dir,
+			env,
+			fetcher,
+		);
+		expect(sent.url).toBe("https://pages.test/@org/bench/");
+		expect(calls[0].url).toBe(
+			"https://actions.test/token?x=1&audience=https%3A%2F%2Fpublish.test",
+		);
+		expect(calls[1].url).toBe("https://publish.test/v1/ci/spaces");
+		const init = calls[1].init as RequestInit;
+		expect((init.headers as Record<string, string>).authorization).toBe(
+			"Bearer jwt",
+		);
+		expect(JSON.parse(init.body as string).slug).toBe("bench");
+	});
+
+	it("says what to add when the job may not ask for a token", async () => {
+		await expect(
+			publishFromActions("https://publish.test", "bench", tmp(), {}),
+		).rejects.toThrow("id-token: write");
 	});
 });

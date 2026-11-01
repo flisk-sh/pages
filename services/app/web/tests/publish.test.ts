@@ -96,6 +96,46 @@ describe("anonymous publishes", () => {
 		expect(hashIn("Publish @sam/x from #3")).toBe("");
 	});
 
+	it("accepts a publish from GitHub Actions for an owner, a slug and a blob", async () => {
+		const { invalid } = await import("../scripts/publish-anon");
+		const ci = {
+			op: "ci",
+			owner: "some-org",
+			slug: "bench",
+			blob: "c".repeat(40),
+		};
+		expect(invalid(ci)).toBe("");
+		expect(invalid({ ...ci, owner: "anon" })).toBe("bad owner or slug");
+		expect(invalid({ ...ci, owner: "Some-Org" })).toBe("bad owner or slug");
+		expect(invalid({ ...ci, slug: "../main" })).toBe("bad owner or slug");
+		expect(invalid({ ...ci, blob: "HEAD" })).toBe("bad blob");
+	});
+
+	it("writes the files a workflow sent and nothing outside the space", async () => {
+		const { writeFiles } = await import("../scripts/publish-anon");
+		const { mkdtempSync, readFileSync, rmSync } = await import("node:fs");
+		const { tmpdir } = await import("node:os");
+		const { join } = await import("node:path");
+		const dir = mkdtempSync(join(tmpdir(), "ci-files-"));
+		try {
+			writeFiles(dir, [
+				{ path: "index.html", base64: btoa("<h1>hi</h1>") },
+				{ path: "data/r.json", base64: btoa("{}") },
+			]);
+			expect(readFileSync(join(dir, "data/r.json"), "utf8")).toBe("{}");
+			for (const path of ["../x", "/etc/x", "a/../../x", ".git/config", ""])
+				expect(() => writeFiles(dir, [{ path, base64: "" }])).toThrow(
+					"refused",
+				);
+			expect(() =>
+				writeFiles(dir, [{ path: "index.html", base64: "" }]),
+			).toThrow();
+			expect(() => writeFiles(dir, [])).toThrow("refused");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
 	it("accepts a signed-in save or remove for a GitHub login and nothing else", async () => {
 		const { invalid } = await import("../scripts/publish-anon");
 		const cv = { me: "bun3" };

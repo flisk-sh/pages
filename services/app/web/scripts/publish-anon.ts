@@ -3,6 +3,9 @@
 //   {op: "publish" | "update" | "delete", id, hash, markdown?, cv?: {me, name}, source?}
 // or, for a visitor who signed in with GitHub (the worker checked who they are):
 //   {op: "save" | "remove", owner: <login>, cv?: {me, name}}   → the branch space/<owner>/cv, no key needed
+// or, from a GitHub Actions job whose OIDC token the worker checked (owner is the repository's owner):
+//   {op: "ci", owner, slug, blob, source}   → the branch space/<owner>/<slug>; the files are the blob, a JSON list of
+//   {path, base64} the worker stored in this repository
 // A space is the branch space/anon/<id>: an index.md, or a developer CV that src/cv.ts builds here from roadmap's
 // ratings string and roadmap's own data, so no visitor's markup is ever published. Its commits carry `Pages-Edit-Hash: <sha256 of the
 // visitor's key>`; update and delete go through only when the hash matches the one on the branch.
@@ -16,7 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkSpace, formatReport } from "../src/check.mjs";
+import { checkSpace, formatReport, validId } from "../src/check.mjs";
 import {
 	cleanName,
 	cvPage,
@@ -32,6 +35,8 @@ export interface Payload {
 	id: string;
 	hash: string;
 	owner?: string;
+	slug?: string;
+	blob?: string;
 	markdown?: string;
 	cv?: { me: string; name?: string };
 	source?: string;
@@ -39,6 +44,11 @@ export interface Payload {
 
 /** Why a payload cannot be acted on, or "" when it can. */
 export function invalid(p: Partial<Payload>): string {
+	if (p.op === "ci") {
+		if (!validId(p.owner ?? "", p.slug ?? "") || p.owner === "anon")
+			return "bad owner or slug";
+		return /^[a-f0-9]{40}$/.test(p.blob ?? "") ? "" : "bad blob";
+	}
 	if (p.op === "save" || p.op === "remove") {
 		if (!/^[a-z0-9](?:[a-z0-9-]{0,38})$/.test(p.owner ?? ""))
 			return "bad owner";
@@ -61,6 +71,39 @@ export function invalid(p: Partial<Payload>): string {
 	if (typeof p.markdown !== "string" || !p.markdown.trim())
 		return "no markdown";
 	return "";
+}
+
+const PART = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
+
+/** Writes the files a workflow sent ({path, base64} each) into dir. Paths are checked again: nothing outside dir. */
+export function writeFiles(dir: string, files: unknown) {
+	if (!Array.isArray(files) || !files.length)
+		throw new Error("refused: no files");
+	for (const f of files as { path?: unknown; base64?: unknown }[]) {
+		const path = typeof f?.path === "string" ? f.path : "";
+		const parts = path.split("/");
+		if (!parts.every((part) => PART.test(part)) || typeof f.base64 !== "string")
+			throw new Error(`refused: bad file ${path.slice(0, 120)}`);
+		mkdirSync(join(dir, ...parts.slice(0, -1)), { recursive: true });
+		writeFileSync(join(dir, ...parts), Buffer.from(f.base64, "base64"), {
+			flag: "wx",
+		});
+	}
+}
+
+/** The files the worker stored as a blob of this repository. */
+async function blobFiles(sha: string): Promise<unknown> {
+	const res = await fetch(
+		`https://api.github.com/repos/${process.env.REPO}/git/blobs/${sha}`,
+		{
+			headers: {
+				authorization: `Bearer ${process.env.GH_TOKEN}`,
+				accept: "application/vnd.github.raw+json",
+			},
+		},
+	);
+	if (!res.ok) throw new Error(`blob ${sha} answered ${res.status}`);
+	return JSON.parse(await res.text());
 }
 
 /** The edit hash a branch's newest commit message carries, or "". */
@@ -117,8 +160,13 @@ async function main() {
 	const p = (event.client_payload ?? {}) as Payload;
 	const why = invalid(p);
 	if (why) throw new Error(`refused: ${why}`);
-	const signedIn = p.op === "save" || p.op === "remove";
-	const handle = signedIn ? `${p.owner}/cv` : `anon/${p.id}`;
+	const fromCi = p.op === "ci";
+	const signedIn = p.op === "save" || p.op === "remove" || fromCi;
+	const handle = fromCi
+		? `${p.owner}/${p.slug}`
+		: signedIn
+			? `${p.owner}/cv`
+			: `anon/${p.id}`;
 	const branch = `space/${handle}`;
 	let parent = "";
 	try {
@@ -148,6 +196,7 @@ async function main() {
 			const dir = join(work, "space");
 			mkdirSync(dir);
 			if (p.cv) await writeCv(dir, p.cv, `https://pages.flisk.si/@${handle}/`);
+			else if (fromCi) writeFiles(dir, await blobFiles(p.blob as string));
 			else writeFileSync(join(dir, "index.md"), p.markdown as string);
 			const result = checkSpace(dir);
 			console.log(formatReport(result));

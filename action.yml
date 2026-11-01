@@ -1,5 +1,5 @@
 name: "Flisk Pages: check and publish"
-description: "Check a page against the Pages rules in CI, and publish it to pages.flisk.si. The check needs no keys."
+description: "Check a page in CI and publish it to pages.flisk.si/@<owner>/<name>. No keys: publish uses the job's OIDC token."
 author: "flisk-sh"
 branding:
   icon: "upload-cloud"
@@ -10,7 +10,7 @@ inputs:
     description: "The page: a folder with an index.html or index.md, or one .html or .md file, relative to the workspace. Run actions/checkout first."
     required: true
   command:
-    description: "check (default) runs the same rules as the publish and sends nothing. publish also puts the page on pages.flisk.si."
+    description: "check (default) runs the same rules as the publish and sends nothing. publish also puts the page on pages.flisk.si/@<repository owner>/<slug>/ (the job needs permissions: id-token: write)."
     required: false
     default: "check"
   slug:
@@ -22,7 +22,7 @@ inputs:
     required: false
     default: "true"
   token:
-    description: "For publish only: a GitHub token (a personal access token that can fork and open pull requests). Not needed for check."
+    description: "Leave empty: publish uses the job's OIDC token and needs no secret. Only to publish under your own login through a pull request instead: a personal access token that can fork and open pull requests."
     required: false
     default: ""
   node-version:
@@ -34,6 +34,9 @@ outputs:
   ok:
     description: "true when the check passed (and, for publish, the page was sent)."
     value: ${{ steps.run.outputs.ok }}
+  url:
+    description: "With publish, the page's link."
+    value: ${{ steps.run.outputs.url }}
 
 runs:
   using: "composite"
@@ -73,8 +76,16 @@ runs:
           args=(publish "$target")
           [ -n "$PG_SLUG" ] && args+=(--slug "$PG_SLUG")
           [ "$PG_WAIT" = "true" ] && args+=(--wait)
-          node "$cli" "${args[@]}"
-          code=$?
+          # No token: the job's own OIDC token says which repository this is, so nobody sets up a secret.
+          [ -z "$GH_TOKEN" ] && args+=(--oidc)
+          pub="${RUNNER_TEMP}/pages-publish.txt"
+          node "$cli" "${args[@]}" 2>&1 | tee "$pub"
+          code=${PIPESTATUS[0]}
+          url=$(grep -oE 'https://pages\.flisk\.si/@[a-z0-9-]+/[a-z0-9-]+/' "$pub" | head -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          if [ "$code" -eq 0 ] && [ -n "$url" ]; then
+            { echo; echo "### Published: $url"; } >> "$GITHUB_STEP_SUMMARY"
+          fi
         fi
         echo "ok=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         exit "$code"

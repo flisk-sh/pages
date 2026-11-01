@@ -136,6 +136,38 @@ export async function removeAnon(api, saved, fetcher = fetch) {
 	}
 }
 
+/** The files of a staged space as [{path, base64}], what POST /v1/ci/spaces takes. */
+export function readFolder(dir, at = dir, out = []) {
+	for (const name of readdirSync(at).sort()) {
+		const path = join(at, name);
+		if (statSync(path).isDirectory()) readFolder(dir, path, out);
+		else out.push({ path: path.slice(dir.length + 1).split("\\").join("/"), base64: readFileSync(path).toString("base64") });
+	}
+	return out;
+}
+
+/**
+ * Publishes a staged space from a GitHub Actions job with the job's OIDC token (the job needs `permissions: id-token:
+ * write`), so no key is set up. The space goes under the repository's owner. Returns {url, runs} or throws.
+ */
+export async function publishFromActions(api, slug, dir, env = process.env, fetcher = fetch) {
+	const ask = env.ACTIONS_ID_TOKEN_REQUEST_URL;
+	if (!ask || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+		throw new Error("No GitHub Actions OIDC token: give the job `permissions: id-token: write` (and contents: read).");
+	const issued = await fetcher(`${ask}&audience=${encodeURIComponent(api)}`, {
+		headers: { authorization: `Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+	}).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
+	if (typeof issued.value !== "string") throw new Error("GitHub Actions did not issue an OIDC token for this job.");
+	const res = await fetcher(`${api}/v1/ci/spaces`, {
+		method: "POST",
+		headers: { authorization: `Bearer ${issued.value}`, "content-type": "application/json" },
+		body: JSON.stringify({ slug, files: readFolder(dir) }),
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error(body.error || `publish.flisk.si answered ${res.status}`);
+	return { url: body.url, runs: body.runs };
+}
+
 /** Polls a link until it answers 200, for up to `seconds`. True when it did. */
 export async function waitLive(url, { seconds = 180, every = 5, fetcher = fetch } = {}) {
 	const until = Date.now() + seconds * 1000;

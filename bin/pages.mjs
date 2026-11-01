@@ -3,7 +3,7 @@
 // `npx -y @flisk-sh/pages publish page.html`, or `node bin/pages.mjs …` from a checkout of this repository.
 //
 //   pages check <path>                                    the same check the publish runs, nothing sent
-//   pages publish <path> [--slug name] [--wait] [--anon] [--dry-run]
+//   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]
 //   pages remove <slug | path>                            take one of your spaces down
 //   pages whoami                                          the login your spaces go under
 //
@@ -17,6 +17,10 @@
 // is live at /@anon/<id>/ with no account. Its token is kept in ~/.config/pages/anon.json, so publishing the same
 // path again adds a version and `pages remove <path>` takes it down. HTML needs the GitHub CLI.
 //
+// In a GitHub Actions job that may ask for an OIDC token (`permissions: id-token: write`), or with --oidc, publish sends
+// the page to publish.flisk.si with that token instead, and it goes live at /@<repository owner>/<slug>/: no key, no
+// fork. This is what the flisk-sh/pages Action does when it is given no token.
+//
 // PAGES_REPO overrides the repository and PAGES_PUBLISH_URL the anonymous service (for testing). --dry-run (or
 // PAGES_DRY_RUN=1, EVAL_PAGES_DRY_RUN=1) checks and prints what it would do, and sends nothing; with PAGES_LOGIN set
 // it does not ask GitHub who you are either.
@@ -28,6 +32,7 @@ import {
 	checkSpace,
 	formatReport,
 	publishAnon,
+	publishFromActions,
 	removeAnon,
 	saveSpace,
 	savedSpace,
@@ -91,9 +96,11 @@ function check(src) {
 	}
 }
 
-async function publish(path, slugArg, wait, anon) {
+async function publish(path, slugArg, wait, anon, oidc) {
 	const src = source(path);
+	if (oidc) return publishWithOidc(src, slugArg, wait);
 	const me = anon ? "" : signedIn();
+	if (!me && !anon && process.env.ACTIONS_ID_TOKEN_REQUEST_URL) return publishWithOidc(src, slugArg, wait);
 	if (!me && src.markdown === undefined)
 		die(
 			anon
@@ -144,6 +151,27 @@ async function publish(path, slugArg, wait, anon) {
 		rmSync(work, { recursive: true, force: true });
 		rmSync(staged, { recursive: true, force: true });
 	}
+}
+
+async function publishWithOidc(src, slugArg, wait) {
+	const slug = slugArg ?? slugify(src.name);
+	if (!validId("ci", slug)) die(`"${slug}" cannot be a space name: use lowercase letters, digits and dashes (--slug my-page).`);
+	if (!check(src)) die("\nFix the problems above, then publish again.");
+	const owner = (process.env.GITHUB_REPOSITORY_OWNER || "<repository owner>").toLowerCase();
+	if (DRY)
+		return console.log(`\nDry run, nothing sent. A publish would send this page to ${API} with this job's OIDC token,\nand the space would go live at ${SITE}@${owner}/${slug}/`);
+	const staged = stage(src);
+	let sent;
+	try {
+		sent = await publishFromActions(API, slug, staged);
+	} catch (e) {
+		die(`\n✗ ${e.message}`);
+	} finally {
+		rmSync(staged, { recursive: true, force: true });
+	}
+	console.log(`\n✓ Sent from GitHub Actions: ${sent.url}\nThe check and the commit run at ${sent.runs}`);
+	if (wait) await live(sent.url);
+	else console.log("It is live in a minute or two; --wait waits until it is.");
 }
 
 async function publishAnonymously(path, src, slugArg, wait) {
@@ -217,11 +245,11 @@ async function remove(arg) {
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === "check" && arg) process.exit(check(source(arg)) ? 0 : 1);
 else if (cmd === "publish" && arg)
-	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"));
+	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"), process.argv.includes("--oidc"));
 else if (cmd === "remove" && arg) await remove(arg);
 else if (cmd === "whoami") console.log(login().toLowerCase());
 else
 	die(
-		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--dry-run]\n  pages remove <slug | path>\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
+		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages remove <slug | path>\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
 		2,
 	);

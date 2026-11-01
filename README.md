@@ -51,8 +51,36 @@ puts the result on the job summary; the job fails when the page has problems.
     path: my-page            # a folder with index.html or index.md, or one .html or .md file
 ```
 
-For `command: publish`, give a `token` (a personal access token that can fork and open pull requests) and, if you
-like, a `slug`. The Action runs the CLI from its own tagged checkout, so the version you pin is the version that runs.
+`command: publish` puts it online too, with no secret: the job's GitHub OIDC token says which repository it is, and
+the page goes live at `https://pages.flisk.si/@<repository owner>/<slug>/` (the slug defaults to the folder name).
+Publishing again adds a version. Good for a report, benchmark or demo your CI already builds:
+
+```yaml
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write          # lets the job prove which repository it is; no key to set up
+jobs:
+  page:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./build-report.sh   # writes report/index.html (or index.md)
+      - uses: flisk-sh/pages@v1
+        id: pages
+        with:
+          path: report
+          command: publish
+          slug: benchmarks
+      - run: echo "${{ steps.pages.outputs.url }}"
+```
+
+Anyone who can run a workflow in a repository of that owner can publish under `/@<owner>/`. Pull requests from forks
+get no OIDC token, so publish on `push` to your main branch. To publish under your own login through a pull request
+instead, give a `token` (a personal access token that can fork and open pull requests). The Action runs the CLI from
+its own tagged checkout, so the version you pin is the version that runs.
 
 ## Put My Page Online (Claude directory)
 
@@ -72,6 +100,7 @@ your folder ──PR from your fork──▶ publish.yml ──check──▶ br
 | Home, a publisher's page, about, 404, `spaces.json`, sitemap, `llms.txt` | `services/app/web/src/pages.ts`, `src/app.ts`, `src/seo.ts` |
 | Branches → `_site/` | `services/app/web/scripts/build.ts` |
 | Pull request → branch, issue → removal | `scripts/publish-pr.ts`, `scripts/remove-issue.ts`, `.github/workflows/` |
+| Publish from GitHub Actions (OIDC, no key): `POST publish.flisk.si/v1/ci/spaces` → `publish-anon.yml` | `services/app/publish/src/worker.js`, `scripts/publish-anon.ts` |
 | The CLI (npm: `@flisk-sh/pages`) | `bin/pages.mjs`, `bin/lib.mjs`, `bin/package.json` |
 | The Claude Code plugin: `pages-publish`, `pages-check` | `.claude-plugin/`, `skills/` |
 | Skill evals (`claude plugin eval . --scaffold --allow-tools Bash Edit Write`) | `evals/` |
