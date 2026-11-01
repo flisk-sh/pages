@@ -50,6 +50,7 @@ npx -y @flisk-sh/pages share interview.html --wait
 # For bob:   https://pages.flisk.si/@you/interview/#bob.<key>
 ```
 
+When the time is up, `pages remove <name>` takes the page down (the locked copy stays in git history, which is why a link is only as private as its holders).
 Skip the question with `--to alice --to bob`. Send each person only their own link.
 
 The caveman rules:
