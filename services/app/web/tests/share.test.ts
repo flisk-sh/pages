@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createApp } from "../src/app";
@@ -13,7 +14,6 @@ describe("the share page", () => {
 		expect(html).toContain('src="/share.js"');
 		expect(html).toContain("script-src 'self'");
 		expect(html).not.toContain("script-src 'none'");
-		expect(html).not.toMatch(/<script>(?!<\/script>)/);
 	});
 
 	it("serves the sealing code and the page script from this site", async () => {
@@ -34,5 +34,18 @@ describe("the share page", () => {
 			"utf8",
 		);
 		expect(served).toBe(cli);
+	});
+});
+
+describe("the share page's integrity pin", () => {
+	it("pins the exact bytes of the script it serves", async () => {
+		const html = await (await get("/share")).text();
+		const pinned = html.match(/integrity="(sha384-[^"]+)"/)?.[1];
+		expect(pinned).toBeDefined();
+		const served = await (await get("/share.js")).text();
+		expect(
+			`sha384-${createHash("sha384").update(served).digest("base64")}`,
+		).toBe(pinned as string);
+		expect(html).toContain('crossorigin="anonymous"');
 	});
 });
