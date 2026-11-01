@@ -12,6 +12,7 @@ import {
 	checkSpace,
 	checkText,
 	csp,
+	decodeEntities,
 	formatReport,
 	hostOf,
 	validId,
@@ -326,5 +327,26 @@ describe("the report", () => {
 		expect(out.match(/\[size\]/g)?.length).toBe(4);
 		expect(out.match(/^! p\d\.html/gm)?.length).toBe(3);
 		expect(out).toContain("! …and 7 more [javascript-url] warnings");
+	});
+});
+
+describe("entity-encoded attributes", () => {
+	it("reads them the way a browser does", () => {
+		expect(decodeEntities("pass&#119;ord")).toBe("password");
+		expect(decodeEntities("pass&#x77;ord")).toBe("password");
+		expect(decodeEntities("https&colon;&sol;&sol;evil.example")).toBe(
+			"https://evil.example",
+		);
+		expect(decodeEntities("&unknown; a & b")).toBe("&unknown; a & b");
+	});
+	it("refuses a password field and an off-site form written with entities", () => {
+		const dir = mkdtempSync(join(tmpdir(), "check-"));
+		writeFileSync(
+			join(dir, "index.html"),
+			'<!doctype html><title>t</title><input type=pass&#119;ord><form action="https&colon;//evil.example"></form>',
+		);
+		const rules = checkSpace(dir).errors.map((e) => e.rule);
+		expect(rules).toContain("password");
+		expect(rules).toContain("form-action");
 	});
 });

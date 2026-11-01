@@ -95,10 +95,37 @@ export function tags(html, name) {
 		for (const a of m[1].matchAll(
 			/([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g,
 		))
-			attrs[a[1].toLowerCase()] = a[2] ?? a[3] ?? a[4] ?? "";
+			attrs[a[1].toLowerCase()] = decodeEntities(a[2] ?? a[3] ?? a[4] ?? "");
 		out.push(attrs);
 	}
 	return out;
+}
+
+const NAMED = {
+	amp: "&",
+	lt: "<",
+	gt: ">",
+	quot: '"',
+	apos: "'",
+	colon: ":",
+	sol: "/",
+	period: ".",
+	lpar: "(",
+	rpar: ")",
+	tab: "\t",
+	newline: "\n",
+};
+
+/** What a browser reads in an attribute value: numeric and the common named entities decoded (&#112; &#x70; &colon;). */
+export function decodeEntities(value) {
+	return value.replace(
+		/&(?:#(\d{1,7})|#x([0-9a-f]{1,6})|([a-z]+));?/gi,
+		(all, dec, hex, name) => {
+			if (name) return NAMED[name.toLowerCase()] ?? all;
+			const code = dec ? Number(dec) : Number.parseInt(hex, 16);
+			return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : all;
+		},
+	);
 }
 
 /** The host of an absolute or protocol-relative address, "" for a relative one, null for one that cannot be read. */
