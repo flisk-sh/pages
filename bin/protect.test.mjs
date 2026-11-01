@@ -61,3 +61,10 @@ test("an opened shared page always carries the warning and report bar", async ()
 	assert.equal(appended.length, 1);
 	assert.ok(html.includes("not checked by us") && html.includes("issues/new?template=report.yml"));
 });
+
+test("pages.mjs imports every helper the share path uses", () => {
+	const src = readFileSync(join(import.meta.dirname, "pages.mjs"), "utf8");
+	for (const name of ["shareStaged", "createInterface"]) {
+		assert.match(src, new RegExp(`^import[^;]*\\b${name}\\b[^;]*from`, "m"), `${name} is used but not imported`);
+	}
+});

@@ -29,6 +29,8 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createInterface } from "node:readline/promises";
+import { shareStaged } from "./protect.mjs";
 import {
 	checkSpace,
 	formatReport,
