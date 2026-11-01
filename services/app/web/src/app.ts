@@ -46,8 +46,11 @@ const shareBundle = (() => {
 	);
 	const body = `${seal}\n${page}`;
 	const digest = createHash("sha384").update(body).digest("base64");
-	return { body, integrity: `sha384-${digest}` };
+	// The file name carries the hash, so a cached old copy can never be served for the new page.
+	const path = `/share-${createHash("sha256").update(body).digest("hex").slice(0, 12)}.js`;
+	return { body, path, integrity: `sha384-${digest}` };
 })();
+export const SHARE_JS_PATH = shareBundle.path;
 
 export const TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -128,10 +131,12 @@ export function createApp(options: AppOptions = {}) {
 	// The site's own pages
 	app.get("/", (c) => c.html(homePage(baseOf(c), spaces)));
 	app.get("/about", (c) => c.html(aboutPage(baseOf(c))));
-	app.get("/share", (c) => c.html(sharePage(baseOf(c), shareBundle.integrity)));
+	app.get("/share", (c) =>
+		c.html(sharePage(baseOf(c), shareBundle.integrity, shareBundle.path)),
+	);
 	// The share page's two scripts, from static/ (served with the same policy as the rest of the site)
 	// One file for the page's script, with the sealing code inside, so one hash covers everything it runs.
-	app.get("/share.js", (c) =>
+	app.get(shareBundle.path, (c) =>
 		c.body(shareBundle.body, 200, {
 			"content-type": "text/javascript; charset=utf-8",
 			"cache-control": "public, max-age=604800",

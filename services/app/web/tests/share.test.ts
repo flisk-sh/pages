@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createApp } from "../src/app";
+import { createApp, SHARE_JS_PATH } from "../src/app";
 
 const app = createApp({ publicUrl: "https://pages.test/", spaces: [] });
 const get = (path: string) => app.request(path);
@@ -11,13 +11,13 @@ describe("the share page", () => {
 	it("serves a page whose only script is same-origin and whose policy blocks everything else", async () => {
 		const html = await (await get("/share")).text();
 		expect(html).toContain("Make a private file");
-		expect(html).toContain('src="/share.js"');
+		expect(html).toMatch(/src="\/share-[0-9a-f]{12}\.js"/);
 		expect(html).toContain("script-src 'self'");
 		expect(html).not.toContain("script-src 'none'");
 	});
 
 	it("serves the sealing code and the page script from this site", async () => {
-		for (const name of ["seal.js", "share.js"]) {
+		for (const name of ["seal.js", SHARE_JS_PATH.slice(1)]) {
 			const res = await get(`/${name}`);
 			expect(res.status).toBe(200);
 			expect(res.headers.get("content-type")).toContain("javascript");
@@ -42,7 +42,7 @@ describe("the share page's integrity pin", () => {
 		const html = await (await get("/share")).text();
 		const pinned = html.match(/integrity="(sha384-[^"]+)"/)?.[1];
 		expect(pinned).toBeDefined();
-		const served = await (await get("/share.js")).text();
+		const served = await (await get(SHARE_JS_PATH)).text();
 		expect(
 			`sha384-${createHash("sha384").update(served).digest("base64")}`,
 		).toBe(pinned as string);
@@ -52,7 +52,7 @@ describe("the share page's integrity pin", () => {
 
 describe("the native share button", () => {
 	it("is written only when the browser can share files, and never offers the passphrase", async () => {
-		const js = await (await get("/share.js")).text();
+		const js = await (await get(SHARE_JS_PATH)).text();
 		expect(js).toContain("navigator.canShare?.(");
 		expect(js).toContain("navigator.share({ files: [fileObj]");
 		expect(js).toContain("Confirm you saved the passphrase first.");
