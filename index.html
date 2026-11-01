@@ -16,7 +16,7 @@ h2 { font-size:1.1rem; margin:1.8rem 0 .5rem; }
 a { color:var(--accent); }
 .muted { color:var(--muted); }
 .box { background:var(--cell); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:.7rem 0; }
-.lab b { display:block; }
+summary { cursor:pointer; }
 button, input { font:inherit; padding:7px 10px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
 button { cursor:pointer; background:var(--accent); color:#fff; border-color:var(--accent); }
 button.ghost { background:transparent; color:var(--accent); }
@@ -35,28 +35,24 @@ code { font-family:ui-monospace,monospace; }
 <h1>Flisk candidate test</h1>
 <p class="muted"><a href="https://flisk.sh">flisk.sh</a> · <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
 
-<div class="box"><b>The rules.</b> Do 4 labs in a public GitHub repo. Check your own score below. <b>100/100 is the only pass.</b> You have <b>2 days</b>: <span id="deadline">until the end of the 2nd day after you got this link (UTC)</span>. Then reply with your repo link. We read nothing else.</div>
+<div class="box"><b>2 days. 100/100 to pass.</b> Deadline: <span id="deadline">end of day 2 after your start date (UTC)</span>.<br>Make a <b>new public GitHub repo</b>, do 4 labs, check your score below, reply with the repo link when it says Accepted.</div>
 
-<h2>Start</h2>
-<p>Install <a href="https://flisk.sh">Flisk</a>, create a <b>new public repo</b> after you got this link, and keep two files in it: <code>LOG.md</code> (your notes) and <code>GTM.md</code>. Star <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>. Commit with <code>git commit -s</code>. Never commit <code>.env</code>.</p>
-<p class="muted">Each lab has a prompt. Paste it into Claude Code (or any AI tool) and let it help; you still run it and write down what really happened.</p>
+<h2>The 4 labs</h2>
+<details class="box"><summary><b>1. Demo</b> — run <code>npx @flisk-sh/flisk demo</code> twice, then with Docker off</summary>
+<p>Write 3 timings and 3 confusions under <code># Lab 1</code> in <code>LOG.md</code>.</p>
+<div class="row"><button class="ghost" data-p="Help me with Lab 1 of the Flisk test. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three things that confused me, each with a one-line fix. Only write what really happened.">Copy Claude prompt</button></div></details>
+<details class="box"><summary><b>2. Build</b> — <code>flisk project agent-stack</code>, add one resource, <code>flisk up</code></summary>
+<p>Add <code>flisk resource my-api --type backend</code>. Paste the healthy <code>flisk status --json</code> under <code># Lab 2</code>. README links to flisk.sh and the Flisk repo. Do not hand-write container files.</p>
+<div class="row"><button class="ghost" data-p="Help me with Lab 2 of the Flisk test. In this repo run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Do not hand-write container manifests and do not edit .flisk/. Add a '# Lab 2' section to LOG.md with the healthy status output. Write a README that links to https://flisk.sh and https://github.com/flisk-sh/flisk.">Copy Claude prompt</button></div></details>
+<details class="box"><summary><b>3. Break it</b> — 3 faults, found with <code>flisk doctor</code>, <code>config verify</code> or <code>logs</code></summary>
+<p>Under <code># Lab 3</code>, a table: fault | symptom | command | fix | minutes (3 rows).</p>
+<div class="row"><button class="ghost" data-p="Help me with Lab 3 of the Flisk test. Break my Flisk system three ways: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Copy Claude prompt</button></div></details>
+<details class="box"><summary><b>4. Improve Flisk</b> — open a pull request to flisk-sh/flisk, with a test</summary>
+<p>Put the PR link under <code># Lab 4</code>. Add a test file to your repo. Then write <code>GTM.md</code>: 1. how to get the first 100 users, 2. three tools to integrate first, 3. one step this week.</p>
+<div class="row"><button class="ghost" data-p="Help me with Lab 4 of the Flisk test. Read https://github.com/flisk-sh/flisk, find one small real improvement (a fix, doc gap, missing test, or integration through `flisk mcp`) and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my own repo. Add a '# Lab 4' section to LOG.md with the PR link. Then write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Copy Claude prompt</button></div></details>
 
-<h2>The labs</h2>
-<div class="box lab"><b>Lab 1: First five minutes</b>Run <code>npx @flisk-sh/flisk demo</code> twice, then once with Docker stopped. In <code>LOG.md</code> under <code># Lab 1</code>: three timings and three things that confused you.
-<div class="row"><button class="ghost" data-p="Help me with Lab 1 of the Flisk test. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Then add a section '# Lab 1' to LOG.md with the three timings and three things that confused me, each with a one-line fix. Only write what really happened.">Copy prompt for Claude</button></div></div>
-
-<div class="box lab"><b>Lab 2: Build a small system</b>Run <code>flisk project agent-stack</code>, add one resource of your own (<code>flisk resource my-api --type backend</code>), run <code>flisk up</code> and <code>flisk status --json</code>. Section <code># Lab 2</code>: paste the healthy status. Do not hand-write container files.
-<div class="row"><button class="ghost" data-p="Help me with Lab 2 of the Flisk test. In this repo run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Do not hand-write container manifests and do not edit .flisk/. Add a '# Lab 2' section to LOG.md with the healthy status output. Write a README that links to https://flisk.sh and https://github.com/flisk-sh/flisk and lets a stranger run this in ten minutes.">Copy prompt for Claude</button></div></div>
-
-<div class="box lab"><b>Lab 3: Break it, then fix it</b>Break your system 3 ways (wrong port, missing env var, a service that starts too early). Find each with <code>flisk doctor --json</code>, <code>flisk config verify --json</code> or <code>flisk logs</code>. Section <code># Lab 3</code> with a table: fault | symptom | command | fix | minutes (at least 3 rows).
-<div class="row"><button class="ghost" data-p="Help me with Lab 3 of the Flisk test. Break my Flisk system three different ways: a wrong port, a missing environment variable, a service that starts before the one it depends on. For each, find it with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table with columns fault | symptom | command | fix | minutes and one row per fault. Only record what really happened.">Copy prompt for Claude</button></div></div>
-
-<div class="box lab"><b>Lab 4: Make Flisk better</b>Open a pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> (a fix, a doc, a test, an integration). Add at least one test file in your repo for what you built. Section <code># Lab 4</code>: link the PR and say why it matters.
-<div class="row"><button class="ghost" data-p="Help me with Lab 4 of the Flisk test. Read https://github.com/flisk-sh/flisk, find one small real improvement (a fix, a doc gap, a missing test, or an integration through `flisk mcp`), and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Also add a test file to my own repo. Then add a '# Lab 4' section to LOG.md with the PR link and why it matters.">Copy prompt for Claude</button></div></div>
-
-<div class="box lab"><b>Go-to-market</b><code>GTM.md</code> with exactly three numbered answers:
-1) how you would get the first 100 to 500 real users, 2) which 3 AI or developer tools to integrate first and why, 3) one step we can take this week.
-<div class="row"><button class="ghost" data-p="Help me write GTM.md for the Flisk test. It must have exactly three numbered answers, starting each line with 1. 2. 3.: (1) how to get the first 100 to 500 real users of Flisk, (2) which three AI or developer tools Flisk should integrate with first and why, (3) one concrete step the Flisk team can take this week. Be specific and short.">Copy prompt for Claude</button></div></div>
+<h2>You are scored on these 10 (10 points each)</h2>
+<ol class="muted"><li>README links flisk.sh and the Flisk repo</li><li>LOG.md has Lab 1 to 4</li><li>Lab 3 table has 3 rows</li><li>3+ service.json files</li><li>No .env or .flisk/ committed</li><li>A test file</li><li>Commits signed off (<code>git commit -s</code>)</li><li>You starred flisk-sh/flisk</li><li>PR open to flisk-sh/flisk</li><li>GTM.md has 1. 2. 3.</li></ol>
 
 <h2>Check your score</h2>
 <div class="row"><input id="user" placeholder="your GitHub username" autocomplete="off"><input id="repo" placeholder="your repo name" autocomplete="off"><input id="start" placeholder="start date YYYY-MM-DD" autocomplete="off"></div>
