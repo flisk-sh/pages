@@ -55,7 +55,7 @@ code { font-family:ui-monospace,monospace; }
 <ol class="muted"><li>README links flisk.sh and the Flisk repo</li><li>LOG.md has Lab 1 to 4</li><li>Lab 3 table has 3 rows</li><li>3+ service.json files</li><li>No .env or .flisk/ committed</li><li>A test file</li><li>Commits signed off (<code>git commit -s</code>)</li><li>You starred flisk-sh/flisk</li><li>PR open to flisk-sh/flisk</li><li>GTM.md has 1. 2. 3.</li></ol>
 
 <h2>Check your score</h2>
-<div class="row"><input id="user" placeholder="your GitHub username" autocomplete="off"><input id="repo" placeholder="your repo name" autocomplete="off"><input id="start" placeholder="start date YYYY-MM-DD" autocomplete="off"></div>
+<div class="row"><input id="user" placeholder="your GitHub username" autocomplete="off"><input id="repo" placeholder="your repo name" autocomplete="off"><input id="start" type="date" title="The day you got the link" aria-label="The day you got the link"></div>
 <div class="row"><button id="go">Check score</button><span id="msg" class="muted"></span></div>
 <div id="out" hidden>
 <p><span id="total"></span> <span id="verdict"></span></p>
@@ -84,7 +84,7 @@ for (const b of document.querySelectorAll("button[data-p]"))
 $("go").addEventListener("click", async () => {
 	const user = $("user").value.trim(), repo = $("repo").value.trim(), start = $("start").value.trim();
 	$("out").hidden = true;
-	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Fill in all three boxes. The start date is in your message, like 2026-11-02.");
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Fill in all three boxes. Pick the day you got the link.");
 	$("msg").textContent = "Checking…";
 	try {
 		const r = await runChecks({ user, repo, start });
