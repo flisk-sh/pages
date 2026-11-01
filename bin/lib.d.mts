@@ -29,4 +29,5 @@ export function publishFromActions(api: string, slug: string, dir: string, env?:
 export function versionsOf(site: string, handle: string, slug: string, fetcher?: Fetcher): Promise<number>;
 export function waitVersion(site: string, handle: string, slug: string, before: number, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;
 export function removeFromActions(api: string, slug: string, env?: Record<string, string | undefined>, fetcher?: Fetcher): Promise<{ url: string }>;
+export function waitCommitted(api: string, handle: string, slug: string, source: string, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;
 export function waitLive(url: string, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;

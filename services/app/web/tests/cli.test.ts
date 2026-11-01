@@ -25,6 +25,7 @@ import {
 	stage,
 	storePath,
 	versionsOf,
+	waitCommitted,
 	waitLive,
 	waitVersion,
 } from "../../../../bin/lib.mjs";
@@ -419,5 +420,41 @@ describe("waiting for a new version and removing from GitHub Actions", () => {
 		expect(out.url).toBe("https://pages.test/@org/bench/");
 		expect(calls[1].url).toBe("https://publish.test/v1/ci/spaces/bench");
 		expect(calls[1].init?.method).toBe("DELETE");
+	});
+});
+
+describe("waiting for this run's version to be committed", () => {
+	it("waits until the space's head came from this run", async () => {
+		let n = 0;
+		const fetcher = (async (url: string) => {
+			expect(url).toBe("https://publish.test/v1/spaces/org/bench/head");
+			n++;
+			return Response.json({
+				sha: "x",
+				source:
+					n < 3
+						? "https://github.com/org/r/actions/runs/1"
+						: "https://github.com/org/r/actions/runs/2",
+			});
+		}) as unknown as typeof fetch;
+		expect(
+			await waitCommitted(
+				"https://publish.test",
+				"org",
+				"bench",
+				"https://github.com/org/r/actions/runs/2",
+				{ every: 0, fetcher },
+			),
+		).toBe(true);
+		expect(n).toBe(3);
+		expect(
+			await waitCommitted(
+				"https://publish.test",
+				"org",
+				"bench",
+				"https://github.com/org/r/actions/runs/9",
+				{ seconds: 0, every: 0, fetcher },
+			),
+		).toBe(false);
 	});
 });

@@ -35,6 +35,7 @@ import {
 	publishFromActions,
 	removeFromActions,
 	versionsOf,
+	waitCommitted,
 	waitVersion,
 	removeAnon,
 	saveSpace,
@@ -175,10 +176,16 @@ async function publishWithOidc(src, slugArg, wait) {
 	}
 	console.log(`\n✓ Sent from GitHub Actions: ${sent.url}\nThe check and the commit run at ${sent.runs}`);
 	if (!wait) return console.log("It is live in a minute or two; --wait waits until it is.");
-	// On an update the link already answers with the old version, so wait for the version count to go up.
-	console.log(`\nWaiting for version ${before + 1} to be live…`);
-	if (await waitVersion(SITE, owner, slug, before)) console.log(`✓ Live now: ${sent.url} (version ${before + 1})`);
-	else die(`Version ${before + 1} is not live after five minutes (a newer publish of the same page replaces a waiting one); see ${sent.runs}`);
+	// First the real answer: publish.flisk.si checked this run's page again and committed it.
+	const run = `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+	console.log("\nWaiting for the check and the commit…");
+	if (!(await waitCommitted(API, owner, slug, run)))
+		die(`✗ Not committed after ten minutes: the check on publish.flisk.si refused it, or a newer run of the same page replaced it. See ${sent.runs}`);
+	console.log(`✓ Checked and committed as version ${before + 1}`);
+	// Then the deploy, which is one queue for the whole site: when it is slow the page is still on its way.
+	console.log("Waiting for it to be live…");
+	if (await waitVersion(SITE, owner, slug, before, { seconds: 600 })) console.log(`✓ Live now: ${sent.url} (version ${before + 1})`);
+	else console.log(`::warning::Committed, but the site's deploy queue has not reached it after ten minutes; ${sent.url} shows version ${before + 1} when it does.`);
 }
 
 async function publishAnonymously(path, src, slugArg, wait) {

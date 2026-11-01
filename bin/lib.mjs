@@ -198,6 +198,22 @@ export async function waitVersion(site, handle, slug, before, { seconds = 300, e
 	}
 }
 
+/**
+ * Waits until the space's newest version came from `source` (this job's run URL): publish.flisk.si checked the page
+ * again and committed it. True when it did within `seconds`.
+ */
+export async function waitCommitted(api, handle, slug, source, { seconds = 600, every = 5, fetcher = fetch } = {}) {
+	const until = Date.now() + seconds * 1000;
+	for (;;) {
+		try {
+			const res = await fetcher(`${api}/v1/spaces/${handle}/${slug}/head`, { cache: "no-store" });
+			if (res.ok && (await res.json()).source === source) return true;
+		} catch {}
+		if (Date.now() + every * 1000 > until) return false;
+		await new Promise((r) => setTimeout(r, every * 1000));
+	}
+}
+
 /** Takes down /@<repository owner>/<slug>/ from a GitHub Actions job of that owner, with the job's OIDC token. */
 export async function removeFromActions(api, slug, env = process.env, fetcher = fetch) {
 	const token = await oidcToken(api, env, fetcher);

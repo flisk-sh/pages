@@ -153,3 +153,20 @@ describe("taking down a page from GitHub Actions", () => {
 		expect(gh.sent).toHaveLength(0);
 	});
 });
+
+describe("a space's newest version", () => {
+	const get = (path) => new Request(`https://publish.test${path}`);
+	it("answers the branch head's sha and the run it came from", async () => {
+		const fetcher = async (url) => {
+			expect(url).toBe("https://api.github.com/repos/flisk-sh/pages/commits/space/some-org/bench");
+			return Response.json({ sha: "b".repeat(40), commit: { message: "Update @some-org/bench\n\nSource: https://github.com/Some-Org/tool/actions/runs/9", committer: { date: "2026-11-01T13:00:00Z" } } });
+		};
+		const res = await handle(get("/v1/spaces/some-org/bench/head"), env, fetcher);
+		expect(await res.json()).toEqual({ sha: "b".repeat(40), source: "https://github.com/Some-Org/tool/actions/runs/9", date: "2026-11-01T13:00:00Z" });
+	});
+	it("answers null for a space that is not there, and 404 for a bad name", async () => {
+		const res = await handle(get("/v1/spaces/some-org/none/head"), env, async () => new Response("{}", { status: 404 }));
+		expect(await res.json()).toEqual({ sha: null });
+		expect((await handle(get("/v1/spaces/Bad_Name/x/head"), env, async () => Response.json({}))).status).toBe(404);
+	});
+});

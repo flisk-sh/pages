@@ -26,6 +26,8 @@
 //   POST   /v1/ci/spaces  {slug, files: [{path, base64}]}  Bearer <OIDC token, audience PUBLISH_ORIGIN>
 //                                      → 202 {url}   the space /@<repository owner>/<slug>/, new or a new version
 //   DELETE /v1/ci/spaces/<slug>        Bearer <the same kind of token>  → 202 {url}   take it down
+//   GET    /v1/spaces/<handle>/<slug>/head  → {sha, source, date} of the space's newest version, or {sha: null}
+//                                      (public; what a CI job waits on: its version is checked and committed)
 //
 // Settings (wrangler.toml [vars]): PAGES_REPO, PAGES_ORIGIN, PUBLISH_ORIGIN, ALLOWED_ORIGINS (comma-separated),
 // MAX_PER_IP_HOUR, MAX_PER_IP_DAY, MAX_PER_HOUR, MAX_CI_PER_HOUR, MAX_CI_PER_DAY. Secret: GITHUB_TOKEN (fine-grained, flisk-sh/pages only,
@@ -359,6 +361,33 @@ async function ciRemove(request, env, fetcher, headers, url, slug) {
 	return json({ url: `${env.PAGES_ORIGIN}/@${who.owner}/${slug}/` }, 202, headers);
 }
 
+/**
+ * The newest commit of the branch space/<handle>/<slug>: its sha, the run it came from (Source:) and when. Answers
+ * are cached for a few seconds, since every CI job that publishes polls this.
+ */
+async function spaceHead(env, fetcher, headers, handle, slug) {
+	if (!validIdPair(handle, slug)) return json({ error: "unknown space" }, 404, headers);
+	const key = new Request(`${env.PUBLISH_ORIGIN}/__head/${handle}/${slug}`);
+	try {
+		const hit = await caches.default.match(key);
+		if (hit) return new Response(hit.body, { status: 200, headers: { "content-type": "application/json", ...headers } });
+	} catch {}
+	const res = await fetcher(`https://api.github.com/repos/${env.PAGES_REPO}/commits/space/${handle}/${slug}`, {
+		headers: { authorization: `Bearer ${env.GITHUB_TOKEN}`, accept: "application/vnd.github+json", "user-agent": "pages-publish-worker" },
+	}).catch(() => null);
+	if (!res || (res.status !== 200 && res.status !== 404 && res.status !== 422)) return json({ error: "Could not reach GitHub; try again." }, 502, headers);
+	const c = res.status === 200 ? await res.json() : null;
+	const body = JSON.stringify(
+		c ? { sha: c.sha, source: /^Source: (\S+)$/m.exec(c.commit?.message ?? "")?.[1] ?? null, date: c.commit?.committer?.date ?? null } : { sha: null },
+	);
+	try {
+		await caches.default.put(key, new Response(body, { headers: { "cache-control": "s-maxage=4" } }));
+	} catch {}
+	return new Response(body, { status: 200, headers: { "content-type": "application/json", ...headers } });
+}
+
+const validIdPair = (handle, slug) => HANDLE.test(handle) && SLUG.test(slug);
+
 async function ciPublish(request, env, fetcher, headers, url) {
 	const [who, refused] = await ciOwner(request, env, fetcher, headers);
 	if (refused) return refused;
@@ -426,6 +455,8 @@ export async function handle(request, env, fetcher = fetch) {
 		return ownSpace(request, env, fetcher, headers, url);
 
 	if (request.method === "POST" && url.pathname === "/v1/ci/spaces") return ciPublish(request, env, fetcher, headers, url);
+	const head = url.pathname.match(/^\/v1\/spaces\/([^/]+)\/([^/]+)\/head$/);
+	if (request.method === "GET" && head) return spaceHead(env, fetcher, headers, head[1], head[2]);
 	const ciSpace = url.pathname.match(/^\/v1\/ci\/spaces\/([^/]+)$/);
 	if (request.method === "DELETE" && ciSpace) return ciRemove(request, env, fetcher, headers, url, ciSpace[1]);
 
