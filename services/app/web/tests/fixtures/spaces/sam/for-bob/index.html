@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Shared page</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#14141a;color:#ececf1}p{max-width:30rem;padding:16px;text-align:center}</style></head>
+<body data-pages-shared><p id="m">This page is shared with certain people. Open the whole link you were given.</p>
+<script>
+(async()=>{
+const [id,k]=location.hash.slice(1).split(".");if(!k)return;
+const P={"bob":{"iv":"VOWfoDiHMw+a7DEF","data":"lOClIKmkBkOZYc/KmSyDXgRa4ne5jbVmOq1QcCAuwJ0ICN3ioPKUw6YX6RCXP64i"}},C={"iv":"89p+6kaYqXlOBsv/","data":"9J6SSp0B4O/XWR+ei9z+iF0z82VmfDrTkjU="};
+const u=(s)=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")),(c)=>c.charCodeAt(0));
+const open=async(key,o)=>crypto.subtle.decrypt({name:"AES-GCM",iv:u(o.iv)},await crypto.subtle.importKey("raw",key,"AES-GCM",false,["decrypt"]),u(o.data));
+try{
+const content=new Uint8Array(await open(u(k),P[id]));
+const html=await open(content,C);
+document.open();document.write(new TextDecoder().decode(html));document.close();
+}catch{document.getElementById("m").textContent="This link is not for you, or it was taken back. Ask for a new one."}
+})();
+</script></body></html>

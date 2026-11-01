@@ -30,6 +30,8 @@ export interface Space extends SpaceGit {
 	kind: "html" | "md";
 	title: string;
 	description: string;
+	/** A shared (locked) page: served by its link, left out of every list, the sitemap and spaces.json. */
+	unlisted: boolean;
 }
 
 export const spacePath = (s: { handle: string; slug: string }) =>
@@ -124,6 +126,11 @@ export function readSpaces(
 				...meta,
 				title: clip(title, 90),
 				description: clip(description, 200),
+				unlisted:
+					kind === "html" &&
+					readFileSync(join(dir, "index.html"), "utf8").includes(
+						"data-pages-shared",
+					),
 			});
 		}
 	return out.sort((a, b) => b.updated.localeCompare(a.updated));

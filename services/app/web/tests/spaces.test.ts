@@ -30,6 +30,7 @@ describe("readSpaces", () => {
 	it("reads title and description from the page or the Markdown, newest first", () => {
 		expect(spaces.map((s) => `${s.handle}/${s.slug}`)).toEqual([
 			"sam/gpu-explainer",
+			"sam/for-bob",
 			"sam/notes",
 		]);
 		expect(spaces[0]).toMatchObject({
@@ -38,8 +39,9 @@ describe("readSpaces", () => {
 			versions: 3,
 		});
 		expect(spaces[0].description).toStartWith("Thousands of small cores");
-		expect(spaces[1]).toMatchObject({ kind: "md", title: "Launch notes" });
-		expect(spaces[1].description).toBe(
+		const notes = spaces.find((s) => s.slug === "notes");
+		expect(notes).toMatchObject({ kind: "md", title: "Launch notes" });
+		expect(notes?.description).toBe(
 			"What we learned shipping Pages in a week.",
 		);
 	});
@@ -234,5 +236,17 @@ describe("the bar's source link", () => {
 		expect(bar("https://pages.test", spaces[0] as Space)).toContain(
 			"tree/space/sam/gpu-explainer",
 		);
+	});
+});
+
+describe("shared pages", () => {
+	it("open by their link but are in no list, spaces.json or sitemap", async () => {
+		const shared = spaces.find((s) => s.slug === "for-bob");
+		expect(shared?.unlisted).toBe(true);
+		expect((await get("/@sam/for-bob/")).status).toBe(200);
+		expect(await (await get("/")).text()).not.toContain("for-bob");
+		expect(await (await get("/@sam/")).text()).not.toContain("for-bob");
+		expect(await (await get("/spaces.json")).text()).not.toContain("for-bob");
+		expect(await (await get("/sitemap.xml")).text()).not.toContain("for-bob");
 	});
 });

@@ -85,8 +85,11 @@ export function byHandle(spaces: Space[]): Map<string, Space[]> {
 }
 
 export function createApp(options: AppOptions = {}) {
-	const spaces = options.spaces ?? [];
+	const served = options.spaces ?? [];
+	// Shared pages open by their link but are never listed: not on a home page, a handle, spaces.json or the sitemap.
+	const spaces = served.filter((s) => !s.unlisted);
 	const handles = byHandle(spaces);
+	const servedBy = byHandle(served);
 	const lastmod = (options.builtAt ?? new Date()).toISOString().slice(0, 10);
 	const files = loadAssets();
 	const app = new Hono();
@@ -128,7 +131,7 @@ export function createApp(options: AppOptions = {}) {
 	});
 	app.get("/:at{@[a-z0-9-]+}/:slug/*", (c) => {
 		const handle = c.req.param("at").slice(1);
-		const s = handles.get(handle)?.find((x) => x.slug === c.req.param("slug"));
+		const s = servedBy.get(handle)?.find((x) => x.slug === c.req.param("slug"));
 		if (!s) return c.html(notFoundPage(baseOf(c)), 404);
 		const prefix = `/${spacePath(s)}`;
 		if (!c.req.path.startsWith(prefix)) return c.redirect(prefix, 301);

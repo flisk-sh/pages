@@ -43,7 +43,7 @@ function shell(page, people) {
 <html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Shared page</title>
 <style>body{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#14141a;color:#ececf1}p{max-width:30rem;padding:16px;text-align:center}</style></head>
-<body><p id="m">This page is shared with certain people. Open the whole link you were given.</p>
+<body data-pages-shared><p id="m">This page is shared with certain people. Open the whole link you were given.</p>
 <script>
 (async()=>{
 const [id,k]=location.hash.slice(1).split(".");if(!k)return;

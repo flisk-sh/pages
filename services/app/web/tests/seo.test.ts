@@ -103,7 +103,9 @@ describe("files for crawlers", () => {
 		expect(xml).toContain(
 			"<loc>https://tool.test/@sam/gpu-explainer/</loc><lastmod>2026-10-27</lastmod>",
 		);
-		expect(xml.match(/<url>/g)).toHaveLength(2 + 1 + spaces.length);
+		expect(xml.match(/<url>/g)).toHaveLength(
+			2 + 1 + spaces.filter((s) => !s.unlisted).length,
+		);
 	});
 
 	it("llms.txt, the manifest and security.txt", async () => {
