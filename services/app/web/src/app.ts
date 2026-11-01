@@ -1,6 +1,7 @@
 // Routes. The same app is the local preview (`flisk up`, `bun run dev`) and the static site: scripts/build.ts asks
 // it for every page and writes the answers to files for GitHub Pages. Spaces are /@<handle>/<slug>/…, served from
 // the folders the build gathered from their branches.
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { Hono } from "hono";
@@ -35,6 +36,18 @@ export interface AppOptions {
 
 /** The demo video and its poster and captions (see DEMO in pages.ts). */
 export const STATIC = join(import.meta.dir, "..", "static");
+
+/** The Share page's script: the sealing code and the page code as one module, plus its SHA-384 for the page to pin. */
+const shareBundle = (() => {
+	const seal = readFileSync(join(STATIC, "seal.js"), "utf8");
+	const page = readFileSync(join(STATIC, "share.js"), "utf8").replace(
+		/^import .*\n/m,
+		"",
+	);
+	const body = `${seal}\n${page}`;
+	const digest = createHash("sha384").update(body).digest("base64");
+	return { body, integrity: `sha384-${digest}` };
+})();
 
 export const TYPES: Record<string, string> = {
 	".html": "text/html; charset=utf-8",
@@ -115,15 +128,21 @@ export function createApp(options: AppOptions = {}) {
 	// The site's own pages
 	app.get("/", (c) => c.html(homePage(baseOf(c), spaces)));
 	app.get("/about", (c) => c.html(aboutPage(baseOf(c))));
-	app.get("/share", (c) => c.html(sharePage(baseOf(c))));
+	app.get("/share", (c) => c.html(sharePage(baseOf(c), shareBundle.integrity)));
 	// The share page's two scripts, from static/ (served with the same policy as the rest of the site)
-	for (const name of ["seal.js", "share.js"])
-		app.get(`/${name}`, (c) =>
-			c.body(readFileSync(join(STATIC, name)), 200, {
-				"content-type": "text/javascript; charset=utf-8",
-				"cache-control": "public, max-age=604800",
-			}),
-		);
+	// One file for the page's script, with the sealing code inside, so one hash covers everything it runs.
+	app.get("/share.js", (c) =>
+		c.body(shareBundle.body, 200, {
+			"content-type": "text/javascript; charset=utf-8",
+			"cache-control": "public, max-age=604800",
+		}),
+	);
+	app.get("/seal.js", (c) =>
+		c.body(readFileSync(join(STATIC, "seal.js")), 200, {
+			"content-type": "text/javascript; charset=utf-8",
+			"cache-control": "public, max-age=604800",
+		}),
+	);
 	app.get("/404.html", (c) => c.html(notFoundPage(baseOf(c)), 404));
 	app.get("/spaces.json", (c) =>
 		c.body(spacesJson(baseOf(c), spaces), 200, {

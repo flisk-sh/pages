@@ -301,7 +301,7 @@ export function aboutPage(base: string): string {
 const SHARE_POLICY =
 	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
 
-export function sharePage(base: string): string {
+export function sharePage(base: string, integrity: string): string {
 	const page = layout(
 		base,
 		{
@@ -319,7 +319,7 @@ export function sharePage(base: string): string {
 <button type="submit">Make private files</button></form>
 <p id="m" role="status"></p><div id="out"></div>
 <p class="muted">Anyone with the file and the passphrase can read the page. Copies you send cannot be taken back. <a href="${SITE.repo}/blob/main/bin/seal.js">Read the sealing code</a>.</p>
-<script type="module" src="${rootOf(base)}/share.js"></script></div>`,
+<script type="module" src="${rootOf(base)}/share.js" integrity="${integrity}" crossorigin="anonymous"></script></div>`,
 	);
 	return page.replace(POLICY, SHARE_POLICY);
 }
