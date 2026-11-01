@@ -42,43 +42,39 @@ describe("the page bar in a browser", () => {
 		).toEqual(expect.arrayContaining(["share", "private", "report", "source"]));
 	});
 
-	it("share copies the page address and says copied", async () => {
+	it("share opens a menu: copy link, email and Gmail", async () => {
+		const w = await open("/@sam/gpu-explainer/");
+		const items = [
+			...w.document.querySelectorAll("[data-pages-bar] [data-menu] a"),
+		];
+		expect(items.map((a) => a.textContent)).toEqual([
+			"Copy link",
+			"Email",
+			"Gmail",
+		]);
+		expect(items[1].getAttribute("href")).toStartWith(
+			"mailto:?subject=How%20GPUs%20work&body=",
+		);
+		expect(items[2].getAttribute("href")).toStartWith(
+			"https://mail.google.com/mail/?view=cm&su=",
+		);
+		expect(items[2].getAttribute("href")).toContain(
+			encodeURIComponent("https://pages.test/@sam/gpu-explainer/"),
+		);
+	});
+
+	it("copy link writes the page address and says Copied", async () => {
 		const copied: string[] = [];
 		const w = await open("/@sam/gpu-explainer/", "", {
 			writeText: async (t: string) => void copied.push(t),
 		});
-		const share = [...w.document.querySelectorAll("[data-pages-bar] a")].find(
-			(a) => a.textContent === "share",
-		);
-		share?.dispatchEvent(
+		const copy = w.document.querySelector("[data-pages-bar] [data-menu] a");
+		copy?.dispatchEvent(
 			new w.MouseEvent("click", { bubbles: true, cancelable: true }),
 		);
 		await wait(50);
 		expect(copied).toEqual(["https://pages.test/@sam/gpu-explainer/"]);
-		expect(share?.textContent).toBe("copied");
-	});
-
-	it("share opens the email instead when the browser refuses the copy", async () => {
-		const w = await open("/@sam/gpu-explainer/", "", {
-			writeText: async () => Promise.reject(new Error("denied")),
-		});
-		const share = [...w.document.querySelectorAll("[data-pages-bar] a")].find(
-			(a) => a.textContent === "share",
-		);
-		let nav = "";
-		Object.defineProperty(w.location, "href", {
-			configurable: true,
-			get: () => "https://pages.test/",
-			set: (v: string) => void (nav = v),
-		});
-		share?.dispatchEvent(
-			new w.MouseEvent("click", { bubbles: true, cancelable: true }),
-		);
-		await wait(50);
-		expect(nav).toStartWith("mailto:?subject=");
-		expect(nav).toContain(
-			encodeURIComponent("https://pages.test/@sam/gpu-explainer/"),
-		);
+		expect(copy?.textContent).toBe("Copied");
 	});
 });
 
