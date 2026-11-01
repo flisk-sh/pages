@@ -2,68 +2,99 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="description" content="Flisk candidate test: four short labs, a score you check yourself, 2 days. 100/100 is the only pass.">
+<meta name="description" content="Flisk engineering assessment: four practical exercises with an automated self-assessment.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flisk candidate test</title>
+<title>Flisk engineering assessment</title>
 <style>
-:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; --ok:#12805c; --bad:#c0392b; }
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; --ok:#12805c; --bad:#b3372a; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; } }
 :root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; }
-body { background:var(--bg); color:var(--fg); font:16px/1.55 system-ui,-apple-system,sans-serif; margin:0; }
-main { max-width:720px; margin:0 auto; padding:28px 16px 64px; }
-h1 { font-size:1.6rem; margin:0 0 .3rem; }
-h2 { font-size:1.1rem; margin:1.8rem 0 .5rem; }
+body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
+main { max-width:760px; margin:0 auto; padding:40px 16px 72px; }
+.kicker { color:var(--muted); font-size:.85rem; letter-spacing:.04em; text-transform:uppercase; margin:0 0 .4rem; }
+h1 { font-size:1.8rem; margin:0 0 .4rem; }
+h2 { font-size:1.2rem; margin:2.4rem 0 .6rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
 a { color:var(--accent); }
 .muted { color:var(--muted); }
-.box { background:var(--cell); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:.7rem 0; }
-summary { cursor:pointer; }
-button, input { font:inherit; padding:7px 10px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
-button { cursor:pointer; background:var(--accent); color:#fff; border-color:var(--accent); }
-button.ghost { background:transparent; color:var(--accent); }
-.row { display:flex; gap:8px; flex-wrap:wrap; margin:.5rem 0; }
-.row input { flex:1; min-width:140px; }
-table { width:100%; border-collapse:collapse; }
-td { padding:6px 4px; border-bottom:1px solid var(--line); }
-td.s { width:2.2rem; text-align:center; font-weight:700; }
+table { width:100%; border-collapse:collapse; margin:.8rem 0; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:.95rem; }
+th { background:var(--cell); font-weight:600; }
+td.n { width:2.4rem; color:var(--muted); }
+details { margin:.3rem 0 .8rem; font-size:.92rem; }
+summary { cursor:pointer; color:var(--accent); }
+details p { margin:.4rem 0; color:var(--muted); }
+button, input { font:inherit; padding:7px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+button { cursor:pointer; }
+button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.row { display:flex; gap:10px; flex-wrap:wrap; margin:.6rem 0; }
+.row input { flex:1; min-width:150px; }
+label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:2px; }
+.field { flex:1; min-width:150px; }
+.field input { width:100%; box-sizing:border-box; }
+td.s { width:2rem; text-align:center; font-weight:700; }
 .ok { color:var(--ok); } .bad { color:var(--bad); }
-#total { font-size:1.4rem; font-weight:700; }
-code { font-family:ui-monospace,monospace; }
+#total { font-size:1.3rem; font-weight:700; }
+code { font-family:ui-monospace,monospace; font-size:.9em; }
 </style>
 </head>
 <body>
 <main>
-<h1>Flisk candidate test</h1>
-<p class="muted"><a href="https://flisk.sh">flisk.sh</a> · <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
+<p class="kicker">Flisk · Engineering assessment</p>
+<h1>Practical assessment</h1>
+<p class="muted">Four exercises on a real product, with an automated self-assessment. Product: <a href="https://flisk.sh">flisk.sh</a> · Source: <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
 
-<div class="box"><b>2 days. 100/100 to pass.</b> Deadline: <span id="deadline">end of day 2 after your start date (UTC)</span>.<br>Make a <b>new public GitHub repo</b>, do 4 labs, check your score below, reply with the repo link when it says Accepted.</div>
+<h2>Summary</h2>
+<table>
+<tr><th>Time allowed</th><td>48 hours, counted to the end of the second day after your start date (UTC). <span id="deadline"></span></td></tr>
+<tr><th>Work product</th><td>One new public GitHub repository, created after you received this link.</td></tr>
+<tr><th>Pass criterion</th><td>All ten checks below pass. The result is binary.</td></tr>
+<tr><th>Review</th><td>Automated and identical for you and for us. Run it as often as you like before the deadline.</td></tr>
+<tr><th>Submission</th><td>Reply with the repository link once the self-assessment shows “Accepted”.</td></tr>
+</table>
 
-<h2>The 4 labs</h2>
-<details class="box"><summary><b>1. Demo</b> — run <code>npx @flisk-sh/flisk demo</code> twice, then with Docker off</summary>
-<p>Write 3 timings and 3 confusions under <code># Lab 1</code> in <code>LOG.md</code>.</p>
-<div class="row"><button class="ghost" data-p="Help me with Lab 1 of the Flisk test. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three things that confused me, each with a one-line fix. Only write what really happened.">Copy Claude prompt</button></div></details>
-<details class="box"><summary><b>2. Build</b> — <code>flisk project agent-stack</code>, add one resource, <code>flisk up</code></summary>
-<p>Add <code>flisk resource my-api --type backend</code>. Paste the healthy <code>flisk status --json</code> under <code># Lab 2</code>. README links to flisk.sh and the Flisk repo. Do not hand-write container files.</p>
-<div class="row"><button class="ghost" data-p="Help me with Lab 2 of the Flisk test. In this repo run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Do not hand-write container manifests and do not edit .flisk/. Add a '# Lab 2' section to LOG.md with the healthy status output. Write a README that links to https://flisk.sh and https://github.com/flisk-sh/flisk.">Copy Claude prompt</button></div></details>
-<details class="box"><summary><b>3. Break it</b> — 3 faults, found with <code>flisk doctor</code>, <code>config verify</code> or <code>logs</code></summary>
-<p>Under <code># Lab 3</code>, a table: fault | symptom | command | fix | minutes (3 rows).</p>
-<div class="row"><button class="ghost" data-p="Help me with Lab 3 of the Flisk test. Break my Flisk system three ways: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Copy Claude prompt</button></div></details>
-<details class="box"><summary><b>4. Improve Flisk</b> — open a pull request to flisk-sh/flisk, with a test</summary>
-<p>Put the PR link under <code># Lab 4</code>. Add a test file to your repo. Then write <code>GTM.md</code>: 1. how to get the first 100 users, 2. three tools to integrate first, 3. one step this week.</p>
-<div class="row"><button class="ghost" data-p="Help me with Lab 4 of the Flisk test. Read https://github.com/flisk-sh/flisk, find one small real improvement (a fix, doc gap, missing test, or integration through `flisk mcp`) and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my own repo. Add a '# Lab 4' section to LOG.md with the PR link. Then write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Copy Claude prompt</button></div></details>
+<h2>Exercises</h2>
+<table>
+<tr><th></th><th>Exercise</th><th>Deliverable</th></tr>
+<tr><td class="n">1</td><td><b>First run.</b> Run <code>npx @flisk-sh/flisk demo</code> twice, then once with Docker stopped.</td><td><code>LOG.md</code>, heading <code># Lab 1</code>: three timings and three points of friction.</td></tr>
+<tr><td class="n">2</td><td><b>Build.</b> <code>flisk project agent-stack</code>, add <code>flisk resource my-api --type backend</code>, then <code>flisk up</code>.</td><td>Healthy <code>flisk status --json</code> under <code># Lab 2</code>. README linking flisk.sh and the Flisk repository. No hand-written container files.</td></tr>
+<tr><td class="n">3</td><td><b>Diagnose.</b> Introduce three faults. Find each with <code>flisk doctor</code>, <code>flisk config verify</code> or <code>flisk logs</code>.</td><td>Table under <code># Lab 3</code>: fault, symptom, command, fix, minutes. Three rows.</td></tr>
+<tr><td class="n">4</td><td><b>Contribute.</b> Open a pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>. Add a test to your repository.</td><td>PR link under <code># Lab 4</code>. <code>GTM.md</code> with three numbered answers: first 100 users, three integrations, one step this week.</td></tr>
+</table>
+<p class="muted">Commit with <code>git commit -s</code>. Do not commit <code>.env</code> or <code>.flisk/</code>. Star the Flisk repository. Using an AI assistant is allowed; record what really happened.</p>
+<details><summary>Optional: starter prompts for an AI assistant</summary>
+<p>Select one and paste it into your assistant.</p>
+<div class="row"><button data-p="Help me with exercise 1 of the Flisk assessment. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three points of friction, each with a one-line fix. Only write what really happened.">Exercise 1</button><button data-p="Help me with exercise 2 of the Flisk assessment. Run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Do not hand-write container manifests and do not edit .flisk/. Add a '# Lab 2' section to LOG.md with the healthy status. Write a README linking https://flisk.sh and https://github.com/flisk-sh/flisk.">Exercise 2</button><button data-p="Help me with exercise 3 of the Flisk assessment. Introduce three faults in my Flisk system: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Exercise 3</button><button data-p="Help me with exercise 4 of the Flisk assessment. Read https://github.com/flisk-sh/flisk, find one small real improvement and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my repository. Add a '# Lab 4' section to LOG.md with the PR link. Write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Exercise 4</button></div></details>
 
-<h2>You are scored on these 10 (10 points each)</h2>
-<ol class="muted"><li>README links flisk.sh and the Flisk repo</li><li>LOG.md has Lab 1 to 4</li><li>Lab 3 table has 3 rows</li><li>3+ service.json files</li><li>No .env or .flisk/ committed</li><li>A test file</li><li>Commits signed off (<code>git commit -s</code>)</li><li>You starred flisk-sh/flisk</li><li>PR open to flisk-sh/flisk</li><li>GTM.md has 1. 2. 3.</li></ol>
+<h2>Scoring</h2>
+<table>
+<tr><th></th><th>Check</th><th>Verified from</th></tr>
+<tr><td class="n">1</td><td>README links flisk.sh and the Flisk repository</td><td>README.md</td></tr>
+<tr><td class="n">2</td><td>LOG.md has headings Lab 1 to Lab 4</td><td>LOG.md</td></tr>
+<tr><td class="n">3</td><td>Fault table has at least three rows</td><td>LOG.md</td></tr>
+<tr><td class="n">4</td><td>At least three <code>service.json</code> files</td><td>Repository tree</td></tr>
+<tr><td class="n">5</td><td>No <code>.env</code> and no <code>.flisk/</code> committed</td><td>Repository tree</td></tr>
+<tr><td class="n">6</td><td>At least one test file</td><td>Repository tree</td></tr>
+<tr><td class="n">7</td><td>Last 20 commits signed off</td><td>Commit messages</td></tr>
+<tr><td class="n">8</td><td>Flisk repository starred</td><td>Your GitHub stars</td></tr>
+<tr><td class="n">9</td><td>Pull request open to flisk-sh/flisk</td><td>GitHub search</td></tr>
+<tr><td class="n">10</td><td>GTM.md answers 1, 2 and 3</td><td>GTM.md</td></tr>
+</table>
+<p class="muted">Also required: the repository was created after your start date, and every commit is before the deadline.</p>
 
-<h2>Check your score</h2>
-<div class="row"><input id="user" placeholder="your GitHub username" autocomplete="off"><input id="repo" placeholder="your repo name" autocomplete="off"><input id="start" type="date" title="The day you got the link" aria-label="The day you got the link"></div>
-<div class="row"><button id="go">Check score</button><span id="msg" class="muted"></span></div>
+<h2>Self-assessment</h2>
+<div class="row">
+<div class="field"><label for="user">GitHub username</label><input id="user" autocomplete="off"></div>
+<div class="field"><label for="repo">Repository name</label><input id="repo" autocomplete="off"></div>
+<div class="field"><label for="start">Start date (the day you received the link)</label><input id="start" type="date"></div>
+</div>
+<div class="row"><button id="go" class="primary">Run assessment</button><span id="msg" class="muted"></span></div>
 <div id="out" hidden>
 <p><span id="total"></span> <span id="verdict"></span></p>
 <table id="rows"></table>
 <p id="gate" class="muted"></p>
 <p id="next"></p>
 </div>
-<p class="muted">The check reads only your public repo through the GitHub API, in your browser. Nothing of yours is run or sent to us. You get the same result we do.</p>
+<p class="muted">The assessment reads only your public repository through the GitHub API, in your browser. Nothing of yours is executed or sent to us.</p>
 </main>
 <script type="module">
 import { runChecks } from "./check.js";
@@ -79,23 +110,23 @@ showDeadline();
 $("start").addEventListener("input", showDeadline);
 for (const b of document.querySelectorAll("button[data-p]"))
 	b.addEventListener("click", async () => {
-		try { await navigator.clipboard.writeText(b.dataset.p); b.textContent = "Copied. Paste it into Claude."; } catch { b.textContent = "Copy failed: select the text yourself"; }
+		try { await navigator.clipboard.writeText(b.dataset.p); b.textContent = "Copied"; } catch { b.textContent = "Copy failed: select the text yourself"; }
 	});
 $("go").addEventListener("click", async () => {
 	const user = $("user").value.trim(), repo = $("repo").value.trim(), start = $("start").value.trim();
 	$("out").hidden = true;
-	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Fill in all three boxes. Pick the day you got the link.");
-	$("msg").textContent = "Checking…";
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Complete all three fields.");
+	$("msg").textContent = "Running…";
 	try {
 		const r = await runChecks({ user, repo, start });
 		$("rows").replaceChildren(...r.rows.map((x) => { const tr = document.createElement("tr"); const a = document.createElement("td"), b = document.createElement("td"); a.className = "s " + (x.ok ? "ok" : "bad"); a.textContent = x.ok ? "✓" : "✗"; b.textContent = `${x.label} (${x.points}/10)`; tr.append(a, b); return tr; }));
 		$("total").textContent = `${r.score}/100`;
-		$("verdict").textContent = r.accepted ? "Accepted. Reply with your repo link." : "Not accepted yet.";
+		$("verdict").textContent = r.accepted ? "Accepted. Reply with your repository link." : "Not accepted.";
 		$("verdict").className = r.accepted ? "ok" : "bad";
 		$("gate").textContent = `Repo created after you got the link: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
-		$("next").textContent = r.accepted ? `Send this on LinkedIn: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Fix the ✗ lines and check again. There is no limit on checks, only the deadline.";
+		$("next").textContent = r.accepted ? `Repository to send: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Resolve the failed checks and run the assessment again. There is no limit on runs before the deadline.";
 		$("out").hidden = false; $("msg").textContent = "";
-	} catch (e) { $("msg").textContent = `Could not check: ${e.message}. Is the repo public and the name right?`; }
+	} catch (e) { $("msg").textContent = `Could not run: ${e.message}. Is the repo public and the name right?`; }
 });
 </script>
 </body>
