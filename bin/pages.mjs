@@ -197,7 +197,7 @@ async function sendFiles(path, names) {
 	const page = readFileSync(file);
 	console.log("\nPrivate files written. Nothing was uploaded anywhere. Send each person their file, and the passphrase by a different channel:\n");
 	for (const name of who) {
-		const { html, passphrase } = sealFile(page);
+		const { html, passphrase } = await sealFile(page);
 		const f = join(out, randomName());
 		writeFileSync(f, html, { mode: 0o600 });
 		console.log(`  ${name}\n    file:       ${f}\n    passphrase: ${passphrase}\n`);
