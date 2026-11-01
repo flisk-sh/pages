@@ -11,12 +11,15 @@ const stage = (files) => {
 	return d;
 };
 
+const appended = [];
+
 // Runs the shell's own decrypt code, the way a browser would.
 async function open(html, id, key) {
 	const code = html.match(/<script>([\s\S]*)<\/script>/)[1];
 	let out = "";
-	const g = { location: { hash: `#${id}.${key}` }, document: { open() {}, write: (s) => { out = s; }, close() {}, getElementById: () => ({}) } };
-	await new Function("location", "document", "crypto", "atob", "TextDecoder", `return ${code.trim().replace(/;$/, "")}`)(g.location, g.document, crypto, atob, TextDecoder);
+	appended.length = 0;
+	const g = { location: { hash: `#${id}.${key}`, pathname: "/@sam/for-bob/" }, document: { open() {}, write: (s) => { out = s; }, close() {}, getElementById: () => ({}), createElement: () => ({ setAttribute() {}, append() {}, style: {} }), body: { append(x) { appended.push(x); } } } };
+	await new Function("location", "document", "crypto", "atob", "TextDecoder", "encodeURIComponent", `return ${code.trim().replace(/;$/, "")}`)(g.location, g.document, crypto, atob, TextDecoder, encodeURIComponent);
 	return out;
 }
 
@@ -48,4 +51,13 @@ test("a link naming a built-in property is refused, not looked up", async () => 
 	const html = readFileSync(join(d, "index.html"), "utf8");
 	assert.ok(html.includes("Object.hasOwn(P,id)"));
 	assert.equal(await open(html, "constructor", "AAAA"), "");
+});
+
+test("an opened shared page always carries the warning and report bar", async () => {
+	const d = stage({ "index.html": "<p>x</p>" });
+	const keys = shareStaged(d, ["alice"]);
+	const html = readFileSync(join(d, "index.html"), "utf8");
+	await open(html, "alice", keys.alice);
+	assert.equal(appended.length, 1);
+	assert.ok(html.includes("not checked by us") && html.includes("issues/new?template=report.yml"));
 });

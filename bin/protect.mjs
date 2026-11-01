@@ -55,6 +55,13 @@ if(!Object.hasOwn(P,id))throw 0;
 const content=new Uint8Array(await open(u(k),P[id]));
 const html=await open(content,C);
 document.open();document.write(new TextDecoder().decode(html));document.close();
+const m=location.pathname.match(/^\\/(@[a-z0-9-]+)\\/([a-z0-9-]+)\\//);
+const bar=document.createElement("div");
+bar.setAttribute("style","position:fixed;left:0;right:0;bottom:0;z-index:2147483647;font:12px/1.4 system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:6px 12px;text-align:center");
+bar.append("Shared privately on pages.flisk.si and not checked by us. Do not enter passwords or payments. ");
+const a=document.createElement("a");a.textContent="Report";a.style.color="#7aa2ff";
+a.href="https://github.com/flisk-sh/pages/issues/new?template=report.yml&title="+encodeURIComponent("Report: "+(m?m[1]+"/"+m[2]:location.pathname));
+bar.append(a);document.body.append(bar);
 }catch{document.getElementById("m").textContent="This link is not for you, or it was taken back. Ask for a new one."}
 })();
 </script></body></html>
