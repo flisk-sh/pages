@@ -1,88 +1,185 @@
 <!doctype html>
-<html lang="uk">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="description" content="Тестове завдання для кандидатів у Flisk: продукт, інтеграція і GTM.">
+<meta name="description" content="Flisk candidate test: four hands-on labs with Flisk, then a Zachman-framework interview. Product, integration and go-to-market.">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flisk: тестове завдання для кандидатів</title>
+<title>Flisk candidate test: four labs</title>
 <style>
-:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; } }
-:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; }
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; } }
+:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; }
 body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
-main { max-width:760px; margin:0 auto; padding:32px 16px; }
+main { max-width:980px; margin:0 auto; padding:32px 16px; }
 h1 { font-size:1.8rem; margin-top:0; }
-h2 { font-size:1.25rem; margin-top:2rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+h2 { font-size:1.25rem; margin-top:2.2rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+h3 { font-size:1.05rem; margin:1.4rem 0 .3rem; }
 a { color:var(--accent); }
 .muted { color:var(--muted); }
+.scroll { overflow-x:auto; }
 table { width:100%; border-collapse:collapse; margin:1rem 0; }
-th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th, td { text-align:left; padding:8px; border:1px solid var(--line); vertical-align:top; font-size:.92rem; }
+th { background:var(--cell); }
+td.row { font-weight:600; background:var(--cell); white-space:nowrap; }
+.grid td { min-width:150px; }
+.core { background:var(--cell); border-left:3px solid var(--accent); padding:8px 12px; margin:1rem 0; }
+.lab { border:1px solid var(--line); border-radius:8px; padding:4px 16px 12px; margin:1.2rem 0; }
+.lab h3 { margin-top:.8rem; }
+pre { background:var(--cell); padding:10px 12px; border-radius:6px; overflow-x:auto; font-size:.88rem; }
 code { font-family:ui-monospace,monospace; }
 </style>
 </head>
 <body>
 <main>
-<h1>Flisk: тестове завдання для кандидатів</h1>
-<p class="muted">Сайт продукту: <a href="https://flisk.sh">flisk.sh</a> · Репозиторій: <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
+<h1>Flisk candidate test: four labs</h1>
+<p class="muted">Product: <a href="https://flisk.sh">flisk.sh</a> · Repository: <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
 
-<h2>Загальна структура</h2>
+<div class="core"><strong>In one line:</strong> Flisk runs a whole microservice or multi-agent system on your laptop with one command. You will use it for real, break it, fix it, and then make it better. Then we talk about it.</div>
+
+<h2>What this is</h2>
+<p>You do four labs in order. Each lab ends with <strong>evidence</strong> (a command output, a log, a screenshot or a link). Then you add one short go-to-market note. Then we interview you, using the evidence as the map. Plan for 4 to 6 hours in total. You may use any AI coding tool; tell us which and how.</p>
+<p>The role is about making Flisk useful to developers and AI agents. So we do not ask for trivia: we ask you to use the product the way our users do, and to notice what hurts.</p>
+
+<h2>Before you start</h2>
 <ul>
-<li><strong>Частина 1 — Product / Feature (головна).</strong> Кандидат має подивитись flisk.sh, спробувати продукт і запропонувати та реалізувати (або детально спроєктувати) щось, що робить Flisk сильнішим.</li>
-<li><strong>Частина 2 — GTM / Growth Strategy.</strong> Як залучати реальних користувачів і робити інтеграції з топовими AI/dev-продуктами.</li>
+<li>A laptop with Docker (Docker Desktop or Colima). Keep about 20 GB of disk free.</li>
+<li>Node 18+ or Bun, and Git.</li>
+<li>A public GitHub repository for your work. Star <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>.</li>
+<li>Keep a <code>LOG.md</code> in that repository. Write what you tried, what failed, how long it took. Honest failures score higher than a clean story.</li>
 </ul>
 
-<h2>Варіанти завдання (обери один)</h2>
-<h3>Варіант A (рекомендовано): «Build something small with Flisk + proposal»</h3>
-<ul>
-<li>Встанови Flisk і зроби будь-який робочий приклад (можна дуже простий).</li>
-<li>Запропонуй одну конкретну фічу або доповнення до Flisk.</li>
-<li>Реалізуй мінімальний прототип або дуже детально опиши імплементацію.</li>
-<li>Покажи, як це можна інтегрувати або зробити видимим для спільноти.</li>
-</ul>
-<h3>Варіант B: «Integration-first»</h3>
-<p>Зроби інтеграцію Flisk з одним топовим AI-інструментом (Claude Code, Cursor, Windsurf, Continue, Aider тощо) і покажи, як це виглядає.</p>
-<h3>Варіант C: «Complementary mini-product»</h3>
-<p>Зроби маленький окремий інструмент, агента або CLI-обгортку, який використовує Flisk і дає додаткову цінність.</p>
-
-<h2>Що треба зробити (Варіант A)</h2>
-<p>Запропонуй одну фічу або покращення, яке:</p>
-<ul>
-<li>робить Flisk кориснішим для AI-агентів і розробників;</li>
-<li>створює інтеграцію з популярним інструментом;</li>
-<li>або додає спосіб, як більше людей дізнаються про Flisk.</li>
-</ul>
-<p>Опиши:</p>
-<ul>
-<li>навіщо це потрібно;</li>
-<li>як це має працювати (UX і технічно);</li>
-<li>acceptance criteria.</li>
-</ul>
-<p>Реалізуй хоча б мінімальний прототип або зроби детальний дизайн і план імплементації (з кодом або псевдокодом, якщо можливо). Покажи, як це пов’язано з Flisk (репозиторій, приклад, документація, інтеграція).</p>
-<p>Добре, якщо є робочий код або приклад, фіча має сенс для AI-агентів або developer experience, видно розуміння продукту і є думка про те, як її просувати.</p>
-
-<h2>Критерії оцінки</h2>
-<table>
-<tr><th>Рівень</th><th>Що бачимо</th></tr>
-<tr><td>Сильна робота</td><td>Робочий прототип, чітка фіча з сенсом, розуміння інтеграції з Flisk і ідеї просування.</td></tr>
-<tr><td>Середня</td><td>Гарна ідея і детальний опис, але слабка або відсутня реалізація, або реалізація без розуміння продукту.</td></tr>
-<tr><td>Слабка</td><td>Загальні фрази, немає конкретики, продукт не спробовано, немає зв’язку з Flisk.</td></tr>
-</table>
-
-<h2>Як надіслати результат</h2>
-<ul>
-<li>Створи публічний репозиторій на GitHub з результатом.</li>
-<li>У README чітко напиши: що це, як це пов’язано з Flisk, як запустити, посилання на <a href="https://flisk.sh">flisk.sh</a> і на <a href="https://github.com/flisk-sh/flisk">офіційний репозиторій Flisk</a>.</li>
-<li>Постав зірку на <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a>.</li>
-<li>(Опційно) зроби fork або PR, якщо хочеш внести щось корисне.</li>
-<li>Надішли посилання на репозиторій (через LinkedIn або email).</li>
-</ul>
-
-<h2>Частина 2: GTM (у README або окремому файлі)</h2>
+<h2>Lab 1: First five minutes</h2>
+<div class="lab">
+<p><strong>Goal:</strong> feel what a new user feels. This is the most important lab: the demo is the first thing a new user runs.</p>
+<h3>Do</h3>
+<pre>npx @flisk-sh/flisk demo</pre>
 <ol>
-<li>Як би ти залучав перших 100–500 реальних користувачів?</li>
-<li>З якими 3 AI/dev-продуктами варто зробити інтеграцію в першу чергу і чому?</li>
-<li>Один конкретний крок, який можна зробити вже цього тижня.</li>
+<li>Run the demo. Note how long until you see something working, and every moment of doubt.</li>
+<li>Run it a <strong>second time</strong>. The second run meets the first run's data and volumes.</li>
+<li>Stop Docker and run it again. The demo should fall back to running the two-service app as plain local processes.</li>
 </ol>
+<h3>Evidence</h3>
+<ul>
+<li>Timings for run 1, run 2 and the no-Docker run, in <code>LOG.md</code>.</li>
+<li>Three things that confused you, each with a one-line fix you would make.</li>
+</ul>
+<h3>We check</h3>
+<p>Can you observe a product honestly? Do you separate "I made a mistake" from "the product misled me"?</p>
+</div>
+
+<h2>Lab 2: Build a small system</h2>
+<div class="lab">
+<p><strong>Goal:</strong> create a multi-service system with Flisk, without hand-writing container files.</p>
+<h3>Do</h3>
+<pre>flisk project agent-stack      # a starter with tools, a database and messaging
+flisk resource my-api --type backend
+flisk up
+flisk status --json</pre>
+<ol>
+<li>Scaffold the agent stack. Add one extra resource of your own (type <code>backend</code>, <code>worker</code>, <code>agent</code> or <code>mcp</code>) that does something small but real.</li>
+<li>Bring everything up and show that your new resource talks to another one.</li>
+<li>If you need a database schema, use a separate migrator resource (<code>appType: migrator</code>), not your API's start script.</li>
+</ol>
+<h3>Rules</h3>
+<ul>
+<li>Do not hand-write container manifests and do not edit generated folders such as <code>.flisk/</code>. Change <code>service.json</code> or the templates instead.</li>
+<li>Do not commit secrets or <code>.env</code> files.</li>
+</ul>
+<h3>Evidence</h3>
+<ul>
+<li>Your repository, with a README that lets a stranger run it in under ten minutes.</li>
+<li>The output of <code>flisk status --json</code> with everything healthy.</li>
+</ul>
+<h3>We check</h3>
+<p>Can you build something that works, and explain it to someone who has never seen it?</p>
+</div>
+
+<h2>Lab 3: Break it, then fix it</h2>
+<div class="lab">
+<p><strong>Goal:</strong> debugging is most of the job. Show that you can find a fault using the tools Flisk gives you.</p>
+<h3>Do</h3>
+<pre>flisk doctor --json            # environment and service checks
+flisk config verify --json     # are the generated files consistent?
+flisk logs                     # what the services say
+flisk restart my-api</pre>
+<ol>
+<li>Break your system in three different ways. For example: a wrong port, a service that depends on one that is not up yet, and a missing environment variable.</li>
+<li>For each: show the symptom, find it with <code>doctor</code>, <code>config verify</code> or <code>logs</code>, and fix it.</li>
+<li>Write down which tool pointed at the cause fastest, and which message was unclear or wrong.</li>
+</ol>
+<h3>Evidence</h3>
+<ul>
+<li>A table in <code>LOG.md</code>: fault, symptom, command that found it, fix, minutes spent.</li>
+<li>At least one error message you think Flisk should say better, with your proposed wording.</li>
+</ul>
+<h3>We check</h3>
+<p>Do you reason from evidence? Do you know the difference between an environment problem (<code>doctor</code>) and a generated-files problem (<code>config verify</code>)?</p>
+</div>
+
+<h2>Lab 4: Make Flisk stronger</h2>
+<div class="lab">
+<p><strong>Goal:</strong> ship one improvement, or a clear plan for one. Pick one option.</p>
+<h3>Option A: Feature proposal and prototype</h3>
+<p>Propose one feature or fix that helps AI agents or developers. Give: why it matters, how it works (user experience and technical), acceptance criteria. Build a prototype, or a detailed design with code or pseudocode.</p>
+<h3>Option B: Integration</h3>
+<p>Connect Flisk to one AI or developer tool (for example Claude Code, Cursor, Windsurf, Continue, Aider) through the MCP server:</p>
+<pre>{ "command": "flisk", "args": ["mcp"] }</pre>
+<p>Show an agent starting the stack, checking status and restarting a service on its own. Record what worked and what the agent got wrong.</p>
+<h3>Option C: Companion tool</h3>
+<p>A small separate tool, agent or CLI wrapper that uses Flisk and adds value on top.</p>
+<h3>Evidence</h3>
+<ul>
+<li>A pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is best. A fork or your own repository is fine.</li>
+<li>Tests for whatever you change. A change without a test is not finished.</li>
+<li>Commits signed off (<code>git commit -s</code>).</li>
+</ul>
+<h3>We check</h3>
+<p>Does the idea fit what Flisk is (a fast local inner loop, not a production cluster tool)? Is it small enough to merge, and clear enough to review?</p>
+</div>
+
+<h2>Go-to-market note</h2>
+<p>One page, in the README or a separate file. Answer in your own words:</p>
+<ol>
+<li>How would you win the first 100 to 500 real users?</li>
+<li>Which three AI or developer products should Flisk integrate with first, and why those?</li>
+<li>One concrete step we could take this week.</li>
+</ol>
+
+<h2>How to send it</h2>
+<ul>
+<li>A public GitHub repository link, with a README covering: what it is, how it relates to Flisk, how to run it, and links to flisk.sh and the official repository.</li>
+<li>Send the link by LinkedIn or email.</li>
+</ul>
+
+<h2>The interview: Zachman framework</h2>
+<p>We walk through <em>your</em> labs using the Zachman framework: six questions (what, how, where, who, when, why) across six viewpoints (from planner to user). We pick 8 to 10 cells, not all 36. Each answer is scored 0 (nothing), 1 (general words), 2 (specific), 3 (specific, with proof such as code, a number or a link).</p>
+<div class="scroll">
+<table class="grid">
+<tr><th></th><th>What (things, data)</th><th>How (process)</th><th>Where (place, network)</th><th>Who (people, roles)</th><th>When (time, events)</th><th>Why (purpose)</th></tr>
+<tr><td class="row">1. Planner<br><span class="muted">scope</span></td>
+<td>What is Flisk in one sentence? What does it not do?</td><td>Which developer job does it replace?</td><td>Where does it run: laptop, Docker, cloud?</td><td>Who is the main user: a person or an AI agent?</td><td>Which moment in development hurts most?</td><td>Why would anyone adopt one more tool?</td></tr>
+<tr><td class="row">2. Owner<br><span class="muted">business</span></td>
+<td>What should a user have after five minutes?</td><td>How does the product create value?</td><td>Where do the first users hang out?</td><td>Who recommends it, who blocks it?</td><td>What must happen in the first 30 days?</td><td>What is the one success metric?</td></tr>
+<tr><td class="row">3. Designer<br><span class="muted">system</span></td>
+<td>Which entities are in your lab (service.json, resource, stack)?</td><td>Describe the flow from command to result.</td><td>Where is the line between Flisk and Docker or Tilt?</td><td>Which roles: developer, agent, CI?</td><td>What starts first, what waits?</td><td>Which design principle sits behind your change?</td></tr>
+<tr><td class="row">4. Builder<br><span class="muted">technology</span></td>
+<td>What data format and schema did you use?</td><td>Which modules or commands did you add?</td><td>Which files in the repository did you touch?</td><td>Who calls it: the CLI, MCP, a UI?</td><td>What are the retries and timeouts?</td><td>Which trade-off did you choose, and why?</td></tr>
+<tr><td class="row">5. Implementer<br><span class="muted">detail</span></td>
+<td>Show the code or config.</td><td>How is it tested? What runs in CI?</td><td>How do I run it from zero on a clean machine?</td><td>Who maintains it after you?</td><td>What breaks on a second run?</td><td>Which acceptance criterion did you pass?</td></tr>
+<tr><td class="row">6. User<br><span class="muted">working system</span></td>
+<td>What does the user see on screen?</td><td>How many steps to success?</td><td>Where will they get stuck, and will the error help?</td><td>Who will they tell about it?</td><td>How many minutes until they feel the value?</td><td>Why would they come back tomorrow?</td></tr>
+</table>
+</div>
+<p class="muted">Reading the grid: an empty "Who" column usually means nobody else ever tried the feature. An empty "Where" or "When" column usually means it only worked once, on one machine.</p>
+
+<h2>Scoring</h2>
+<table>
+<tr><th>Level</th><th>What we see</th></tr>
+<tr><td>Strong</td><td>All four labs have evidence. Lab 1 and Lab 3 are honest and specific. Lab 4 is a real pull request or working prototype with tests. Scores of 2 or 3 in viewpoints 3 to 5, and in viewpoints 1, 2 and 6 the candidate talks about people and one metric, not only code. The go-to-market note has a concrete step.</td></tr>
+<tr><td>Medium</td><td>Good ideas and a clear write-up, but weak build (low scores in rows 4 and 5) or a build without understanding of the product (low scores in rows 1 and 2).</td></tr>
+<tr><td>Weak</td><td>General phrases, labs skipped or not run, no evidence, no link to what Flisk really does.</td></tr>
+</table>
+<p class="muted">We value honesty over polish. A failed lab with a clear diagnosis beats a perfect lab nobody can reproduce.</p>
 </main>
 </body>
 </html>
