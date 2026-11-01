@@ -34,7 +34,7 @@ describe("the page bar in a browser", () => {
 		const bar = w.document.querySelector("[data-pages-bar]");
 		expect(bar?.querySelector("span")?.textContent).toContain("public");
 		const items = [...(bar?.querySelectorAll("[data-tip]") ?? [])];
-		expect(items.length).toBe(8);
+		expect(items.length).toBe(10);
 		for (const el of items)
 			expect(el.getAttribute("data-tip")?.length).toBeGreaterThan(10);
 		expect(
@@ -42,25 +42,19 @@ describe("the page bar in a browser", () => {
 		).toEqual(expect.arrayContaining(["share", "private", "report", "source"]));
 	});
 
-	it("share opens a menu: copy link, email and Gmail", async () => {
+	it("share offers exactly a public link and a private file, and no email", async () => {
 		const w = await open("/@sam/gpu-explainer/");
 		const items = [
 			...w.document.querySelectorAll("[data-pages-bar] [data-menu] a"),
 		];
 		expect(items.map((a) => a.textContent)).toEqual([
-			"Copy link",
-			"Email",
-			"Gmail",
+			"Public link",
+			"Private file",
 		]);
-		expect(items[1].getAttribute("href")).toStartWith(
-			"mailto:?subject=How%20GPUs%20work&body=",
-		);
-		expect(items[2].getAttribute("href")).toStartWith(
-			"https://mail.google.com/mail/?view=cm&su=",
-		);
-		expect(items[2].getAttribute("href")).toContain(
-			encodeURIComponent("https://pages.test/@sam/gpu-explainer/"),
-		);
+		expect(items[1].getAttribute("href")).toBe("https://pages.test/share");
+		expect(
+			w.document.querySelector("[data-pages-bar]")?.innerHTML,
+		).not.toContain("mailto:");
 	});
 
 	it("copy link writes the page address and says Copied", async () => {
