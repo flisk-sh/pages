@@ -39,24 +39,24 @@ The npm package is released by `.github/workflows/release-cli.yml` when a `cli-v
 Or by hand in the browser: [add a file](https://github.com/flisk-sh/pages/new/main?filename=spaces/YOUR-LOGIN/my-page/index.md)
 at `spaces/<your login>/<name>/index.md` and propose the change. GitHub makes the fork and the pull request for you.
 
-## Protected: share to one person
+## Lock: share to one person
 
-Public is for everyone. Private needs a server and an account list. **Protected** sits between: the page is locked, and
+Public is for everyone. Private needs a server and an account list. **Locked** sits between: the page is locked, and
 only whoever holds the link can open it.
 
 ```bash
-npx -y @flisk-sh/pages publish interview.html --protected --wait
+npx -y @flisk-sh/pages publish interview.html --lock --wait
 ```
 
 It prints a link like `https://pages.flisk.si/@you/interview/#<key>`. Send that whole link to the one person.
 
-The caveman rules:
+Short: `--lock` = only people with the link can read. (`--protected` still works as the same flag.) The caveman rules:
 
 1. Lock the page before it leaves your machine (AES-256-GCM). The repository and the site only ever hold the locked page.
 2. The key is the part after `#`. A browser never sends that part to a server, so nobody but the link holder has it.
 3. No server, no accounts, no database: it stays static files, so a billion readers cost the same as one.
 4. Lost link means lost page: there is no recovery. Publish again for a new key; an old link stops being a secret only if you remove the space.
-5. One self-contained `.html` page (no Markdown, no extra files). Anyone you give the link to can pass it on, so protected is not named-person access.
+5. One self-contained `.html` page (no Markdown, no extra files). Anyone you give the link to can pass it on, so locked is not named-person access.
 
 ## GitHub Action
 

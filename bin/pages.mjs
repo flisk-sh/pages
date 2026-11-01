@@ -3,8 +3,8 @@
 // `npx -y @flisk-sh/pages publish page.html`, or `node bin/pages.mjs …` from a checkout of this repository.
 //
 //   pages check <path>                                    the same check the publish runs, nothing sent
-//   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--protected] [--dry-run]
-//                                                         --protected: encrypted, the key is in the link's #fragment
+//   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--lock] [--dry-run]
+//                                                         --lock: encrypted, the key is in the link's #fragment
 //   pages remove <slug | path> [--oidc]                   take one of your spaces down
 //   pages whoami                                          the login your spaces go under
 //
@@ -113,7 +113,7 @@ async function publish(path, slugArg, wait, anon, oidc, prot) {
 				: "Publishing this page needs the GitHub CLI signed in (gh auth login). Only a Markdown page (one .md file,\nor a folder holding just index.md) publishes without it, at pages.flisk.si/@anon/<id>/.",
 		);
 	if (!check(src)) die("\nFix the problems above, then publish again.");
-	if (prot && !me) die("--protected needs the GitHub CLI signed in (gh auth login).");
+	if (prot && !me) die("--lock needs the GitHub CLI signed in (gh auth login).");
 	if (!me) return publishAnonymously(path, src, slugArg, wait);
 
 	const handle = me.toLowerCase();
@@ -153,7 +153,7 @@ async function publish(path, slugArg, wait, anon, oidc, prot) {
 			"--body", `Publishing \`spaces/${handle}/${slug}/\` with \`bin/pages.mjs\`. The check runs on this pull request; when it passes, the space goes live at ${SITE}@${handle}/${slug}/ and this pull request is closed.`,
 		);
 		console.log(`\nPull request: ${pr}\nWill be live at: ${SITE}@${handle}/${slug}/`);
-		if (key) console.log(`\nProtected. Share this full link, the part after # is the key and is not stored anywhere:\n${SITE}@${handle}/${slug}/#${key}`);
+		if (key) console.log(`\nLocked. Send this whole link to your person. The part after # is the key. Lose it, lose the page:\n${SITE}@${handle}/${slug}/#${key}`);
 		if (wait && (await waitFor(pr))) await live(`${SITE}@${handle}/${slug}/`);
 	} finally {
 		rmSync(work, { recursive: true, force: true });
@@ -281,11 +281,11 @@ async function remove(arg, oidc) {
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === "check" && arg) process.exit(check(source(arg)) ? 0 : 1);
 else if (cmd === "publish" && arg)
-	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"), process.argv.includes("--oidc"), process.argv.includes("--protected"));
+	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"), process.argv.includes("--oidc"), (process.argv.includes("--lock") || process.argv.includes("--protected")));
 else if (cmd === "remove" && arg) await remove(arg, process.argv.includes("--oidc"));
 else if (cmd === "whoami") console.log(login().toLowerCase());
 else
 	die(
-		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--protected] [--dry-run]\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
+		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--lock] [--dry-run]\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
 		2,
 	);
