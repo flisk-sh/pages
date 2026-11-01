@@ -157,7 +157,9 @@ export function readSpaces(
 export function bar(base: string, s: Space): string {
 	const l = links(s);
 	const a = 'style="color:inherit;text-decoration:none"';
-	return `<div data-pages-bar style="position:fixed;right:10px;bottom:10px;z-index:2147483647;display:flex;gap:10px;align-items:center;font:12px/1.2 ui-sans-serif,system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:7px 12px;border-radius:999px;opacity:.9;box-shadow:0 2px 10px rgba(0,0,0,.25)"><a ${a} href="${base}/"><b>pages</b>.flisk.si</a><a ${a} href="${base}/@${s.handle}/">@${esc(s.handle)}</a><a ${a} href="${l.history}" title="Every version of this page">v${s.versions}</a><a ${a} href="${l.source}" title="${s.origin ? "The CI run that published this page" : "The files of this page"}">source</a><a ${a} href="${l.report}" title="Report this page">report</a></div>`;
+	const url = `${base}/${spacePath(s)}`;
+	const mail = `mailto:?subject=${encodeURIComponent(s.title)}&body=${encodeURIComponent(url)}`;
+	return `<div data-pages-bar style="position:fixed;right:10px;bottom:10px;z-index:2147483647;display:flex;gap:10px;align-items:center;font:12px/1.2 ui-sans-serif,system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:7px 12px;border-radius:999px;opacity:.9;box-shadow:0 2px 10px rgba(0,0,0,.25)"><a ${a} href="${base}/"><b>pages</b>.flisk.si</a><a ${a} href="${base}/@${s.handle}/">@${esc(s.handle)}</a><a ${a} href="${l.history}" title="Every version of this page">v${s.versions}</a><a ${a} href="${l.source}" title="${s.origin ? "The CI run that published this page" : "The files of this page"}">source</a><a ${a} href="${mail}" title="Email this page">share</a><a ${a} href="https://github.com/flisk-sh/pages#share-only-the-people-you-name" title="Share with only the people you name">private</a><a ${a} href="${l.report}" title="Report this page">report</a></div>`;
 }
 
 /**

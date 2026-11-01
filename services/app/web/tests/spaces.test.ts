@@ -230,6 +230,11 @@ describe("the bar's source link", () => {
 		expect(originOf(`Source: ${run}/../../x`)).toBeUndefined();
 		expect(originOf("Update @a/b")).toBeUndefined();
 	});
+	it("has a share by email link and a private sharing link", () => {
+		const html = bar("https://pages.test", spaces[0] as Space);
+		expect(html).toContain('href="mailto:?subject=How%20GPUs%20work&body=');
+		expect(html).toContain("share-only-the-people-you-name");
+	});
 	it("opens the publishing run, or the files when there is none", () => {
 		const s = { ...(spaces[0] as Space), origin: run };
 		expect(bar("https://pages.test", s)).toContain(
