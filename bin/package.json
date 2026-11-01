@@ -1,6 +1,6 @@
 {
 	"name": "@flisk-sh/pages",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "Publish a page to pages.flisk.si/@you/name in one command: free, public, one git branch per space. Markdown publishes with no account.",
 	"type": "module",
 	"bin": { "pages": "pages.mjs" },
