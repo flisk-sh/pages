@@ -71,27 +71,31 @@ runs:
         fi
 
         out="${RUNNER_TEMP}/pages-check.txt"
-        node "$cli" check "$target" > "$out" 2>&1
-        code=$?
-        cat "$out"
-        {
-          if [ "$code" -eq 0 ]; then echo "### Pages check: passed"; else echo "### Pages check: problems to fix"; fi
-          echo
-          echo '```'
-          cat "$out"
-          echo '```'
-        } >> "$GITHUB_STEP_SUMMARY"
+        summary() {
+          {
+            if [ "$code" -eq 0 ]; then echo "### Pages $PG_COMMAND: passed"; else echo "### Pages $PG_COMMAND: problems to fix"; fi
+            echo
+            echo '```'
+            cat "$out"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+        }
 
-        if [ "$code" -eq 0 ] && [ "$PG_COMMAND" = "publish" ]; then
+        if [ "$PG_COMMAND" = "check" ]; then
+          node "$cli" check "$target" 2>&1 | tee "$out"
+          code=${PIPESTATUS[0]}
+          summary
+        else
+          # publish runs the same check before it sends anything.
           args=(publish "$target")
           [ -n "$PG_SLUG" ] && args+=(--slug "$PG_SLUG")
           [ "$PG_WAIT" = "true" ] && args+=(--wait)
           # No token: the job's own OIDC token says which repository this is, so nobody sets up a secret.
           [ -z "$GH_TOKEN" ] && args+=(--oidc)
-          pub="${RUNNER_TEMP}/pages-publish.txt"
-          node "$cli" "${args[@]}" 2>&1 | tee "$pub"
+          node "$cli" "${args[@]}" 2>&1 | tee "$out"
           code=${PIPESTATUS[0]}
-          url=$(grep -oE 'https://pages\.flisk\.si/@[a-z0-9-]+/[a-z0-9-]+/' "$pub" | head -1)
+          summary
+          url=$(grep -oE 'https://pages\.flisk\.si/@[a-z0-9-]+/[a-z0-9-]+/' "$out" | head -1)
           echo "url=$url" >> "$GITHUB_OUTPUT"
           if [ "$code" -eq 0 ] && [ -n "$url" ]; then
             { echo; echo "### Published: $url"; } >> "$GITHUB_STEP_SUMMARY"

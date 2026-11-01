@@ -8,7 +8,14 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { checkSpace, checkText, csp, hostOf, validId } from "../src/check.mjs";
+import {
+	checkSpace,
+	checkText,
+	csp,
+	formatReport,
+	hostOf,
+	validId,
+} from "../src/check.mjs";
 
 const roots: string[] = [];
 afterAll(() => {
@@ -293,5 +300,31 @@ describe("checkText (a pasted file, no folder)", () => {
 			"description",
 			"title",
 		]);
+	});
+});
+
+describe("the report", () => {
+	it("lists every error, and a repeated warning three times then counts it", () => {
+		const warn = (i: number) => ({
+			severity: "warn" as const,
+			rule: "javascript-url",
+			file: `p${i}.html`,
+			message: "a javascript: link",
+		});
+		const out = formatReport({
+			ok: false,
+			errors: [1, 2, 3, 4].map((i) => ({
+				severity: "error" as const,
+				rule: "size",
+				file: `big${i}.bin`,
+				message: "too big",
+			})),
+			warnings: Array.from({ length: 10 }, (_, i) => warn(i)),
+			files: 14,
+			bytes: 1,
+		});
+		expect(out.match(/\[size\]/g)?.length).toBe(4);
+		expect(out.match(/^! p\d\.html/gm)?.length).toBe(3);
+		expect(out).toContain("! …and 7 more [javascript-url] warnings");
 	});
 });

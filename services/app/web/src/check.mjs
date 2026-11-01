@@ -404,10 +404,23 @@ export function checkText(name, text) {
 
 /** The report as lines a person or an agent reads. */
 export function formatReport(result) {
-	const lines = [...result.errors, ...result.warnings].map(
-		(f) =>
-			`${f.severity === "error" ? "✗" : "!"} ${f.file}: ${f.message} [${f.rule}]`,
-	);
+	// Every error is listed. A warning that repeats (a generated report has the same link on every page) is listed
+	// three times, then counted, so a real report's output stays readable.
+	const shown = new Map();
+	const lines = [];
+	for (const f of [...result.errors, ...result.warnings]) {
+		const n = (shown.get(f.rule) ?? 0) + 1;
+		shown.set(f.rule, n);
+		if (f.severity === "error" || n <= 3)
+			lines.push(
+				`${f.severity === "error" ? "✗" : "!"} ${f.file}: ${f.message} [${f.rule}]`,
+			);
+	}
+	for (const [rule, n] of shown) {
+		const errors = result.errors.filter((f) => f.rule === rule).length;
+		if (n - errors > 3)
+			lines.push(`! …and ${n - errors - 3} more [${rule}] warnings`);
+	}
 	lines.push(
 		result.ok
 			? `✓ ready to publish: ${result.files} files, ${(result.bytes / 1024).toFixed(0)} KB`
