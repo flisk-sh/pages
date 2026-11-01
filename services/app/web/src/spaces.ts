@@ -192,7 +192,8 @@ blockquote{margin:0;padding:2px 16px;border-left:3px solid var(--line);color:var
 /** An index.md as a page: rendered like a GitHub README (sanitized: no scripts), in a plain reading layout. */
 export function markdownPage(md: string, base: string, s: Space): string {
 	const body = renderMarkdown(md, {
-		baseUrl: `https://github.com/${SITE.repoSlug}/blob/${branchOf(s)}/index.md`,
+		// Relative links stay on the site: a link to report.html opens that file of the space, not its GitHub blob.
+		baseUrl: `${base}/${spacePath(s)}`,
 		imageBaseUrl: `${base}/${spacePath(s)}`,
 	});
 	const html = `<!doctype html><html lang="${SITE.lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(s.title)}</title><meta name="description" content="${esc(s.description)}"><meta property="og:title" content="${esc(s.title)}"><meta property="og:description" content="${esc(s.description)}"><meta property="og:image" content="${base}/og.png"><style>${DOC_STYLE}</style></head><body><main>${body}</main></body></html>`;

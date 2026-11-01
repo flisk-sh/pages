@@ -8,3 +8,5 @@ What we learned shipping Pages in a week.
 <script>alert(1)</script>
 
 ![chart](chart.svg)
+
+See the [report](report.html) and the [home page](../gpu-explainer/).

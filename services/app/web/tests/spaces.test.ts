@@ -118,6 +118,16 @@ describe("a published Markdown page", () => {
 		expect(html).toContain('src="https://pages.test/@sam/notes/chart.svg"');
 		expect(html).toContain('http-equiv="Content-Security-Policy"');
 	});
+
+	it("links its relative pages on this site, not to GitHub", async () => {
+		const html = await (await get("/@sam/notes/")).text();
+		expect(html).toContain('href="https://pages.test/@sam/notes/report.html"');
+		expect(html).toContain('href="https://pages.test/@sam/gpu-explainer/"');
+		expect(html).not.toMatch(/href="https:\/\/github\.com\/[^"]*\/blob\//);
+		const linked = await get("/@sam/notes/report.html");
+		expect(linked.status).toBe(200);
+		expect(await linked.text()).toContain("data-pages-bar");
+	});
 });
 
 describe("the site around the spaces", () => {

@@ -154,6 +154,36 @@ async function viaCli() {
 		(await until(url, (s) => s === 404)) !== null,
 		secs(from),
 	);
+
+	// An index.md that links a sibling page: the link must open the page on this site, not a GitHub blob.
+	const linkSlug = `${SLUG}-links`;
+	const linkUrl = `${SITE}/@${login}/${linkSlug}/`;
+	await cli(
+		"publish",
+		folder({
+			"index.md": "# E2E links\n\nSee the [report](report.html).\n",
+			"report.html": page("The linked report"),
+		}),
+		"--slug",
+		linkSlug,
+		"--wait",
+	);
+	const md = await until(
+		linkUrl,
+		(s, b) => s === 200 && b.includes("E2E links"),
+	);
+	const href = md?.match(/href="([^"]*report\.html)"/)?.[1];
+	record(
+		"a relative link in index.md stays on pages.flisk.si",
+		href === `${linkUrl}report.html`,
+		href,
+	);
+	const linked = href ? await fetch(href) : undefined;
+	record(
+		"the linked page opens with the corner bar",
+		linked?.status === 200 && (await linked.text()).includes("data-pages-bar"),
+	);
+	await cli("remove", linkSlug);
 }
 
 async function oneClick() {
