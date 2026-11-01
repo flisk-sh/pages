@@ -332,7 +332,7 @@ export function sharePage(
 <p class="lede">Choose a page and the people it is for. Each person gets their own file and passphrase. This runs in your browser: the page is never uploaded, and nothing is stored. Send each file and its passphrase by different channels.</p>
 <form id="f"><label>Page (.html file) <input id="page" type="file" accept=".html,text/html"></label>
 <label>Or paste the page's HTML here (no file needed) <textarea id="paste" rows="6" spellcheck="false" autocapitalize="off"></textarea></label>
-<label>Names, one per line or separated by commas <textarea id="names" rows="3" required></textarea></label>
+<label>Names (optional, just labels: one per line or separated by commas) <textarea id="names" rows="3" placeholder="e.g. me, or leave empty"></textarea></label>
 <button type="submit">Make private files</button></form>
 <p id="m" role="status"></p><div id="out"></div>
 <p class="muted">Anyone with the file and the passphrase can read the page. Copies you send cannot be taken back. <a href="${SITE.repo}/blob/main/bin/seal.js">Read the sealing code</a>.</p>
