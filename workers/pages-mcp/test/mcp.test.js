@@ -27,6 +27,7 @@ test("both tools are read-only, titled, and publish nothing", async () => {
     assert.ok(t.annotations.title, t.name);
   }
   assert.equal(text(await call("how_to_put_page_online", {})).published_by_this_tool, false);
+  assert.match(text(await call("how_to_put_page_online", {})).only_certain_people.command, /pages share page\.html/);
 });
 
 test("a clean page is ready and the next step is the publish command", async () => {
