@@ -154,7 +154,7 @@ async function publish(path, slugArg, wait, anon, oidc, names) {
 		);
 		console.log(`\nPull request: ${pr}\nWill be live at: ${SITE}@${handle}/${slug}/`);
 		for (const [id, key] of Object.entries(keys)) console.log(`\nFor ${id}: ${SITE}@${handle}/${slug}/#${id}.${key}`);
-		if (names) console.log("\nSend each person their own whole link. The part after # is the key. Lose it, lose the page.\nWhen they are done, take it down: pages remove ${slug}");
+		if (names) console.log(`\nSend each person their own whole link. The part after # is the key. Lose it, lose the page.\nWhen they are done, take it down: pages remove ${slug}`);
 		if (wait && (await waitFor(pr))) await live(`${SITE}@${handle}/${slug}/`);
 	} finally {
 		rmSync(work, { recursive: true, force: true });
