@@ -97,7 +97,7 @@ code { font-family:ui-monospace,monospace; font-size:.9em; }
 <p class="muted">The assessment reads only your public repository through the GitHub API, in your browser. Nothing of yours is executed or sent to us.</p>
 </main>
 <script type="module">
-import { runChecks } from "./check.js";
+import { runChecks } from "./check.js?v=2";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
