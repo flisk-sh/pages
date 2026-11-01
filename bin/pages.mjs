@@ -4,7 +4,8 @@
 //
 //   pages check <path>                                    the same check the publish runs, nothing sent
 //   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]
-//   pages share <path> [--to name]... [--slug name] [--wait]   one locked link per person; asks who if no --to
+//   pages share <path> --send [--to name]... [--out dir]   private: one self-decrypting file per person, never hosted
+//   pages share <path> [--to name]... [--slug name] [--wait]   hosted but locked (public ciphertext; prefer --send)
 //   pages remove <slug | path> [--oidc]                   take one of your spaces down
 //   pages whoami                                          the login your spaces go under
 //
@@ -26,10 +27,11 @@
 // PAGES_DRY_RUN=1, EVAL_PAGES_DRY_RUN=1) checks and prints what it would do, and sends nothing; with PAGES_LOGIN set
 // it does not ask GitHub who you are either.
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { randomName, sealFile } from "./send.mjs";
 import { shareStaged } from "./protect.mjs";
 import {
 	checkSpace,
@@ -183,6 +185,26 @@ async function recipients() {
 	return answer.split(",");
 }
 
+/** --send: one self-decrypting file per person, never hosted. Names appear only in this terminal output. */
+async function sendFiles(path, names) {
+	const src = source(path);
+	if (src.index !== "index.html") die("--send takes one self-contained .html page.");
+	const file = src.file ?? join(src.dir, "index.html");
+	const who = names.map((n) => n.trim()).filter(Boolean);
+	if (!who.length) die("Say who it is for: pages share <path> --send --to alice --to bob");
+	const out = flag("out") ?? `pages-private-${Date.now().toString(36)}`;
+	mkdirSync(out, { recursive: true });
+	const page = readFileSync(file);
+	console.log("\nPrivate files written. Nothing was uploaded anywhere. Send each person their file, and the passphrase by a different channel:\n");
+	for (const name of who) {
+		const { html, passphrase } = sealFile(page);
+		const f = join(out, randomName());
+		writeFileSync(f, html, { mode: 0o600 });
+		console.log(`  ${name}\n    file:       ${f}\n    passphrase: ${passphrase}\n`);
+	}
+	console.log("The files hold no names and the passphrases are not saved: copy them now. A copy you have sent cannot be taken back.");
+}
+
 async function publishWithOidc(src, slugArg, wait) {
 	const slug = slugArg ?? slugify(src.name);
 	if (!validId("ci", slug)) die(`"${slug}" cannot be a space name: use lowercase letters, digits and dashes (--slug my-page).`);
@@ -304,11 +326,12 @@ const [cmd, arg] = process.argv.slice(2);
 const has = (f) => process.argv.includes(f);
 if (cmd === "check" && arg) process.exit(check(source(arg)) ? 0 : 1);
 else if (cmd === "publish" && arg) await publish(arg, flag("slug"), has("--wait"), has("--anon"), has("--oidc"), null);
+else if (cmd === "share" && arg && has("--send")) await sendFiles(arg, await recipients());
 else if (cmd === "share" && arg) await publish(arg, flag("slug"), has("--wait"), false, false, await recipients());
 else if (cmd === "remove" && arg) await remove(arg, has("--oidc"));
 else if (cmd === "whoami") console.log(login().toLowerCase());
 else
 	die(
-		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages share <path> [--to name]... [--slug name] [--wait]   only the people you name can read it; asks who if no --to\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file (share: one .html file).",
+		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages share <path> --send [--to name]... [--out dir]       private: one self-decrypting file per person, never hosted\n  pages share <path> [--to name]... [--slug name] [--wait]   hosted but locked (the locked page is public ciphertext; prefer --send)\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file (share: one .html file).",
 		2,
 	);
