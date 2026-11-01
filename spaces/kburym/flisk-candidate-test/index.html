@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Тестове завдання для кандидатів у Flisk: продукт, інтеграція і GTM.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flisk: тестове завдання для кандидатів</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; } }
+:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; }
+body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
+main { max-width:760px; margin:0 auto; padding:32px 16px; }
+h1 { font-size:1.8rem; margin-top:0; }
+h2 { font-size:1.25rem; margin-top:2rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+a { color:var(--accent); }
+.muted { color:var(--muted); }
+table { width:100%; border-collapse:collapse; margin:1rem 0; }
+th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); vertical-align:top; }
+code { font-family:ui-monospace,monospace; }
+</style>
+</head>
+<body>
+<main>
+<h1>Flisk: тестове завдання для кандидатів</h1>
+<p class="muted">Сайт продукту: <a href="https://flisk.sh">flisk.sh</a> · Репозиторій: <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a></p>
+
+<h2>Загальна структура</h2>
+<ul>
+<li><strong>Частина 1 — Product / Feature (головна).</strong> Кандидат має подивитись flisk.sh, спробувати продукт і запропонувати та реалізувати (або детально спроєктувати) щось, що робить Flisk сильнішим.</li>
+<li><strong>Частина 2 — GTM / Growth Strategy.</strong> Як залучати реальних користувачів і робити інтеграції з топовими AI/dev-продуктами.</li>
+</ul>
+
+<h2>Варіанти завдання (обери один)</h2>
+<h3>Варіант A (рекомендовано): «Build something small with Flisk + proposal»</h3>
+<ul>
+<li>Встанови Flisk і зроби будь-який робочий приклад (можна дуже простий).</li>
+<li>Запропонуй одну конкретну фічу або доповнення до Flisk.</li>
+<li>Реалізуй мінімальний прототип або дуже детально опиши імплементацію.</li>
+<li>Покажи, як це можна інтегрувати або зробити видимим для спільноти.</li>
+</ul>
+<h3>Варіант B: «Integration-first»</h3>
+<p>Зроби інтеграцію Flisk з одним топовим AI-інструментом (Claude Code, Cursor, Windsurf, Continue, Aider тощо) і покажи, як це виглядає.</p>
+<h3>Варіант C: «Complementary mini-product»</h3>
+<p>Зроби маленький окремий інструмент, агента або CLI-обгортку, який використовує Flisk і дає додаткову цінність.</p>
+
+<h2>Що треба зробити (Варіант A)</h2>
+<p>Запропонуй одну фічу або покращення, яке:</p>
+<ul>
+<li>робить Flisk кориснішим для AI-агентів і розробників;</li>
+<li>створює інтеграцію з популярним інструментом;</li>
+<li>або додає спосіб, як більше людей дізнаються про Flisk.</li>
+</ul>
+<p>Опиши:</p>
+<ul>
+<li>навіщо це потрібно;</li>
+<li>як це має працювати (UX і технічно);</li>
+<li>acceptance criteria.</li>
+</ul>
+<p>Реалізуй хоча б мінімальний прототип або зроби детальний дизайн і план імплементації (з кодом або псевдокодом, якщо можливо). Покажи, як це пов’язано з Flisk (репозиторій, приклад, документація, інтеграція).</p>
+<p>Добре, якщо є робочий код або приклад, фіча має сенс для AI-агентів або developer experience, видно розуміння продукту і є думка про те, як її просувати.</p>
+
+<h2>Критерії оцінки</h2>
+<table>
+<tr><th>Рівень</th><th>Що бачимо</th></tr>
+<tr><td>Сильна робота</td><td>Робочий прототип, чітка фіча з сенсом, розуміння інтеграції з Flisk і ідеї просування.</td></tr>
+<tr><td>Середня</td><td>Гарна ідея і детальний опис, але слабка або відсутня реалізація, або реалізація без розуміння продукту.</td></tr>
+<tr><td>Слабка</td><td>Загальні фрази, немає конкретики, продукт не спробовано, немає зв’язку з Flisk.</td></tr>
+</table>
+
+<h2>Як надіслати результат</h2>
+<ul>
+<li>Створи публічний репозиторій на GitHub з результатом.</li>
+<li>У README чітко напиши: що це, як це пов’язано з Flisk, як запустити, посилання на <a href="https://flisk.sh">flisk.sh</a> і на <a href="https://github.com/flisk-sh/flisk">офіційний репозиторій Flisk</a>.</li>
+<li>Постав зірку на <a href="https://github.com/flisk-sh/flisk">github.com/flisk-sh/flisk</a>.</li>
+<li>(Опційно) зроби fork або PR, якщо хочеш внести щось корисне.</li>
+<li>Надішли посилання на репозиторій (через LinkedIn або email).</li>
+</ul>
+
+<h2>Частина 2: GTM (у README або окремому файлі)</h2>
+<ol>
+<li>Як би ти залучав перших 100–500 реальних користувачів?</li>
+<li>З якими 3 AI/dev-продуктами варто зробити інтеграцію в першу чергу і чому?</li>
+<li>Один конкретний крок, який можна зробити вже цього тижня.</li>
+</ol>
+</main>
+</body>
+</html>
