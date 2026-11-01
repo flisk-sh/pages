@@ -5,6 +5,7 @@ import { csp } from "../src/check.mjs";
 import { SHOWCASE_MAX, showcase } from "../src/pages";
 import {
 	bar,
+	isSharedShell,
 	originOf,
 	preparePage,
 	readSpaces,
@@ -248,5 +249,13 @@ describe("shared pages", () => {
 		expect(await (await get("/@sam/")).text()).not.toContain("for-bob");
 		expect(await (await get("/spaces.json")).text()).not.toContain("for-bob");
 		expect(await (await get("/sitemap.xml")).text()).not.toContain("for-bob");
+	});
+});
+
+describe("isSharedShell", () => {
+	it("is true for the locked shell and false for a public page that only carries the marker", () => {
+		const fixtures = join(import.meta.dir, "fixtures", "spaces", "sam");
+		expect(isSharedShell(join(fixtures, "for-bob"), "html")).toBe(true);
+		expect(isSharedShell(join(fixtures, "gpu-explainer"), "html")).toBe(false);
 	});
 });

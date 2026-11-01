@@ -41,3 +41,11 @@ test("needs a person, one html page, and names become ids", () => {
 	assert.throws(() => shareStaged(stage({ "index.md": "# x" }), ["a"]), /one self-contained/);
 	assert.equal(personId(" Olena D. "), "olena-d");
 });
+
+test("a link naming a built-in property is refused, not looked up", async () => {
+	const d = stage({ "index.html": "<p>x</p>" });
+	shareStaged(d, ["alice"]);
+	const html = readFileSync(join(d, "index.html"), "utf8");
+	assert.ok(html.includes("Object.hasOwn(P,id)"));
+	assert.equal(await open(html, "constructor", "AAAA"), "");
+});

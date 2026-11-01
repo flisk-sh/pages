@@ -71,6 +71,21 @@ const decode = (s: string) =>
 		.replace(/&#39;/g, "'")
 		.replace(/&amp;/g, "&");
 
+/**
+ * Whether a space is the locked shell `pages share` writes: one index.html, marked, and small once its encrypted data
+ * is taken out. Only that is left out of the lists, so a public page cannot hide itself by containing the marker.
+ */
+export function isSharedShell(dir: string, kind: "html" | "md"): boolean {
+	if (kind !== "html" || readdirSync(dir).length !== 1) return false;
+	const html = readFileSync(join(dir, "index.html"), "utf8");
+	if (!html.includes("<body data-pages-shared>")) return false;
+	const rest = html.replace(/const P=\{[\s\S]*?\},C=\{[\s\S]*?\};/, "");
+	return (
+		rest.length < 2500 &&
+		!/<(?:script|iframe|img|link|form)\b[^>]*\b(?:src|href|action)=/i.test(rest)
+	);
+}
+
 /** Title and description: the page's <title> and meta description, or the Markdown's first heading and paragraph. */
 function describe(dir: string, kind: Space["kind"], slug: string) {
 	if (kind === "md") {
@@ -126,11 +141,7 @@ export function readSpaces(
 				...meta,
 				title: clip(title, 90),
 				description: clip(description, 200),
-				unlisted:
-					kind === "html" &&
-					readFileSync(join(dir, "index.html"), "utf8").includes(
-						"data-pages-shared",
-					),
+				unlisted: isSharedShell(dir, kind),
 			});
 		}
 	return out.sort((a, b) => b.updated.localeCompare(a.updated));

@@ -51,6 +51,7 @@ const P=${JSON.stringify(people)},C=${JSON.stringify(page)};
 const u=(s)=>Uint8Array.from(atob(s.replace(/-/g,"+").replace(/_/g,"/")),(c)=>c.charCodeAt(0));
 const open=async(key,o)=>crypto.subtle.decrypt({name:"AES-GCM",iv:u(o.iv)},await crypto.subtle.importKey("raw",key,"AES-GCM",false,["decrypt"]),u(o.data));
 try{
+if(!Object.hasOwn(P,id))throw 0;
 const content=new Uint8Array(await open(u(k),P[id]));
 const html=await open(content,C);
 document.open();document.write(new TextDecoder().decode(html));document.close();
