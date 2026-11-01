@@ -14,8 +14,10 @@ permissions:
   pages: write
   id-token: write
 
+# One group per space: GitHub keeps one pending run per group and cancels the older one, so a group per owner dropped
+# a publish whenever two repositories of the same owner published within a minute.
 concurrency:
-  group: anon-${{ github.event.client_payload.id || github.event.client_payload.owner }}
+  group: anon-${{ github.event.client_payload.id || format('{0}/{1}', github.event.client_payload.owner, github.event.client_payload.slug || 'cv') }}
   cancel-in-progress: false
 
 jobs:

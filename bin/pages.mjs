@@ -178,7 +178,7 @@ async function publishWithOidc(src, slugArg, wait) {
 	// On an update the link already answers with the old version, so wait for the version count to go up.
 	console.log(`\nWaiting for version ${before + 1} to be live…`);
 	if (await waitVersion(SITE, owner, slug, before)) console.log(`✓ Live now: ${sent.url} (version ${before + 1})`);
-	else die(`Version ${before + 1} is not live after five minutes; see ${sent.runs}`);
+	else die(`Version ${before + 1} is not live after five minutes (a newer publish of the same page replaces a waiting one); see ${sent.runs}`);
 }
 
 async function publishAnonymously(path, src, slugArg, wait) {
@@ -236,7 +236,15 @@ async function remove(arg, oidc) {
 		if (DRY) return console.log(`Dry run, nothing sent. Would take down ${SITE}@<repository owner>/${arg}/ with this job's OIDC token.`);
 		try {
 			const { url } = await removeFromActions(API, arg);
-			return console.log(`Removed: ${url} is gone after the next deploy, in a minute or two.`);
+			if (!process.argv.includes("--wait")) return console.log(`Sent: ${url} is gone after the next deploy, in a minute or two.`);
+			const owner = (process.env.GITHUB_REPOSITORY_OWNER || "").toLowerCase();
+			console.log(`Sent. Waiting for ${url} to be gone…`);
+			const until = Date.now() + 300_000;
+			while ((await versionsOf(SITE, owner, arg)) > 0) {
+				if (Date.now() > until) die(`Still live after five minutes; see https://github.com/${REPO}/actions/workflows/publish-anon.yml`);
+				await new Promise((r) => setTimeout(r, 5000));
+			}
+			return console.log(`✓ Removed: ${url}`);
 		} catch (e) {
 			die(`✗ ${e.message}`);
 		}

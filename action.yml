@@ -62,7 +62,9 @@ runs:
 
         if [ "$PG_COMMAND" = "remove" ]; then
           [ -n "$PG_SLUG" ] || { echo "::error::remove needs the slug of the page to take down."; exit 2; }
-          node "$cli" remove "$PG_SLUG" --oidc
+          rm_args=(remove "$PG_SLUG" --oidc)
+          [ "$PG_WAIT" = "true" ] && rm_args+=(--wait)
+          node "$cli" "${rm_args[@]}"
           code=$?
           echo "ok=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           exit "$code"
