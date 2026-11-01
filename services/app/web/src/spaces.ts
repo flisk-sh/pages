@@ -18,6 +18,8 @@ export interface SpaceGit {
 	versions: number;
 	/** A maintainer published it even though the check failed (a Pages-Approved-By trailer). */
 	approved?: boolean;
+	/** The CI run that published it (a Source: trailer on the commit), so "source" can open the publisher's own run. */
+	origin?: string;
 }
 
 export interface Space extends SpaceGit {
@@ -38,8 +40,18 @@ export const branchOf = (s: { handle: string; slug: string }) =>
 
 const repoUrl = (path: string) => `https://github.com/${SITE.repoSlug}/${path}`;
 
-export const links = (s: { handle: string; slug: string }) => ({
-	source: repoUrl(`tree/${branchOf(s)}`),
+/** The Source: trailer of a publish commit, only when it is a GitHub Actions run (nothing else is linked from the bar). */
+export const originOf = (body: string) =>
+	body.match(
+		/^Source: (https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+)\s*$/m,
+	)?.[1];
+
+export const links = (s: {
+	handle: string;
+	slug: string;
+	origin?: string;
+}) => ({
+	source: s.origin ?? repoUrl(`tree/${branchOf(s)}`),
 	history: repoUrl(`commits/${branchOf(s)}`),
 	report: repoUrl(
 		`issues/new?template=report.yml&title=${encodeURIComponent(`Report: @${s.handle}/${s.slug}`)}`,
@@ -121,7 +133,7 @@ export function readSpaces(
 export function bar(base: string, s: Space): string {
 	const l = links(s);
 	const a = 'style="color:inherit;text-decoration:none"';
-	return `<div data-pages-bar style="position:fixed;right:10px;bottom:10px;z-index:2147483647;display:flex;gap:10px;align-items:center;font:12px/1.2 ui-sans-serif,system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:7px 12px;border-radius:999px;opacity:.9;box-shadow:0 2px 10px rgba(0,0,0,.25)"><a ${a} href="${base}/"><b>pages</b>.flisk.si</a><a ${a} href="${base}/@${s.handle}/">@${esc(s.handle)}</a><a ${a} href="${l.history}">v${s.versions}</a><a ${a} href="${l.source}">source</a><a ${a} href="${l.report}">report</a></div>`;
+	return `<div data-pages-bar style="position:fixed;right:10px;bottom:10px;z-index:2147483647;display:flex;gap:10px;align-items:center;font:12px/1.2 ui-sans-serif,system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:7px 12px;border-radius:999px;opacity:.9;box-shadow:0 2px 10px rgba(0,0,0,.25)"><a ${a} href="${base}/"><b>pages</b>.flisk.si</a><a ${a} href="${base}/@${s.handle}/">@${esc(s.handle)}</a><a ${a} href="${l.history}" title="Every version of this page">v${s.versions}</a><a ${a} href="${l.source}" title="${s.origin ? "The CI run that published this page" : "The files of this page"}">source</a><a ${a} href="${l.report}" title="Report this page">report</a></div>`;
 }
 
 /**

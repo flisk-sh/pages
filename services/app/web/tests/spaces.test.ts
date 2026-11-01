@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { createApp } from "../src/app";
 import { csp } from "../src/check.mjs";
 import { SHOWCASE_MAX, showcase } from "../src/pages";
-import { preparePage, readSpaces, type Space } from "../src/spaces";
+import {
+	bar,
+	originOf,
+	preparePage,
+	readSpaces,
+	type Space,
+} from "../src/spaces";
 
 const skipped: string[] = [];
 const spaces = readSpaces(
@@ -196,5 +202,27 @@ describe("the home page showcase", () => {
 		expect(out).toHaveLength(SHOWCASE_MAX);
 		expect(SHOWCASE_MAX).toBe(9);
 		expect(out[0].slug).toBe("p0");
+	});
+});
+
+describe("the bar's source link", () => {
+	const run =
+		"https://github.com/jawah/charset_normalizer/actions/runs/41311328873";
+	it("reads only a GitHub Actions run from the Source: trailer", () => {
+		expect(originOf(`Update @a/b\n\nSource: ${run}\n`)).toBe(run);
+		expect(
+			originOf("Update @a/b\n\nSource: https://evil.example/actions/runs/1"),
+		).toBeUndefined();
+		expect(originOf(`Source: ${run}/../../x`)).toBeUndefined();
+		expect(originOf("Update @a/b")).toBeUndefined();
+	});
+	it("opens the publishing run, or the files when there is none", () => {
+		const s = { ...(spaces[0] as Space), origin: run };
+		expect(bar("https://pages.test", s)).toContain(
+			`href="${run}" title="The CI run that published this page">source`,
+		);
+		expect(bar("https://pages.test", spaces[0] as Space)).toContain(
+			"tree/space/sam/gpu-explainer",
+		);
 	});
 });

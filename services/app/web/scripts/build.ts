@@ -12,7 +12,7 @@ import { validId } from "../src/check.mjs";
 import { DEMO } from "../src/pages";
 import { ICONS } from "../src/seo";
 import { SITE } from "../src/site";
-import { readSpaces, type SpaceGit, spacePath } from "../src/spaces";
+import { originOf, readSpaces, type SpaceGit, spacePath } from "../src/spaces";
 
 const here = join(import.meta.dir, "..");
 const arg = (name: string, fallback: string) => {
@@ -66,6 +66,7 @@ export function gather(): Record<string, SpaceGit> {
 			updated: new Date(updated).toISOString(),
 			versions: Number(git("rev-list", "--count", ref)),
 			approved: /^Pages-Approved-By: \S+/m.test(body),
+			origin: originOf(body),
 		};
 	}
 	writeFileSync(join(SPACES, "git.json"), JSON.stringify(meta, null, 2));
