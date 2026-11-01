@@ -234,11 +234,13 @@ describe("the bar's source link", () => {
 		const html = bar("https://pages.test", spaces[0] as Space);
 		expect(html).toContain('href="mailto:?subject=How%20GPUs%20work&body=');
 		expect(html).toContain("share-only-the-people-you-name");
+		expect(html).toContain("data-tip=");
+		expect(html).toContain("a[data-tip]:hover::after");
 	});
 	it("opens the publishing run, or the files when there is none", () => {
 		const s = { ...(spaces[0] as Space), origin: run };
 		expect(bar("https://pages.test", s)).toContain(
-			`href="${run}" title="The CI run that published this page">source`,
+			`href="${run}" data-tip="The CI run that published this page">source`,
 		);
 		expect(bar("https://pages.test", spaces[0] as Space)).toContain(
 			"tree/space/sam/gpu-explainer",
