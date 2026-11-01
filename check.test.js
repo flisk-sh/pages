@@ -9,7 +9,9 @@ const STARTER_TREE = [
 	"README.md", ".flisk/project.json", "services/agents/agent/service.json", "services/agents/tools/service.json",
 	"services/agents/agent-migrator/service.json", "services/agents/agent/tests/agent.test.ts", "services/agents/tools/tests/tools.test.ts",
 ];
-const OWN = ["services/agents/my-api/service.json", "services/agents/my-api/tests/api.test.ts"];
+// What `flisk resource my-api --type backend --stack agents --yes` creates, plus one test the candidate wrote.
+const SCAFFOLD = ["services/agents/my-api/service.json", "services/agents/my-api/tests/my-api.test.ts"];
+const OWN = [...SCAFFOLD, "services/agents/my-api/tests/routes.test.ts"];
 
 function repo(over = {}) {
 	const o = {
@@ -46,7 +48,12 @@ describe("a candidate who follows the instructions", () => {
 	});
 });
 
-describe("the starter alone is not enough", () => {
+describe("the starter and the scaffold alone are not enough", () => {
+	it("passes system but fails tests until the candidate writes a test of their own", async () => {
+		const r = await run({ tree: [...STARTER_TREE, ...SCAFFOLD] });
+		expect(failed(r)).toEqual(["tests"]);
+		expect(r.accepted).toBe(false);
+	});
 	it("fails system and tests until the candidate adds their own", async () => {
 		const r = await run({ tree: STARTER_TREE });
 		expect(failed(r)).toEqual(expect.arrayContaining(["system", "tests"]));
