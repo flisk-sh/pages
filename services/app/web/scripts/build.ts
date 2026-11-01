@@ -115,7 +115,9 @@ export async function build(meta: Record<string, SpaceGit>) {
 		...Object.values(DEMO).map((n): [string, string] => [`/${n}`, n]),
 	];
 	for (const [path, file] of site) await write(path, file);
-	for (const handle of new Set(spaces.map((s) => s.handle)))
+	for (const handle of new Set(
+		spaces.filter((s) => !s.unlisted).map((s) => s.handle),
+	))
 		await write(`/@${handle}/`, `@${handle}/index.html`);
 	for (const s of spaces) {
 		const prefix = spacePath(s);
