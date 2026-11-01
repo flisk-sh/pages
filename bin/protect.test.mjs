@@ -68,3 +68,12 @@ test("pages.mjs imports every helper the share path uses", () => {
 		assert.match(src, new RegExp(`^import[^;]*\\b${name}\\b[^;]*from`, "m"), `${name} is used but not imported`);
 	}
 });
+
+test("every local file pages.mjs imports is in the npm package's files list", () => {
+	const dir = import.meta.dirname;
+	const src = readFileSync(join(dir, "pages.mjs"), "utf8");
+	const files = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).files;
+	const imports = [...src.matchAll(/from "\.\/([a-z.-]+\.mjs)"/g)].map((m) => m[1]);
+	assert.ok(imports.length >= 3);
+	for (const f of imports) assert.ok(files.includes(f), `${f} is imported by pages.mjs but missing from package.json files`);
+});
