@@ -10,6 +10,7 @@ form.addEventListener("submit", async (e) => {
 	e.preventDefault();
 	out.replaceChildren();
 	const file = document.getElementById("page").files[0];
+	const pasted = document.getElementById("paste").value;
 	const names = [
 		...new Set(
 			document
@@ -19,8 +20,9 @@ form.addEventListener("submit", async (e) => {
 				.filter(Boolean),
 		),
 	];
-	if (!file || !names.length) {
-		msg.textContent = "Choose one .html page and at least one name.";
+	if ((!file && !pasted.trim()) || !names.length) {
+		msg.textContent =
+			"Choose a .html file or paste its HTML, and enter at least one name.";
 		return;
 	}
 	if (!globalThis.crypto?.subtle) {
@@ -29,7 +31,9 @@ form.addEventListener("submit", async (e) => {
 		return;
 	}
 	msg.textContent = "Sealing in this browser…";
-	const page = new Uint8Array(await file.arrayBuffer());
+	const page = file
+		? new Uint8Array(await file.arrayBuffer())
+		: new TextEncoder().encode(pasted);
 	for (const name of names) {
 		const { html, passphrase } = await sealPage(page);
 		const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));

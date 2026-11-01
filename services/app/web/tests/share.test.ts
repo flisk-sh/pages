@@ -59,3 +59,13 @@ describe("the native share button", () => {
 		expect(js).not.toMatch(/navigator\.share\(\{[^}]*passphrase/);
 	});
 });
+
+describe("pasting instead of a file", () => {
+	it("the page has a paste box and the script accepts either a file or pasted HTML", async () => {
+		const html = await (await get("/share")).text();
+		expect(html).toContain('id="paste"');
+		const js = await (await get(SHARE_JS_PATH)).text();
+		expect(js).toContain('document.getElementById("paste").value');
+		expect(js).toContain("new TextEncoder().encode(pasted)");
+	});
+});

@@ -330,7 +330,8 @@ export function sharePage(
 </style>
 <div class="wrap page"><p class="eyebrow">Private</p><h1>Make a private file</h1>
 <p class="lede">Choose a page and the people it is for. Each person gets their own file and passphrase. This runs in your browser: the page is never uploaded, and nothing is stored. Send each file and its passphrase by different channels.</p>
-<form id="f"><label>Page (.html) <input id="page" type="file" accept=".html,text/html" required></label>
+<form id="f"><label>Page (.html file) <input id="page" type="file" accept=".html,text/html"></label>
+<label>Or paste the page's HTML here (no file needed) <textarea id="paste" rows="6" spellcheck="false" autocapitalize="off"></textarea></label>
 <label>Names, one per line or separated by commas <textarea id="names" rows="3" required></textarea></label>
 <button type="submit">Make private files</button></form>
 <p id="m" role="status"></p><div id="out"></div>
