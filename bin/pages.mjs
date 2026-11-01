@@ -3,8 +3,8 @@
 // `npx -y @flisk-sh/pages publish page.html`, or `node bin/pages.mjs …` from a checkout of this repository.
 //
 //   pages check <path>                                    the same check the publish runs, nothing sent
-//   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--lock] [--dry-run]
-//                                                         --lock: encrypted, the key is in the link's #fragment
+//   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]
+//   pages share <path> [--to name]... [--slug name] [--wait]   one locked link per person; asks who if no --to
 //   pages remove <slug | path> [--oidc]                   take one of your spaces down
 //   pages whoami                                          the login your spaces go under
 //
@@ -101,7 +101,7 @@ function check(src) {
 	}
 }
 
-async function publish(path, slugArg, wait, anon, oidc, prot) {
+async function publish(path, slugArg, wait, anon, oidc, names) {
 	const src = source(path);
 	if (oidc) return publishWithOidc(src, slugArg, wait);
 	const me = anon ? "" : signedIn();
@@ -113,7 +113,7 @@ async function publish(path, slugArg, wait, anon, oidc, prot) {
 				: "Publishing this page needs the GitHub CLI signed in (gh auth login). Only a Markdown page (one .md file,\nor a folder holding just index.md) publishes without it, at pages.flisk.si/@anon/<id>/.",
 		);
 	if (!check(src)) die("\nFix the problems above, then publish again.");
-	if (prot && !me) die("--lock needs the GitHub CLI signed in (gh auth login).");
+	if (names && !me) die("share needs the GitHub CLI signed in (gh auth login).");
 	if (!me) return publishAnonymously(path, src, slugArg, wait);
 
 	const handle = me.toLowerCase();
@@ -131,7 +131,7 @@ async function publish(path, slugArg, wait, anon, oidc, prot) {
 	const work = mkdtempSync(join(tmpdir(), "pages-publish-"));
 	const staged = stage(src);
 	try {
-		const key = prot ? protectStaged(staged) : "";
+		const keys = names ? shareOrDie(staged, names) : {};
 		const git = (...args) => run("git", args, { cwd: work });
 		run("git", ["clone", "--quiet", "--depth=1", `https://github.com/${REPO}.git`, work]);
 		const branch = `publish/${slug}-${Date.now().toString(36)}`;
@@ -153,12 +153,32 @@ async function publish(path, slugArg, wait, anon, oidc, prot) {
 			"--body", `Publishing \`spaces/${handle}/${slug}/\` with \`bin/pages.mjs\`. The check runs on this pull request; when it passes, the space goes live at ${SITE}@${handle}/${slug}/ and this pull request is closed.`,
 		);
 		console.log(`\nPull request: ${pr}\nWill be live at: ${SITE}@${handle}/${slug}/`);
-		if (key) console.log(`\nLocked. Send this whole link to your person. The part after # is the key. Lose it, lose the page:\n${SITE}@${handle}/${slug}/#${key}`);
+		for (const [id, key] of Object.entries(keys)) console.log(`\nFor ${id}: ${SITE}@${handle}/${slug}/#${id}.${key}`);
+		if (names) console.log("\nSend each person their own whole link. The part after # is the key. Lose it, lose the page.");
 		if (wait && (await waitFor(pr))) await live(`${SITE}@${handle}/${slug}/`);
 	} finally {
 		rmSync(work, { recursive: true, force: true });
 		rmSync(staged, { recursive: true, force: true });
 	}
+}
+
+function shareOrDie(staged, names) {
+	try {
+		return shareStaged(staged, names);
+	} catch (e) {
+		return die(e.message);
+	}
+}
+
+/** Who is it for? --to a --to b, or ask. */
+async function recipients() {
+	const given = process.argv.flatMap((a, i, all) => (a === "--to" && all[i + 1] ? [all[i + 1]] : []));
+	if (given.length) return given;
+	if (!process.stdin.isTTY) die("Say who it is for: pages share <path> --to alice --to bob");
+	const rl = createInterface({ input: process.stdin, output: process.stdout });
+	const answer = await rl.question("Who is this page for? (names, separated by commas): ");
+	rl.close();
+	return answer.split(",");
 }
 
 async function publishWithOidc(src, slugArg, wait) {
@@ -279,13 +299,14 @@ async function remove(arg, oidc) {
 }
 
 const [cmd, arg] = process.argv.slice(2);
+const has = (f) => process.argv.includes(f);
 if (cmd === "check" && arg) process.exit(check(source(arg)) ? 0 : 1);
-else if (cmd === "publish" && arg)
-	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"), process.argv.includes("--oidc"), (process.argv.includes("--lock") || process.argv.includes("--protected")));
-else if (cmd === "remove" && arg) await remove(arg, process.argv.includes("--oidc"));
+else if (cmd === "publish" && arg) await publish(arg, flag("slug"), has("--wait"), has("--anon"), has("--oidc"), null);
+else if (cmd === "share" && arg) await publish(arg, flag("slug"), has("--wait"), false, false, await recipients());
+else if (cmd === "remove" && arg) await remove(arg, has("--oidc"));
 else if (cmd === "whoami") console.log(login().toLowerCase());
 else
 	die(
-		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--lock] [--dry-run]\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
+		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages share <path> [--to name]... [--slug name] [--wait]   only the people you name can read it; asks who if no --to\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file (share: one .html file).",
 		2,
 	);

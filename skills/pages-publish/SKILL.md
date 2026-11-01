@@ -1,6 +1,6 @@
 ---
 name: pages-publish
-description: Publish a page (a folder with an index.html or index.md, or a single .html or .md file) to a public link on pages.flisk.si/@<github login>/<name>, or publish a new version of one, or take one down. Use when the user asks to publish, share, host or put online a page, dashboard, explainer, report or prototype the agent built, to "make it a link", or mentions pages.flisk.si. Not for deploying apps with a server, or for private pages.
+description: Publish a page (a folder with an index.html or index.md, or a single .html or .md file) to a public link on pages.flisk.si/@<github login>/<name>, or publish a new version of one, or take one down. Use when the user asks to publish, share, host or put online a page, dashboard, explainer, report or prototype the agent built, to "make it a link", or mentions pages.flisk.si. To share with only certain people, use `share` (asks who, one locked link per person). Not for deploying apps with a server.
 ---
 
 # Publish to pages.flisk.si
@@ -19,6 +19,7 @@ folders up from this file, and runs on `node` (18+) or `bun` (`bun "$PAGES" …`
 PAGES="<this skill's base directory>/../../bin/pages.mjs"
 node "$PAGES" check ./my-page                              # the publish check, nothing sent
 node "$PAGES" publish ./my-page --slug my-page --wait      # the link, once it answers
+node "$PAGES" share ./page.html --to alice --to bob --wait  # only named people; ASK the user who first, never guess
 node "$PAGES" publish ./notes.md --wait                    # one file is fine; not signed in, it goes to /@anon/
 node "$PAGES" remove my-page                               # take it down (or: remove ./notes.md for an anonymous one)
 ```
