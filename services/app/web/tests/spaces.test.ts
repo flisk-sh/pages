@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createApp } from "../src/app";
 import { csp } from "../src/check.mjs";
@@ -257,5 +258,14 @@ describe("isSharedShell", () => {
 		const fixtures = join(import.meta.dir, "fixtures", "spaces", "sam");
 		expect(isSharedShell(join(fixtures, "for-bob"), "html")).toBe(true);
 		expect(isSharedShell(join(fixtures, "gpu-explainer"), "html")).toBe(false);
+	});
+});
+
+describe("hidden spaces", () => {
+	it("lists the spaces a maintainer hid in src/hidden.json", () => {
+		const hidden = JSON.parse(
+			readFileSync(join(import.meta.dir, "..", "src", "hidden.json"), "utf8"),
+		);
+		expect(hidden).toContain("kburym/flisk-candidate-test");
 	});
 });

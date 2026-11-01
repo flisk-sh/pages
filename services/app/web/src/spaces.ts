@@ -71,6 +71,11 @@ const decode = (s: string) =>
 		.replace(/&#39;/g, "'")
 		.replace(/&amp;/g, "&");
 
+/** Spaces a maintainer keeps off every list (src/hidden.json). They still open by their link. */
+const HIDDEN: string[] = JSON.parse(
+	readFileSync(join(import.meta.dir, "hidden.json"), "utf8"),
+);
+
 /**
  * Whether a space is the locked shell `pages share` writes: one index.html, marked, and small once its encrypted data
  * is taken out. Only that is left out of the lists, so a public page cannot hide itself by containing the marker.
@@ -141,7 +146,8 @@ export function readSpaces(
 				...meta,
 				title: clip(title, 90),
 				description: clip(description, 200),
-				unlisted: isSharedShell(dir, kind),
+				unlisted:
+					isSharedShell(dir, kind) || HIDDEN.includes(`${handle}/${slug}`),
 			});
 		}
 	return out.sort((a, b) => b.updated.localeCompare(a.updated));
