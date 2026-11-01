@@ -69,3 +69,10 @@ describe("pasting instead of a file", () => {
 		expect(js).toContain("new TextEncoder().encode(pasted)");
 	});
 });
+
+describe("names are optional", () => {
+	it("one file is made when no names are typed", async () => {
+		const js = await (await get(SHARE_JS_PATH)).text();
+		expect(js).toContain('"Recipient 1"');
+	});
+});

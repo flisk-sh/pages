@@ -20,9 +20,9 @@ form.addEventListener("submit", async (e) => {
 				.filter(Boolean),
 		),
 	];
-	if ((!file && !pasted.trim()) || !names.length) {
-		msg.textContent =
-			"Choose a .html file or paste its HTML, and enter at least one name.";
+	if (names.length === 0) names.push("Recipient 1");
+	if (!file && !pasted.trim()) {
+		msg.textContent = "Choose a .html file or paste its HTML first.";
 		return;
 	}
 	if (!globalThis.crypto?.subtle) {
