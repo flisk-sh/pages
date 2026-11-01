@@ -299,7 +299,7 @@ export function aboutPage(base: string): string {
 
 // The share page runs one same-origin script and nothing else. It is the only page that allows scripts.
 const SHARE_POLICY =
-	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'";
 
 export function sharePage(
 	base: string,

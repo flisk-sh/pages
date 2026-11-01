@@ -74,3 +74,10 @@ describe("no share sheet", () => {
 		expect(js).not.toContain("canShare");
 	});
 });
+
+describe("the share page's image policy", () => {
+	it("allows the site's own images, so the logo loads", async () => {
+		const html = await (await get("/share")).text();
+		expect(html).toContain("img-src 'self'");
+	});
+});
