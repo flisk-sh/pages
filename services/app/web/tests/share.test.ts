@@ -50,16 +50,6 @@ describe("the share page's integrity pin", () => {
 	});
 });
 
-describe("the native share button", () => {
-	it("is written only when the browser can share files, and never offers the passphrase", async () => {
-		const js = await (await get(SHARE_JS_PATH)).text();
-		expect(js).toContain("navigator.canShare?.(");
-		expect(js).toContain("navigator.share({ files: [fileObj]");
-		expect(js).toContain("Confirm you saved the passphrase first.");
-		expect(js).not.toMatch(/navigator\.share\(\{[^}]*passphrase/);
-	});
-});
-
 describe("pasting instead of a file", () => {
 	it("the page has a paste box and the script accepts either a file or pasted HTML", async () => {
 		const html = await (await get("/share")).text();
@@ -74,5 +64,13 @@ describe("names are optional", () => {
 	it("one file is made when no names are typed", async () => {
 		const js = await (await get(SHARE_JS_PATH)).text();
 		expect(js).toContain('"Recipient 1"');
+	});
+});
+
+describe("no share sheet", () => {
+	it("the page never opens the system share sheet, so nothing is sent by email automatically", async () => {
+		const js = await (await get(SHARE_JS_PATH)).text();
+		expect(js).not.toContain("navigator.share");
+		expect(js).not.toContain("canShare");
 	});
 });
