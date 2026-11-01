@@ -77,6 +77,10 @@ jobs:
       - run: echo "${{ steps.pages.outputs.url }}"
 ```
 
+`--wait` (on by default) waits until the new version is live, not just until the link answers. To take the page
+down, run the Action with `command: remove` and the same `slug` (or open an issue titled `Remove @<owner>/<slug>`
+as the owner or, for an organization, as a public member of it).
+
 Anyone who can run a workflow in a repository of that owner can publish under `/@<owner>/`. Pull requests from forks
 get no OIDC token, so publish on `push` to your main branch. To publish under your own login through a pull request
 instead, give a `token` (a personal access token that can fork and open pull requests). The Action runs the CLI from

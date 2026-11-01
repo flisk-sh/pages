@@ -6,6 +6,7 @@
 // or, from a GitHub Actions job whose OIDC token the worker checked (owner is the repository's owner):
 //   {op: "ci", owner, slug, blob, source}   → the branch space/<owner>/<slug>; the files are the blob, a JSON list of
 //   {path, base64} the worker stored in this repository
+//   {op: "ci-remove", owner, slug, source}   → deletes the branch space/<owner>/<slug>
 // A space is the branch space/anon/<id>: an index.md, or a developer CV that src/cv.ts builds here from roadmap's
 // ratings string and roadmap's own data, so no visitor's markup is ever published. Its commits carry `Pages-Edit-Hash: <sha256 of the
 // visitor's key>`; update and delete go through only when the hash matches the one on the branch.
@@ -44,9 +45,10 @@ export interface Payload {
 
 /** Why a payload cannot be acted on, or "" when it can. */
 export function invalid(p: Partial<Payload>): string {
-	if (p.op === "ci") {
+	if (p.op === "ci" || p.op === "ci-remove") {
 		if (!validId(p.owner ?? "", p.slug ?? "") || p.owner === "anon")
 			return "bad owner or slug";
+		if (p.op === "ci-remove") return "";
 		return /^[a-f0-9]{40}$/.test(p.blob ?? "") ? "" : "bad blob";
 	}
 	if (p.op === "save" || p.op === "remove") {
@@ -160,7 +162,7 @@ async function main() {
 	const p = (event.client_payload ?? {}) as Payload;
 	const why = invalid(p);
 	if (why) throw new Error(`refused: ${why}`);
-	const fromCi = p.op === "ci";
+	const fromCi = p.op === "ci" || p.op === "ci-remove";
 	const signedIn = p.op === "save" || p.op === "remove" || fromCi;
 	const handle = fromCi
 		? `${p.owner}/${p.slug}`
@@ -187,7 +189,7 @@ async function main() {
 			throw new Error("refused: wrong key");
 	}
 
-	if (p.op === "delete" || p.op === "remove") {
+	if (p.op === "delete" || p.op === "remove" || p.op === "ci-remove") {
 		if (parent) run(["push", "origin", "--delete", branch]);
 		console.log(`removed @${handle}`);
 	} else {

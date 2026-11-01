@@ -4,7 +4,7 @@
 //
 //   pages check <path>                                    the same check the publish runs, nothing sent
 //   pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]
-//   pages remove <slug | path>                            take one of your spaces down
+//   pages remove <slug | path> [--oidc]                   take one of your spaces down
 //   pages whoami                                          the login your spaces go under
 //
 // <path> is a folder with an index.html or index.md, or a single .html or .md file, which becomes the index.
@@ -33,6 +33,9 @@ import {
 	formatReport,
 	publishAnon,
 	publishFromActions,
+	removeFromActions,
+	versionsOf,
+	waitVersion,
 	removeAnon,
 	saveSpace,
 	savedSpace,
@@ -160,6 +163,7 @@ async function publishWithOidc(src, slugArg, wait) {
 	const owner = (process.env.GITHUB_REPOSITORY_OWNER || "<repository owner>").toLowerCase();
 	if (DRY)
 		return console.log(`\nDry run, nothing sent. A publish would send this page to ${API} with this job's OIDC token,\nand the space would go live at ${SITE}@${owner}/${slug}/`);
+	const before = await versionsOf(SITE, owner, slug);
 	const staged = stage(src);
 	let sent;
 	try {
@@ -170,8 +174,11 @@ async function publishWithOidc(src, slugArg, wait) {
 		rmSync(staged, { recursive: true, force: true });
 	}
 	console.log(`\n✓ Sent from GitHub Actions: ${sent.url}\nThe check and the commit run at ${sent.runs}`);
-	if (wait) await live(sent.url);
-	else console.log("It is live in a minute or two; --wait waits until it is.");
+	if (!wait) return console.log("It is live in a minute or two; --wait waits until it is.");
+	// On an update the link already answers with the old version, so wait for the version count to go up.
+	console.log(`\nWaiting for version ${before + 1} to be live…`);
+	if (await waitVersion(SITE, owner, slug, before)) console.log(`✓ Live now: ${sent.url} (version ${before + 1})`);
+	else die(`Version ${before + 1} is not live after five minutes; see ${sent.runs}`);
 }
 
 async function publishAnonymously(path, src, slugArg, wait) {
@@ -223,7 +230,17 @@ async function waitFor(pr) {
 	return false;
 }
 
-async function remove(arg) {
+async function remove(arg, oidc) {
+	if (oidc) {
+		if (!validId("ci", arg)) die(`"${arg}" is not a space name.`);
+		if (DRY) return console.log(`Dry run, nothing sent. Would take down ${SITE}@<repository owner>/${arg}/ with this job's OIDC token.`);
+		try {
+			const { url } = await removeFromActions(API, arg);
+			return console.log(`Removed: ${url} is gone after the next deploy, in a minute or two.`);
+		} catch (e) {
+			die(`✗ ${e.message}`);
+		}
+	}
 	const saved = existsSync(arg) ? savedSpace(arg) : undefined;
 	if (saved) {
 		if (DRY) return console.log(`Dry run, nothing sent. Would take down ${saved.url}`);
@@ -246,10 +263,10 @@ const [cmd, arg] = process.argv.slice(2);
 if (cmd === "check" && arg) process.exit(check(source(arg)) ? 0 : 1);
 else if (cmd === "publish" && arg)
 	await publish(arg, flag("slug"), process.argv.includes("--wait"), process.argv.includes("--anon"), process.argv.includes("--oidc"));
-else if (cmd === "remove" && arg) await remove(arg);
+else if (cmd === "remove" && arg) await remove(arg, process.argv.includes("--oidc"));
 else if (cmd === "whoami") console.log(login().toLowerCase());
 else
 	die(
-		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages remove <slug | path>\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
+		"usage:\n  pages check <path>\n  pages publish <path> [--slug name] [--wait] [--anon] [--oidc] [--dry-run]\n  pages remove <slug | path> [--oidc]\n  pages whoami\n\n<path> is a folder with an index.html or index.md, or one .html or .md file.",
 		2,
 	);

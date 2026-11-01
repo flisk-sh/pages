@@ -124,3 +124,32 @@ describe("publishing from GitHub Actions", () => {
 		}
 	});
 });
+
+describe("taking down a page from GitHub Actions", () => {
+	const del = (auth, slug = "bench") =>
+		new Request(`https://publish.test/v1/ci/spaces/${slug}`, { method: "DELETE", headers: { authorization: `Bearer ${auth}` } });
+
+	it("dispatches the removal of the owner's space and nobody else's", async () => {
+		const gh = github();
+		const res = await handle(del(await token()), env, gh.fetcher);
+		expect(res.status).toBe(202);
+		expect((await res.json()).url).toBe("https://pages.test/@some-org/bench/");
+		expect(gh.sent).toEqual([
+			{
+				url: "https://api.github.com/repos/flisk-sh/pages/dispatches",
+				body: {
+					event_type: "pages-anon",
+					client_payload: { op: "ci-remove", owner: "some-org", slug: "bench", source: "https://github.com/Some-Org/tool/actions/runs/123" },
+				},
+			},
+		]);
+	});
+
+	it("refuses without a valid token or with a bad slug", async () => {
+		const gh = github();
+		expect((await handle(del("nope"), env, gh.fetcher)).status).toBe(401);
+		expect((await handle(del(await token(), "..%2Fmain"), env, gh.fetcher)).status).toBe(404);
+		expect((await handle(del(await token({ repository_owner: "anon" })), env, gh.fetcher)).status).toBe(403);
+		expect(gh.sent).toHaveLength(0);
+	});
+});

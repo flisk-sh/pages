@@ -26,4 +26,7 @@ export function publishAnon(api: string, markdown: string, saved?: AnonSpace, fe
 export function removeAnon(api: string, saved: AnonSpace, fetcher?: Fetcher): Promise<void>;
 export function readFolder(dir: string): { path: string; base64: string }[];
 export function publishFromActions(api: string, slug: string, dir: string, env?: Record<string, string | undefined>, fetcher?: Fetcher): Promise<{ url: string; runs: string }>;
+export function versionsOf(site: string, handle: string, slug: string, fetcher?: Fetcher): Promise<number>;
+export function waitVersion(site: string, handle: string, slug: string, before: number, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;
+export function removeFromActions(api: string, slug: string, env?: Record<string, string | undefined>, fetcher?: Fetcher): Promise<{ url: string }>;
 export function waitLive(url: string, opts?: { seconds?: number; every?: number; fetcher?: Fetcher }): Promise<boolean>;

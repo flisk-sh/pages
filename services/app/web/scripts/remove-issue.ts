@@ -1,5 +1,5 @@
 // Takes a space down, run by .github/workflows/remove.yml when an issue titled "Remove @<handle>/<slug>" is opened by
-// that publisher, or when a maintainer adds the `remove` label to one (for a report). Deletes the branch, has the
+// that publisher (for an organization's space, by a public member of it), or when a maintainer adds the `remove` label to one (for a report). Deletes the branch, has the
 // workflow's next job deploy (DEPLOY_HERE) or starts the deploy, and closes the issue. Needs GH_TOKEN, REPO, ISSUE, and SENDER (who opened or labeled it).
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -43,6 +43,16 @@ function isMaintainer(repo: string, login: string): boolean {
 	}
 }
 
+/** Whether login is a public member of the organization `org` (a space published from that organization's CI). */
+function isPublicMember(org: string, login: string): boolean {
+	try {
+		run("gh", "api", "--silent", `orgs/${org}/public_members/${login}`);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 async function main() {
 	const repo = env("REPO");
 	const issue = env("ISSUE");
@@ -61,8 +71,9 @@ async function main() {
 	if (!space) return;
 	const own =
 		/^\s*remove\b/i.test(title) &&
-		author.toLowerCase() === space.handle &&
-		sender === author;
+		sender === author &&
+		(author.toLowerCase() === space.handle ||
+			isPublicMember(space.handle, author));
 	const byMaintainer =
 		process.env.EVENT_LABEL === "remove" && isMaintainer(repo, sender);
 	if (!own && !byMaintainer) {
@@ -75,7 +86,7 @@ async function main() {
 				"-R",
 				repo,
 				"--body",
-				`Only @${space.handle} can remove @${space.handle}/${space.slug} this way. To report it, use the Report link on the page; a maintainer will look.`,
+				`Only @${space.handle} (or, for an organization, a public member of it) can remove @${space.handle}/${space.slug} this way. A workflow of that owner can also run \`flisk-sh/pages@v1\` with \`command: remove\`. To report it, use the Report link on the page; a maintainer will look.`,
 			);
 		return;
 	}

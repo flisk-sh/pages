@@ -109,6 +109,12 @@ describe("anonymous publishes", () => {
 		expect(invalid({ ...ci, owner: "Some-Org" })).toBe("bad owner or slug");
 		expect(invalid({ ...ci, slug: "../main" })).toBe("bad owner or slug");
 		expect(invalid({ ...ci, blob: "HEAD" })).toBe("bad blob");
+		expect(invalid({ op: "ci-remove", owner: "some-org", slug: "bench" })).toBe(
+			"",
+		);
+		expect(invalid({ op: "ci-remove", owner: "anon", slug: "x" })).toBe(
+			"bad owner or slug",
+		);
 	});
 
 	it("writes the files a workflow sent and nothing outside the space", async () => {

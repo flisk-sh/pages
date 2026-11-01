@@ -10,7 +10,7 @@ inputs:
     description: "The page: a folder with an index.html or index.md, or one .html or .md file, relative to the workspace. Run actions/checkout first."
     required: true
   command:
-    description: "check (default) runs the same rules as the publish and sends nothing. publish also puts the page on pages.flisk.si/@<repository owner>/<slug>/ (the job needs permissions: id-token: write)."
+    description: "check (default) runs the same rules as the publish and sends nothing. publish also puts the page on pages.flisk.si/@<repository owner>/<slug>/ (the job needs permissions: id-token: write). remove takes /@<repository owner>/<slug>/ down (needs slug)."
     required: false
     default: "check"
   slug:
@@ -58,7 +58,15 @@ runs:
         # The CLI runs from this action's own checkout, so it is the version you pinned and needs no install.
         cli="${GITHUB_ACTION_PATH}/bin/pages.mjs"
         target="${GITHUB_WORKSPACE}/${PG_PATH}"
-        case "$PG_COMMAND" in check|publish) ;; *) echo "::error::command is check or publish."; exit 2 ;; esac
+        case "$PG_COMMAND" in check|publish|remove) ;; *) echo "::error::command is check, publish or remove."; exit 2 ;; esac
+
+        if [ "$PG_COMMAND" = "remove" ]; then
+          [ -n "$PG_SLUG" ] || { echo "::error::remove needs the slug of the page to take down."; exit 2; }
+          node "$cli" remove "$PG_SLUG" --oidc
+          code=$?
+          echo "ok=$([ "$code" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit "$code"
+        fi
 
         out="${RUNNER_TEMP}/pages-check.txt"
         node "$cli" check "$target" > "$out" 2>&1

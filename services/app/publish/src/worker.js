@@ -25,6 +25,7 @@
 // Publishing from GitHub Actions needs no key either: the workflow's own OIDC token says which repository it is.
 //   POST   /v1/ci/spaces  {slug, files: [{path, base64}]}  Bearer <OIDC token, audience PUBLISH_ORIGIN>
 //                                      → 202 {url}   the space /@<repository owner>/<slug>/, new or a new version
+//   DELETE /v1/ci/spaces/<slug>        Bearer <the same kind of token>  → 202 {url}   take it down
 //
 // Settings (wrangler.toml [vars]): PAGES_REPO, PAGES_ORIGIN, PUBLISH_ORIGIN, ALLOWED_ORIGINS (comma-separated),
 // MAX_PER_IP_HOUR, MAX_PER_IP_DAY, MAX_PER_HOUR, MAX_CI_PER_HOUR, MAX_CI_PER_DAY. Secret: GITHUB_TOKEN (fine-grained, flisk-sh/pages only,
@@ -336,12 +337,32 @@ export function readFiles(body) {
 	return [{ slug: body.slug, files: body.files.map(({ path, base64 }) => ({ path, base64 })) }, ""];
 }
 
-async function ciPublish(request, env, fetcher, headers, url) {
+/** The repository owner a request's OIDC token proves, or a Response saying why not. */
+async function ciOwner(request, env, fetcher, headers) {
 	const claims = await verifyOidc(env, bearer(request), fetcher);
 	if (!claims)
-		return json({ error: `send a GitHub Actions OIDC token for audience ${env.PUBLISH_ORIGIN} (the job needs permissions: id-token: write)` }, 401, headers);
+		return [null, json({ error: `send a GitHub Actions OIDC token for audience ${env.PUBLISH_ORIGIN} (the job needs permissions: id-token: write)` }, 401, headers)];
 	const owner = String(claims.repository_owner ?? "").toLowerCase();
-	if (!HANDLE.test(owner) || RESERVED.has(owner)) return json({ error: `cannot publish under @${owner}` }, 403, headers);
+	if (!HANDLE.test(owner) || RESERVED.has(owner)) return [null, json({ error: `cannot publish under @${owner}` }, 403, headers)];
+	return [{ owner, claims }, null];
+}
+
+async function ciRemove(request, env, fetcher, headers, url, slug) {
+	const [who, refused] = await ciOwner(request, env, fetcher, headers);
+	if (refused) return refused;
+	if (!SLUG.test(slug)) return json({ error: "unknown space" }, 404, headers);
+	if (await overLimit(env, url.origin, `ci-${who.owner}`, Number(env.MAX_CI_PER_HOUR ?? 20), Number(env.MAX_CI_PER_DAY ?? 100)))
+		return json({ error: `Too many changes for @${who.owner}; try again in an hour.` }, 429, headers);
+	const source = `https://github.com/${who.claims.repository}/actions/runs/${who.claims.run_id}`;
+	if (!(await dispatch(env, { op: "ci-remove", owner: who.owner, slug, source }, fetcher)))
+		return json({ error: "Could not reach GitHub; try again." }, 502, headers);
+	return json({ url: `${env.PAGES_ORIGIN}/@${who.owner}/${slug}/` }, 202, headers);
+}
+
+async function ciPublish(request, env, fetcher, headers, url) {
+	const [who, refused] = await ciOwner(request, env, fetcher, headers);
+	if (refused) return refused;
+	const { owner, claims } = who;
 	const [content, problem] = readFiles(await readJson(request));
 	if (problem) return json({ error: problem }, 400, headers);
 	if (await overLimit(env, url.origin, `ci-${owner}`, Number(env.MAX_CI_PER_HOUR ?? 20), Number(env.MAX_CI_PER_DAY ?? 100)))
@@ -405,6 +426,8 @@ export async function handle(request, env, fetcher = fetch) {
 		return ownSpace(request, env, fetcher, headers, url);
 
 	if (request.method === "POST" && url.pathname === "/v1/ci/spaces") return ciPublish(request, env, fetcher, headers, url);
+	const ciSpace = url.pathname.match(/^\/v1\/ci\/spaces\/([^/]+)$/);
+	if (request.method === "DELETE" && ciSpace) return ciRemove(request, env, fetcher, headers, url, ciSpace[1]);
 
 	const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
 	if (request.method === "POST" && url.pathname === "/v1/spaces") {

@@ -146,11 +146,8 @@ export function readFolder(dir, at = dir, out = []) {
 	return out;
 }
 
-/**
- * Publishes a staged space from a GitHub Actions job with the job's OIDC token (the job needs `permissions: id-token:
- * write`), so no key is set up. The space goes under the repository's owner. Returns {url, runs} or throws.
- */
-export async function publishFromActions(api, slug, dir, env = process.env, fetcher = fetch) {
+/** This GitHub Actions job's OIDC token for `api`, or throws saying what the job is missing. */
+async function oidcToken(api, env, fetcher) {
 	const ask = env.ACTIONS_ID_TOKEN_REQUEST_URL;
 	if (!ask || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)
 		throw new Error("No GitHub Actions OIDC token: give the job `permissions: id-token: write` (and contents: read).");
@@ -158,14 +155,56 @@ export async function publishFromActions(api, slug, dir, env = process.env, fetc
 		headers: { authorization: `Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
 	}).then((r) => (r.ok ? r.json() : {})).catch(() => ({}));
 	if (typeof issued.value !== "string") throw new Error("GitHub Actions did not issue an OIDC token for this job.");
+	return issued.value;
+}
+
+/**
+ * Publishes a staged space from a GitHub Actions job with the job's OIDC token (the job needs `permissions: id-token:
+ * write`), so no key is set up. The space goes under the repository's owner. Returns {url, runs} or throws.
+ */
+export async function publishFromActions(api, slug, dir, env = process.env, fetcher = fetch) {
+	const token = await oidcToken(api, env, fetcher);
 	const res = await fetcher(`${api}/v1/ci/spaces`, {
 		method: "POST",
-		headers: { authorization: `Bearer ${issued.value}`, "content-type": "application/json" },
+		headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
 		body: JSON.stringify({ slug, files: readFolder(dir) }),
 	});
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error(body.error || `publish.flisk.si answered ${res.status}`);
 	return { url: body.url, runs: body.runs };
+}
+
+/** How many versions the space has on the live site (0 when it is not there yet), from spaces.json. */
+export async function versionsOf(site, handle, slug, fetcher = fetch) {
+	try {
+		const res = await fetcher(`${site}spaces.json?t=${Date.now()}`, { cache: "no-store" });
+		const list = res.ok ? await res.json() : [];
+		return list.find((s) => s.handle === handle && s.slug === slug)?.versions ?? 0;
+	} catch {
+		return 0;
+	}
+}
+
+/**
+ * Waits until the space shows more than `before` versions, since its link already answers with the old version on
+ * an update. True when it did within `seconds`.
+ */
+export async function waitVersion(site, handle, slug, before, { seconds = 300, every = 5, fetcher = fetch } = {}) {
+	const until = Date.now() + seconds * 1000;
+	for (;;) {
+		if ((await versionsOf(site, handle, slug, fetcher)) > before) return true;
+		if (Date.now() + every * 1000 > until) return false;
+		await new Promise((r) => setTimeout(r, every * 1000));
+	}
+}
+
+/** Takes down /@<repository owner>/<slug>/ from a GitHub Actions job of that owner, with the job's OIDC token. */
+export async function removeFromActions(api, slug, env = process.env, fetcher = fetch) {
+	const token = await oidcToken(api, env, fetcher);
+	const res = await fetcher(`${api}/v1/ci/spaces/${slug}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error(body.error || `publish.flisk.si answered ${res.status}`);
+	return { url: body.url };
 }
 
 /** Polls a link until it answers 200, for up to `seconds`. True when it did. */
