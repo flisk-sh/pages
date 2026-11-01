@@ -233,6 +233,7 @@ describe("the bar's source link", () => {
 	it("has a share by email link and a private sharing link", () => {
 		const html = bar("https://pages.test", spaces[0] as Space);
 		expect(html).toContain('href="mailto:?subject=How%20GPUs%20work&body=');
+		expect(html).toContain("navigator.clipboard.writeText(location.href)");
 		expect(html).toContain("share-only-the-people-you-name");
 		expect(html).toContain("data-tip=");
 		expect(html).toContain("[data-tip]:hover::after");
