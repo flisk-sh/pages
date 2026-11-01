@@ -74,6 +74,7 @@ describe("the page bar in a browser", () => {
 		);
 		await wait(50);
 		expect(copied).toEqual(["https://pages.test/@sam/gpu-explainer/"]);
+		expect(copied[0]).not.toContain("#");
 		expect(copy?.textContent).toBe("Copied");
 	});
 });

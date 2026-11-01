@@ -104,6 +104,9 @@ export async function build(meta: Record<string, SpaceGit>) {
 	const site: [string, string][] = [
 		["/", "index.html"],
 		["/about", "about.html"],
+		["/share", "share.html"],
+		["/seal.js", "seal.js"],
+		["/share.js", "share.js"],
 		["/404.html", "404.html"],
 		["/spaces.json", "spaces.json"],
 		["/robots.txt", "robots.txt"],
