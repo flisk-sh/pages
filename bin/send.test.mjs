@@ -17,31 +17,31 @@ function open(html, passphrase) {
 	return all.subarray(4, 4 + all.readUInt32BE(0)).toString();
 }
 
-test("the file opens with its passphrase, written with or without dashes and in any case", () => {
-	const { html, passphrase } = sealFile(Buffer.from("<h1>owner secret</h1>"));
+test("the file opens with its passphrase, written with or without dashes and in any case", async () => {
+	const { html, passphrase } = await sealFile(Buffer.from("<h1>owner secret</h1>"));
 	assert.equal(open(html, passphrase), "<h1>owner secret</h1>");
 	assert.equal(open(html, passphrase.replaceAll("-", "").toLowerCase()), "<h1>owner secret</h1>");
 	assert.throws(() => open(html, "AAAA-AAAA-AAAA-AAAA"));
 });
 
-test("the file never contains the page, the passphrase or any name", () => {
-	const { html, passphrase } = sealFile(Buffer.from("<h1>owner secret</h1>"));
+test("the file never contains the page, the passphrase or any name", async () => {
+	const { html, passphrase } = await sealFile(Buffer.from("<h1>owner secret</h1>"));
 	for (const leak of ["owner secret", passphrase, normalize(passphrase), "alice"]) assert.ok(!html.includes(leak));
 	assert.ok(html.includes("noindex"));
 });
 
-test("two files for the same page share nothing, and sizes fall in blocks", () => {
+test("two files for the same page share nothing, and sizes fall in blocks", async () => {
 	const page = Buffer.from("<p>same</p>");
-	const a = sealFile(page);
-	const b = sealFile(page);
+	const a = await sealFile(page);
+	const b = await sealFile(page);
 	assert.notEqual(a.passphrase, b.passphrase);
 	assert.notDeepEqual(parts(a.html).data, parts(b.html).data);
 	assert.equal(parts(a.html).data.length, BLOCK + 16);
-	assert.equal(parts(sealFile(Buffer.alloc(BLOCK)).html).data.length, 2 * BLOCK + 16);
+	assert.equal(parts((await sealFile(Buffer.alloc(BLOCK))).html).data.length, 2 * BLOCK + 16);
 	assert.equal(pad(Buffer.from("x")).length % BLOCK, 0);
 });
 
-test("passphrases are 4x4 from an unambiguous alphabet; file names are random", () => {
+test("passphrases are 4x4 from an unambiguous alphabet; file names are random", async () => {
 	assert.match(newPassphrase(), /^[A-HJKMNP-Z2-9]{4}(-[A-HJKMNP-Z2-9]{4}){3}$/);
 	assert.notEqual(randomName(), randomName());
 	assert.match(randomName(), /^private-[0-9a-f]{8}\.html$/);

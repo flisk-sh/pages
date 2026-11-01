@@ -297,6 +297,33 @@ export function aboutPage(base: string): string {
 	);
 }
 
+// The share page runs one same-origin script and nothing else. It is the only page that allows scripts.
+const SHARE_POLICY =
+	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
+
+export function sharePage(base: string): string {
+	const page = layout(
+		base,
+		{
+			path: "share",
+			title: "Make a private file",
+			description:
+				"Seal a page into one private file per person, in your browser. Nothing is uploaded.",
+			jsonLd: [],
+			crumbs: [{ name: "Share", path: "share" }],
+		},
+		`<div class="wrap page"><p class="eyebrow">Private</p><h1>Make a private file</h1>
+<p class="lede">Choose a page and the people it is for. Each person gets their own file and passphrase. This runs in your browser: the page is never uploaded, and nothing is stored. Send each file and its passphrase by different channels.</p>
+<form id="f"><label>Page (.html) <input id="page" type="file" accept=".html,text/html" required></label>
+<label>Names, one per line or separated by commas <textarea id="names" rows="3" required></textarea></label>
+<button type="submit">Make private files</button></form>
+<p id="m" role="status"></p><div id="out"></div>
+<p class="muted">Anyone with the file and the passphrase can read the page. Copies you send cannot be taken back. <a href="${SITE.repo}/blob/main/bin/seal.js">Read the sealing code</a>.</p>
+<script type="module" src="${rootOf(base)}/share.js"></script></div>`,
+	);
+	return page.replace(POLICY, SHARE_POLICY);
+}
+
 export function notFoundPage(base: string): string {
 	const root = rootOf(base);
 	return layout(

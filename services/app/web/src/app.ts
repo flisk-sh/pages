@@ -11,6 +11,7 @@ import {
 	handlePage,
 	homePage,
 	notFoundPage,
+	sharePage,
 	spacesJson,
 } from "./pages";
 import {
@@ -114,6 +115,15 @@ export function createApp(options: AppOptions = {}) {
 	// The site's own pages
 	app.get("/", (c) => c.html(homePage(baseOf(c), spaces)));
 	app.get("/about", (c) => c.html(aboutPage(baseOf(c))));
+	app.get("/share", (c) => c.html(sharePage(baseOf(c))));
+	// The share page's two scripts, from static/ (served with the same policy as the rest of the site)
+	for (const name of ["seal.js", "share.js"])
+		app.get(`/${name}`, (c) =>
+			c.body(readFileSync(join(STATIC, name)), 200, {
+				"content-type": "text/javascript; charset=utf-8",
+				"cache-control": "public, max-age=604800",
+			}),
+		);
 	app.get("/404.html", (c) => c.html(notFoundPage(baseOf(c)), 404));
 	app.get("/spaces.json", (c) =>
 		c.body(spacesJson(baseOf(c), spaces), 200, {

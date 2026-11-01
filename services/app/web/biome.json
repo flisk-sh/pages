@@ -8,7 +8,8 @@
 			"!**/node_modules",
 			"!tests/fixtures",
 			"!.spaces",
-			"!_site"
+			"!_site",
+			"!static/seal.js"
 		]
 	}
 }

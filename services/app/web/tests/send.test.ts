@@ -1,5 +1,5 @@
 // A file from `pages share --send`, opened the way a recipient does: the form, the passphrase, the decrypted page.
-import { describe, expect, it } from "bun:test";
+import { beforeAll, describe, expect, it } from "bun:test";
 import { Window } from "happy-dom";
 // @ts-expect-error plain .mjs without types
 import { sealFile } from "../../../../bin/send.mjs";
@@ -23,9 +23,13 @@ async function openWith(html: string, passphrase: string) {
 }
 
 describe("a private file in a browser", () => {
-	const { html, passphrase } = sealFile(
-		Buffer.from("<!doctype html><title>t</title><h1>owner secret</h1>"),
-	);
+	let html = "";
+	let passphrase = "";
+	beforeAll(async () => {
+		({ html, passphrase } = await sealFile(
+			Buffer.from("<!doctype html><title>t</title><h1>owner secret</h1>"),
+		));
+	});
 
 	it("asks for a passphrase and shows nothing of the page before it", () => {
 		const w = new Window({ settings: { enableJavaScriptEvaluation: true } });
