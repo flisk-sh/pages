@@ -49,3 +49,13 @@ describe("the share page's integrity pin", () => {
 		expect(html).toContain('crossorigin="anonymous"');
 	});
 });
+
+describe("the native share button", () => {
+	it("is written only when the browser can share files, and never offers the passphrase", async () => {
+		const js = await (await get("/share.js")).text();
+		expect(js).toContain("navigator.canShare?.(");
+		expect(js).toContain("navigator.share({ files: [fileObj]");
+		expect(js).toContain("Confirm you saved the passphrase first.");
+		expect(js).not.toMatch(/navigator\.share\(\{[^}]*passphrase/);
+	});
+});
