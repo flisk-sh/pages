@@ -45,8 +45,8 @@ code { font-family:ui-monospace,monospace; font-size:.9em; }
 
 <h2>Summary</h2>
 <table>
-<tr><th>Time allowed</th><td>48 hours, counted to the end of the second day after your start date (UTC). <span id="deadline"></span></td></tr>
-<tr><th>Work product</th><td>One new public GitHub repository, created after you received this link.</td></tr>
+<tr><th>Deadline</th><td>23:59 UTC on the second day after your start date. <span id="deadline"></span></td></tr>
+<tr><th>Work product</th><td>One new public GitHub repository, created after you received this link. Nothing else is read.</td></tr>
 <tr><th>Pass criterion</th><td>All ten checks below pass. The result is binary.</td></tr>
 <tr><th>Review</th><td>Automated and identical for you and for us. Run it as often as you like before the deadline.</td></tr>
 <tr><th>Submission</th><td>Reply with the repository link once the self-assessment shows “Accepted”.</td></tr>
@@ -56,30 +56,30 @@ code { font-family:ui-monospace,monospace; font-size:.9em; }
 <table>
 <tr><th></th><th>Exercise</th><th>Deliverable</th></tr>
 <tr><td class="n">1</td><td><b>First run.</b> Run <code>npx @flisk-sh/flisk demo</code> twice, then once with Docker stopped.</td><td><code>LOG.md</code>, heading <code># Lab 1</code>: three timings and three points of friction.</td></tr>
-<tr><td class="n">2</td><td><b>Build.</b> <code>flisk project agent-stack</code>, add <code>flisk resource my-api --type backend</code>, then <code>flisk up</code>.</td><td>Healthy <code>flisk status --json</code> under <code># Lab 2</code>. README linking flisk.sh and the Flisk repository. No hand-written container files.</td></tr>
+<tr><td class="n">2</td><td><b>Build.</b> <code>flisk project agent-stack</code>, then <code>cd flisk-agent-stack &amp;&amp; rm -rf .git &amp;&amp; git init</code> so the work is your own history. Add <code>flisk resource my-api --type backend</code> (choose the <code>agents</code> stack), then <code>flisk up</code>.</td><td>Healthy <code>flisk status --json</code> under <code># Lab 2</code>. README linking flisk.sh and the Flisk repository. No hand-written container files. Push to your new public repository.</td></tr>
 <tr><td class="n">3</td><td><b>Diagnose.</b> Introduce three faults. Find each with <code>flisk doctor</code>, <code>flisk config verify</code> or <code>flisk logs</code>.</td><td>Table under <code># Lab 3</code>: fault, symptom, command, fix, minutes. Three rows.</td></tr>
-<tr><td class="n">4</td><td><b>Contribute.</b> Open a pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>. Add a test to your repository.</td><td>PR link under <code># Lab 4</code>. <code>GTM.md</code> with three numbered answers: first 100 users, three integrations, one step this week.</td></tr>
+<tr><td class="n">4</td><td><b>Contribute.</b> Open a pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>. Add a test for your own resource.</td><td>PR link under <code># Lab 4</code>. <code>GTM.md</code> with three numbered answers: first 100 users, three integrations, one step this week.</td></tr>
 </table>
-<p class="muted">Commit with <code>git commit -s</code>. Do not commit <code>.env</code> or <code>.flisk/</code>. Star the Flisk repository. Using an AI assistant is allowed; record what really happened.</p>
+<p class="muted">Commit with <code>git commit -s</code>. Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files (the starter's <code>.gitignore</code> already excludes them). Star the Flisk repository. Using an AI assistant is allowed; record what really happened.</p>
 <details><summary>Optional: starter prompts for an AI assistant</summary>
 <p>Select one and paste it into your assistant.</p>
-<div class="row"><button data-p="Help me with exercise 1 of the Flisk assessment. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three points of friction, each with a one-line fix. Only write what really happened.">Exercise 1</button><button data-p="Help me with exercise 2 of the Flisk assessment. Run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Do not hand-write container manifests and do not edit .flisk/. Add a '# Lab 2' section to LOG.md with the healthy status. Write a README linking https://flisk.sh and https://github.com/flisk-sh/flisk.">Exercise 2</button><button data-p="Help me with exercise 3 of the Flisk assessment. Introduce three faults in my Flisk system: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Exercise 3</button><button data-p="Help me with exercise 4 of the Flisk assessment. Read https://github.com/flisk-sh/flisk, find one small real improvement and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my repository. Add a '# Lab 4' section to LOG.md with the PR link. Write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Exercise 4</button></div></details>
+<div class="row"><button data-p="Help me with exercise 1 of the Flisk assessment. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three points of friction, each with a one-line fix. Only write what really happened.">Exercise 1</button><button data-p="Help me with exercise 2 of the Flisk assessment. Run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend`, run `flisk up` and `flisk status --json`. Then cd flisk-agent-stack, run rm -rf .git and git init so the work is my own history. Do not hand-write container manifests. Add a '# Lab 2' section to LOG.md with the healthy status. Write a README linking https://flisk.sh and https://github.com/flisk-sh/flisk.">Exercise 2</button><button data-p="Help me with exercise 3 of the Flisk assessment. Introduce three faults in my Flisk system: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Exercise 3</button><button data-p="Help me with exercise 4 of the Flisk assessment. Read https://github.com/flisk-sh/flisk, find one small real improvement and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my repository. Add a '# Lab 4' section to LOG.md with the PR link. Write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Exercise 4</button></div></details>
 
 <h2>Scoring</h2>
 <table>
 <tr><th></th><th>Check</th><th>Verified from</th></tr>
 <tr><td class="n">1</td><td>README links flisk.sh and the Flisk repository</td><td>README.md</td></tr>
-<tr><td class="n">2</td><td>LOG.md has headings Lab 1 to Lab 4</td><td>LOG.md</td></tr>
-<tr><td class="n">3</td><td>Fault table has at least three rows</td><td>LOG.md</td></tr>
-<tr><td class="n">4</td><td>At least three <code>service.json</code> files</td><td>Repository tree</td></tr>
-<tr><td class="n">5</td><td>No <code>.env</code> and no <code>.flisk/</code> committed</td><td>Repository tree</td></tr>
-<tr><td class="n">6</td><td>At least one test file</td><td>Repository tree</td></tr>
+<tr><td class="n">2</td><td>LOG.md has Lab 1 to Lab 4, each with 120+ characters</td><td>LOG.md</td></tr>
+<tr><td class="n">3</td><td>Lab 3 table: three rows, five columns</td><td>LOG.md</td></tr>
+<tr><td class="n">4</td><td>Your own resource added: four or more <code>service.json</code> (the starter has three)</td><td>Repository tree</td></tr>
+<tr><td class="n">5</td><td>No <code>.env</code>, <code>node_modules</code> or generated <code>.flisk</code> files committed</td><td>Repository tree</td></tr>
+<tr><td class="n">6</td><td>Your own test added: three or more test files (the starter has two)</td><td>Repository tree</td></tr>
 <tr><td class="n">7</td><td>Last 20 commits signed off</td><td>Commit messages</td></tr>
 <tr><td class="n">8</td><td>Flisk repository starred</td><td>Your GitHub stars</td></tr>
-<tr><td class="n">9</td><td>Pull request open to flisk-sh/flisk</td><td>GitHub search</td></tr>
-<tr><td class="n">10</td><td>GTM.md answers 1, 2 and 3</td><td>GTM.md</td></tr>
+<tr><td class="n">9</td><td>Pull request to flisk-sh/flisk opened after your start date</td><td>GitHub search</td></tr>
+<tr><td class="n">10</td><td>GTM.md answers 1, 2 and 3, 40+ characters each</td><td>GTM.md</td></tr>
 </table>
-<p class="muted">Also required: the repository was created after your start date, and every commit is before the deadline.</p>
+<p class="muted">Also required: the repository was created after your start date, and every commit is before the deadline. The scoring code and its tests are open: <a href="check.js">check.js</a>, <a href="check.test.js">check.test.js</a>.</p>
 
 <h2>Self-assessment</h2>
 <div class="row">
@@ -100,7 +100,7 @@ code { font-family:ui-monospace,monospace; font-size:.9em; }
 import { runChecks } from "./check.js";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
-if (hash.get("start")) $("start").value = hash.get("start");
+if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
 const fmt = (d) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
 function showDeadline() {
 	const m = /^\d{4}-\d{2}-\d{2}$/.test($("start").value) && new Date(`${$("start").value}T00:00:00Z`);
