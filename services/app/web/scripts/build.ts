@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import { createApp } from "../src/app";
+import { createApp, SHARE_JS_PATH } from "../src/app";
 import { validId } from "../src/check.mjs";
 import { DEMO } from "../src/pages";
 import { ICONS } from "../src/seo";
@@ -105,8 +105,9 @@ export async function build(meta: Record<string, SpaceGit>) {
 		["/", "index.html"],
 		["/about", "about.html"],
 		["/share", "share.html"],
+		[SHARE_JS_PATH, SHARE_JS_PATH.slice(1)],
 		["/seal.js", "seal.js"],
-		["/share.js", "share.js"],
+
 		["/404.html", "404.html"],
 		["/spaces.json", "spaces.json"],
 		["/robots.txt", "robots.txt"],
