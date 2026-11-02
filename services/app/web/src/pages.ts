@@ -67,8 +67,6 @@ h2{font-size:clamp(28px,3.6vw,42px);line-height:1.05;letter-spacing:-.035em;font
 .card .view{aspect-ratio:16/10;border-bottom:1px solid var(--line)}
 .card .view iframe{width:400%;height:400%;transform:scale(.25)}
 .card .view::after{content:"";position:absolute;inset:0}
-.card .md{position:absolute;inset:14px 14px 0;padding:20px 22px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--card);color:var(--fg);font-size:13px;line-height:1.5;overflow:hidden;mask-image:linear-gradient(#000 60%,transparent);-webkit-mask-image:linear-gradient(#000 60%,transparent)}
-.card .md b{display:block;font-size:20px;letter-spacing:-.02em;margin-bottom:8px}
 .meta{display:flex;flex-direction:column;gap:6px;padding:16px 18px 18px;flex:1}
 .meta b{font-size:16.5px;line-height:1.3;letter-spacing:-.01em}
 .meta span{color:var(--muted);font-size:14px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -125,10 +123,8 @@ const avatar = (handle: string) =>
 		? '<span class="av" aria-hidden="true"></span>'
 		: `<img src="https://avatars.githubusercontent.com/${esc(handle)}?s=48" alt="" width="22" height="22" loading="lazy">`;
 
-/** A live, scaled-down view of the space: a sandboxed frame for HTML, the opening lines for Markdown. */
+/** A live, scaled-down view of the space in a sandboxed frame; the page bar removes itself inside it. */
 function preview(root: string, s: Space): string {
-	if (s.kind === "md")
-		return `<div class="view"><div class="md" aria-hidden="true"><b>${esc(s.title)}</b>${esc(s.description)}</div></div>`;
 	return `<div class="view"><iframe src="${root}/${spacePath(s)}" sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true" title="${esc(s.title)}" referrerpolicy="no-referrer"></iframe></div>`;
 }
 

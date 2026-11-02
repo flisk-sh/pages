@@ -56,3 +56,22 @@ jobs:
           grep -q '<urlset' _site/sitemap.xml
           test -s _site/og.png && test -s _site/404.html
           test "$(cat _site/CNAME)" = pages.flisk.si
+
+  browser:
+    # Shared and public pages in a real Chromium: good links, bad links and the ones in between (e2e/share.e2e.ts).
+    name: Browser E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: services/app/web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.4.3
+      - run: bun install --frozen-lockfile
+      - run: bunx playwright install --with-deps chromium
+      - run: bun test ./e2e/share.e2e.ts
