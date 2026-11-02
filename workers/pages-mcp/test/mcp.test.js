@@ -15,6 +15,7 @@ const page = (body, head = "") => `<!doctype html><html><head><title>Demo</title
 test("initialize names the server and offers tools only", async () => {
   const body = await (await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "t", version: "1" } } })).json();
   assert.equal(body.result.serverInfo.name, "flisk-pages");
+  assert.equal(body.result.serverInfo.icons[0].src, "https://pages.flisk.si/icon-512.png");
   assert.deepEqual(body.result.capabilities, { tools: {}, prompts: {} });
 });
 
