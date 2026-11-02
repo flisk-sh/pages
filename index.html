@@ -115,7 +115,7 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <article><span class="num">3</span><div><h3>Pitch <small>about 45 min</small></h3><p>Write the one page you would send an engineering lead at a team building AI agents.</p><p class="deliv"><b>Deliver</b><code>PITCH.md</code> with a <code>## Why Flisk</code> section (against Docker Compose, Tilt or devcontainers, honestly, including where they win) and a <code>## Pricing</code> section: what is free, what is paid, for whom.</p></div></article>
 <article><span class="num">4</span><div><h3>Product angle <small>about 15 min</small></h3><p>One feature that would make Flisk more useful for AI-heavy workflows, and how you would know it worked.</p><p class="deliv"><b>Deliver</b>An issue in <em>your</em> repository: the problem, the feature, and the signal you would watch.</p></div></article>
 </div>
-<div class="rules"><b>Please</b><ul><li><b>Contact no one and touch no other repository.</b> Do not open issues, pull requests or comments on the example apps, on Flisk, or on your buyers' projects, and do not send your buyer messages. Everything stays in your own repository. A submission that contacted other projects is not reviewed.</li><li>Keep it honest: write what really happened, including what did not work.</li><li>Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files.</li></ul></div>
+<div class="rules"><b>Please</b><ul><li><b>Contact no one and touch no other repository.</b> Do not open issues, pull requests or comments on the example apps, on Flisk, or on your buyers' projects, and do not send your buyer messages. Everything stays in your own repository. A submission that contacted other projects is not reviewed.</li><li><b>Do not ping anyone from your repository either.</b> No <code>@mentions</code> in your issue, and no links to other projects' issues or pull requests in your issue or commit messages: GitHub notifies those people and posts a "mentioned this" note on their issue. Link buyer pain in <code>BUYERS.md</code> only, where it notifies no one.</li><li><b>Keep the original app's <code>LICENSE</code></b> file next to the copied code.</li><li><b>No personal data.</b> In <code>BUYERS.md</code> name teams and companies, not private people, and write no email addresses or phone numbers. Your repository is public.</li><li>Keep it honest: write what really happened, including what did not work.</li><li>Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files.</li></ul></div>
 </section>
 
 <section>
@@ -152,7 +152,7 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <footer>Questions? Reply to the message that brought you this link.</footer>
 </main>
 <script type="module">
-import { runChecks } from "./check.js?v=5";
+import { runChecks } from "./check.js?v=6";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
@@ -175,9 +175,10 @@ $("go").addEventListener("click", async () => {
 		$("verdict").textContent = r.ready ? "Ready for review" : "Not ready yet";
 		$("verdict").className = r.ready ? "ok" : "bad";
 		$("gate").textContent = `Repository created on or after your start date: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
+		if (r.contactUnknown) $("msg").textContent = "GitHub limits searches to 10 a minute: the contact check could not run. Wait a minute and check again.";
 		$("ci").textContent = r.ci ? `Bonus: your latest GitHub Actions run ${r.ci.ok ? "passed" : "did not pass"}.` : "";
 		$("next").textContent = r.ready ? `Reply with: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Finish the parts marked ✗ and check again. There is no limit before the deadline.";
-		$("out").hidden = false; $("msg").textContent = "";
+		$("out").hidden = false; if (!r.contactUnknown) $("msg").textContent = "";
 	} catch (e) { $("msg").textContent = /403|rate/i.test(e.message) ? "GitHub is limiting checks from your network for a few minutes. Try again shortly." : `Could not check: ${e.message}. Is the repository public and the name right?`; }
 });
 </script>

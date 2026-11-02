@@ -1,6 +1,6 @@
 // The self-check for the Flisk Sales Architect task. It answers one question: is this submission complete enough for
 // the founder to review? It does not score quality; a person does that. It only reads the candidate's PUBLIC GitHub
-// repository through the GitHub API (5 calls, well under the 60 an hour GitHub allows without a login).
+// repository through the GitHub API (6 calls: 5 of the 60 an hour GitHub allows without a login, and 1 search of 10 a minute).
 const API = "https://api.github.com";
 const RAW = "https://raw.githubusercontent.com";
 const DAY = 864e5;
@@ -16,6 +16,11 @@ export const CHECKS = [
 	["Part 4: an issue in your repository with your product idea", "idea"],
 	["No .env, node_modules or generated .flisk files committed", "clean"],
 	["Your own new repository, not a fork of the example app", "own"],
+	["Keeps the original app's LICENSE file", "license"],
+	["BUYERS.md has no email addresses or phone numbers", "privacy"],
+	["Your issues @mention no one (it would notify real people)", "mentions"],
+	["Your issues and commits link no other project's issues or pull requests (it would post on them)", "crossrefs"],
+	["No issues or pull requests opened on the example apps, Flisk or your buyers since your start date", "contact"],
 ];
 
 /** The deadline: the end of the day two days after the start date (UTC). */
@@ -53,6 +58,27 @@ export function readmeOk(readme, user, repo) {
 	return upstream && /flisk up\b/.test(readme);
 }
 
+// The example apps candidates copy. Nobody should open an issue or pull request on them as part of this task.
+export const EXAMPLES = ["dockersamples/example-voting-app", "docker/awesome-compose", "flisk-sh/flisk", "flisk-sh/pages"];
+const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/;
+const PHONE = /\+?\d[\d\s().-]{8,}\d/;
+// An @login GitHub would notify: not part of an email, a path or a package scope like @flisk-sh/flisk.
+const MENTION = /(^|[^\w`/.@-])@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?![\w/@.-])/m;
+
+/** GitHub repositories (owner/name) linked anywhere in the text. */
+export function repoLinks(text) {
+	return [...new Set((text.match(/github\.com\/[\w.-]+\/[\w.-]+/gi) || []).map((l) => l.slice(11).replace(/\.git$/, "").toLowerCase()))];
+}
+
+/** A reference GitHub turns into a "mentioned this" event on another repository's issue or pull request. */
+export function crossRef(text, own) {
+	const refs = [...text.matchAll(/github\.com\/([\w.-]+\/[\w.-]+)\/(?:issues|pull)\/\d+/gi), ...text.matchAll(/(?:^|[\s(])([\w.-]+\/[\w.-]+)#\d+/g)];
+	return refs.some((m) => m[1].toLowerCase() !== own.toLowerCase());
+}
+
+export const mentions = (text) => MENTION.test(text.replace(/`[^`]*`/g, "").replace(EMAIL, ""));
+export const personalData = (text) => EMAIL.test(text) || PHONE.test(text.replace(/https?:\/\/\S+/g, ""));
+
 export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 	const json = async (u) => {
 		const r = await get(u);
@@ -80,6 +106,16 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 		text("PITCH.md", ref),
 	]);
 
+	const own = `${user}/${repo}`;
+	const startMs = Date.parse(`${start}T00:00:00Z`);
+	const watched = [...new Set([...EXAMPLES, ...repoLinks(buyersMd)])].filter((r) => r !== own.toLowerCase()).slice(0, 12);
+	const q = `author:${user} created:>=${start} ${watched.map((r) => `repo:${r}`).join(" ")}`;
+	const contacted = await json(`${API}/search/issues?per_page=5&q=${encodeURIComponent(q)}`)
+		.then((r) => r.total_count > 0)
+		.catch(() => null);
+	const recent = commits.filter((c) => Date.parse(c.commit.committer.date) >= startMs);
+	const mine = (issues || []).filter((i) => !i.pull_request);
+
 	const pass = {
 		stack: has(/(^|\/)\.flisk\/project\.json$/) && paths.filter((p) => p.endsWith("service.json")).length >= 2,
 		readme: readmeOk(readme, user, repo),
@@ -87,6 +123,11 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 		pitch: pitchOk(pitch),
 		idea: (issues || []).some((i) => !i.pull_request),
 		own: !info.fork,
+		license: has(/^(LICEN[CS]E|COPYING)(\.[a-z]+)?$/i),
+		privacy: !personalData(buyersMd),
+		mentions: !mine.some((i) => mentions(`${i.title}\n${i.body || ""}`)),
+		crossrefs: !mine.some((i) => crossRef(`${i.title}\n${i.body || ""}`, own)) && !recent.some((c) => crossRef(c.commit.message || "", own)),
+		contact: contacted === false,
 		clean: !has(/(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/) && !has(/(^|\/)node_modules\//) && !has(GENERATED),
 	};
 
@@ -103,6 +144,7 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 		gate,
 		deadline,
 		ready: rows.every((r) => r.ok) && gate.started && gate.inTime,
+		contactUnknown: contacted === null,
 		ci: last ? { ok: last.conclusion === "success", url: last.html_url } : null,
 		repoUrl: info.html_url,
 		head: commits[0]?.sha,
