@@ -31,6 +31,7 @@ button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); 
 label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:2px; }
 .field { flex:1; min-width:150px; }
 .field input { width:100%; box-sizing:border-box; }
+.field.wide { flex:3; min-width:240px; }
 td.s { width:2rem; text-align:center; font-weight:700; }
 .ok { color:var(--ok); } .bad { color:var(--bad); }
 #total { font-size:1.3rem; font-weight:700; }
@@ -87,24 +88,23 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <main>
 <header class="hero">
 <p class="kicker">Flisk · Sales Architect / Product Engineer</p>
-<h1>Run it, improve it, pitch it</h1>
-<p class="lede">Show us how you would sell <a href="https://flisk.sh">Flisk</a>, on paper, in your own public repository. About 2–3 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
+<h1>Make it run, then plan what comes next</h1>
+<p class="lede">Show us how you would work on <a href="https://flisk.sh">Flisk</a>: get it running on a real app, then decide what it should become. All in your own fork. About 2 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
 </header>
 
 <section>
-<h2>Three parts</h2>
+<h2>Two parts</h2>
 <div class="ex">
-<article><span class="num">1</span><div><h3>Make it run <small>75 min</small></h3><p><b>What:</b> Convert a real app to run with <code>flisk up</code>. <b>How:</b> Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a>, press <b>Use this template</b>, then run <code>npx @flisk-sh/flisk import .</code> and <code>flisk up</code> (Docker needed).</p><p class="deliv"><b>Deliver</b> The converted app and your <code>README.md</code>: how to start it with <code>flisk up</code>, and a <code>## What was hard</code> section.</p></div></article>
-<article><span class="num">2</span><div><h3>Product idea <small>15 min</small></h3><p><b>What:</b> One feature that would make Flisk better for AI agents. <b>How:</b> Open an issue in your own repository. <b>Why:</b> This shows you can see problems and imagine solutions, not just follow instructions.</p><p class="deliv"><b>Deliver</b> An issue with the problem, the feature, and the metric you would watch to know it worked.</p></div></article>
-<article><span class="num">3</span><div><h3>Pitch <small>45 min</small></h3><p><b>What:</b> One page for an engineering lead at a team building AI agents. <b>How:</b> Write <code>PITCH.md</code>. <b>Why:</b> Because selling the product to customers matters as much as building it.</p><p class="deliv"><b>Deliver</b> <code>PITCH.md</code> with <code>## Why Flisk</code> (honest versus Compose, Tilt, devcontainers) and <code>## Pricing</code> (what is free, what costs, why).</p></div></article>
-</div>
+<article><span class="num">1</span><div><h3>Technical: make it run <small>75 min</small></h3><p><b>What:</b> Convert a real app to run with <code>flisk up</code>. <b>How:</b> Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a>, press <b>Fork</b>, then in your fork run <code>npx @flisk-sh/flisk import .</code> and <code>flisk up</code> (Docker needed).</p><p class="deliv"><b>Deliver</b> Your fork with the converted app and your own <code>README.md</code>: how to start it with <code>flisk up</code>, and a <code>## What was hard</code> section.</p></div></article>
+<article><span class="num">2</span><div><h3>Product: the next 6 months <small>45 min</small></h3><p><b>What:</b> Predict what Flisk should ship by six months from now. <b>How:</b> Read <a href="https://flisk.sh">flisk.sh</a>, the <a href="https://github.com/flisk-sh/flisk#readme">README</a> and the <a href="https://github.com/flisk-sh/flisk/releases">recent releases</a>, and use what you learned in Part 1. <b>Why:</b> The first hire shapes the roadmap with the founder; we want to see if you understand where Flisk is going and why.</p><p class="deliv"><b>Deliver</b> <code>ROADMAP.md</code> with three sections:<br><code>## Vision</code>: where Flisk is going, in one or two sentences of your own.<br><code>## Next 6 months</code>: a table of at least three things to ship, scored with <b>ICE</b> (Impact, Confidence, Ease, 1–10 each) and sorted by the score, so quick wins rise to the top. Columns: <code>| Item | Who it is for | Impact | Confidence | Ease | ICE | Number to watch |</code>.<br><code>## Not now</code>: one thing Flisk should not build yet, and why.</p></div></article>
 
-<section></section>
+</div>
+</section>
 
 <section>
 <h2>Rules</h2>
 <div class="rules"><ul>
-<li><b>Contact no one.</b> No forks, issues, pull requests or comments on the starter or Flisk. No <code>@mentions</code> or links to other projects' issues in your issue or commits.</li>
+<li><b>Contact no one.</b> Fork the starter, but open no issues, pull requests or comments on it or on Flisk. No links to other projects' issues in your commit messages.</li>
 <li>Keep <code>LICENSE</code> and <code>NOTICE</code>.</li>
 <li>No <code>.env</code> or <code>node_modules</code> committed. AI assistants are welcome.</li>
 </ul></div>
@@ -112,19 +112,18 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 
 <section>
 <h2>How we review</h2>
-<p>The self-check only confirms everything is there. The founder then scores technical depth, product sense and clarity, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
+<p>The self-check only confirms everything is there. The founder then scores technical depth and product vision, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
 </section>
 
 <section id="self">
 <h2>Self-check</h2>
 <div class="assess">
 <div class="row">
-<div class="field"><label for="user">GitHub username</label><input id="user" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your GitHub login"></div>
-<div class="field"><label for="repo">Repository name</label><input id="repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your new repository"></div>
+<div class="field wide"><label for="fork">Your fork</label><input id="fork" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://github.com/you/flisk-task-starter"></div>
 <div class="field"><label for="start">Start date</label><input id="start" type="date"></div>
 </div>
 <div class="actions"><button id="go" class="primary">Run self-check</button><span id="msg" class="muted" role="status"></span></div>
-<p class="note">Start date is the day you got this link. The check reads your public repository in your browser; nothing is sent to us. When it says <b>Ready for review</b>, reply with your repository link.</p>
+<p class="note"><b>This does not submit anything.</b> It is only for you: it reads your public fork in your browser and sends nothing to us. Run it as often as you like, up to about 15 times an hour (GitHub's limit without a login). When it says <b>Ready for review</b>, submit by replying to the message that brought you this link, with your fork's URL. Start date is the day you got the link.</p>
 </div>
 <div id="out" hidden>
 <div class="result"><span id="total"></span><span id="verdict"></span></div>
@@ -137,7 +136,7 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <footer>Questions? Reply to the message that brought you this link.</footer>
 </main>
 <script type="module">
-import { runChecks } from "./check.js?v=8";
+import { runChecks } from "./check.js?v=10";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
@@ -149,9 +148,11 @@ function showDeadline() {
 showDeadline();
 $("start").addEventListener("input", showDeadline);
 $("go").addEventListener("click", async () => {
-	const user = $("user").value.trim(), repo = $("repo").value.trim(), start = $("start").value.trim();
+	const m = /^(?:https?:\/\/)?(?:www\.)?(?:github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[\/?#].*)?$/i.exec($("fork").value.trim());
+	const user = m?.[1] || "", repo = m?.[2] || "", start = $("start").value.trim();
+	if (`${user}/${repo}`.toLowerCase() === "flisk-sh/flisk-task-starter") return ($("msg").textContent = "That is the starter. Press Fork on it, then paste the URL of your fork.");
 	$("out").hidden = true;
-	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Complete all three fields.");
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Paste your fork's URL and pick your start date.");
 	$("msg").textContent = "Checking…";
 	try {
 		const r = await runChecks({ user, repo, start });

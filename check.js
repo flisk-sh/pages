@@ -1,6 +1,6 @@
 // The self-check for the Flisk Sales Architect task. It answers one question: is this submission complete enough for
 // the founder to review? It does not score quality; a person does that. It only reads the candidate's PUBLIC GitHub
-// repository through the GitHub API (6 calls: 5 of the 60 an hour GitHub allows without a login, and 1 search of 10 a minute).
+// repository through the GitHub API (5 calls: 4 of the 60 an hour GitHub allows without a login, and 1 search of 10 a minute).
 const API = "https://api.github.com";
 const RAW = "https://raw.githubusercontent.com";
 const DAY = 864e5;
@@ -8,16 +8,13 @@ const DAY = 864e5;
 const GENERATED = /(^|\/)\.flisk\/(\.flisk-out|\.project-id|smoke)(\/|$)/;
 
 export const CHECKS = [
-	["Part 1: created with Use this template from flisk-sh/flisk-task-starter", "template"],
+	["Part 1: a fork of flisk-sh/flisk-task-starter", "fork"],
 	["Part 1: the app runs with Flisk (.flisk/project.json and 2 or more service.json)", "stack"],
 	["Part 1: README says how to start it with flisk up and what was hard", "readme"],
-	["Part 2: an issue in your repository with your product idea", "idea"],
-	["Part 3: PITCH.md has a ## Why Flisk section and a ## Pricing section", "pitch"],
+	["Part 2: ROADMAP.md has ## Vision, ## Next 6 months (an ICE table, 3+ items) and ## Not now", "roadmap"],
 	["No .env, node_modules or generated .flisk files committed", "clean"],
-	["Your own new repository, not a fork", "own"],
 	["Keeps the starter's LICENSE and NOTICE files", "license"],
-	["Your issues @mention no one (it would notify real people)", "mentions"],
-	["Your issues and commits link no other project's issues or pull requests (it would post on them)", "crossrefs"],
+	["Your commits link no other project's issues or pull requests (it would post on them)", "crossrefs"],
 	["No issues or pull requests opened on the starter, Flisk or the original app since your start date", "contact"],
 ];
 
@@ -37,9 +34,20 @@ export function sections(md) {
 	return out;
 }
 
-export function pitchOk(md) {
-	const titles = sections(md).map((s) => s.title.toLowerCase());
-	return titles.some((t) => t.includes("why")) && titles.some((t) => /pric|packag|plan/.test(t));
+/** ICE rows: table lines under "Next 6 months" with Impact, Confidence and Ease scored 1-10, below a header naming them. */
+export function iceRows(body) {
+	const rows = body.split("\n").filter((l) => /^\s*\|.*\|\s*$/.test(l) && !/^\s*\|[\s:|-]+\|\s*$/.test(l));
+	const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim().toLowerCase());
+	const head = rows.length ? cells(rows[0]) : [];
+	const col = ["impact", "confidence", "ease"].map((w) => head.findIndex((h) => h.includes(w)));
+	if (col.includes(-1)) return 0;
+	return rows.slice(1).filter((l) => col.every((k) => /^(10|[1-9])(\.\d+)?$/.test(cells(l)[k] || ""))).length;
+}
+
+export function roadmapOk(md) {
+	const find = (w) => sections(md).find((s) => s.title.toLowerCase().includes(w));
+	const next = find("next");
+	return !!find("vision")?.body && !!find("not now")?.body && !!next && iceRows(next.body) >= 3;
 }
 
 /** README is the candidate's own: it shows `flisk up` and has a section on what was hard (not the starter's README). */
@@ -48,11 +56,8 @@ export function readmeOk(readme) {
 }
 
 export const STARTER = "flisk-sh/flisk-task-starter";
-// Nobody should open an issue or pull request on these as part of this task: the starter, Flisk, and the app the starter copies.
+// Candidates fork the starter. Nobody should open an issue or pull request on these: the starter, Flisk, and the app it copies.
 export const WATCHED = [STARTER, "flisk-sh/flisk", "flisk-sh/pages", "dockersamples/example-voting-app"];
-const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/;
-// An @login GitHub would notify: not part of an email, a path or a package scope like @flisk-sh/flisk.
-const MENTION = /(^|[^\w`/.@-])@[A-Za-z0-9][A-Za-z0-9-]{0,38}(?![\w/@.-])/m;
 
 /** A reference GitHub turns into a "mentioned this" event on another repository's issue or pull request. */
 export function crossRef(text, own) {
@@ -60,7 +65,6 @@ export function crossRef(text, own) {
 	return refs.some((m) => m[1].toLowerCase() !== own.toLowerCase());
 }
 
-export const mentions = (text) => MENTION.test(text.replace(/`[^`]*`/g, "").replace(EMAIL, ""));
 
 export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 	const json = async (u) => {
@@ -75,15 +79,14 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 	const info = await json(`${API}/repos/${user}/${repo}`);
 	if (info.private) throw new Error("The repository is not public.");
 	const ref = info.default_branch;
-	const [tree, commits, issues, runs] = await Promise.all([
+	const [tree, commits, runs] = await Promise.all([
 		json(`${API}/repos/${user}/${repo}/git/trees/${ref}?recursive=1`),
 		json(`${API}/repos/${user}/${repo}/commits?per_page=30`),
-		json(`${API}/repos/${user}/${repo}/issues?state=all&per_page=30`),
 		json(`${API}/repos/${user}/${repo}/actions/runs?branch=${encodeURIComponent(ref)}&per_page=1`).catch(() => ({})),
 	]);
 	const paths = (tree.tree || []).map((f) => f.path);
 	const has = (re) => paths.some((p) => re.test(p));
-	const [readme, pitch] = await Promise.all([text("README.md", ref), text("PITCH.md", ref)]);
+	const [readme, roadmap] = await Promise.all([text("README.md", ref), text("ROADMAP.md", ref)]);
 
 	const own = `${user}/${repo}`;
 	const startMs = Date.parse(`${start}T00:00:00Z`);
@@ -93,18 +96,14 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 		.then((r) => r.total_count > 0)
 		.catch(() => null);
 	const recent = commits.filter((c) => Date.parse(c.commit.committer.date) >= startMs);
-	const mine = (issues || []).filter((i) => !i.pull_request);
 
 	const pass = {
 		stack: has(/(^|\/)\.flisk\/project\.json$/) && paths.filter((p) => p.endsWith("service.json")).length >= 2,
 		readme: readmeOk(readme),
-		pitch: pitchOk(pitch),
-		idea: (issues || []).some((i) => !i.pull_request),
-		own: !info.fork,
+		roadmap: roadmapOk(roadmap),
 		license: has(/^LICEN[CS]E(\.[a-z]+)?$/i) && has(/^NOTICE(\.[a-z]+)?$/i),
-		template: (info.template_repository?.full_name || "").toLowerCase() === STARTER,
-		mentions: !mine.some((i) => mentions(`${i.title}\n${i.body || ""}`)),
-		crossrefs: !mine.some((i) => crossRef(`${i.title}\n${i.body || ""}`, own)) && !recent.some((c) => crossRef(c.commit.message || "", own)),
+		fork: info.fork === true && (info.parent?.full_name || "").toLowerCase() === STARTER,
+		crossrefs: !recent.some((c) => crossRef(c.commit.message || "", own)),
 		contact: contacted === false,
 		clean: !has(/(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/) && !has(/(^|\/)node_modules\//) && !has(GENERATED),
 	};
