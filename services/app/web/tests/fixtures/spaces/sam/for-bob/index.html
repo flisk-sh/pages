@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Shared page</title>
-<style>body[data-pages-shared]{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#14141a;color:#ececf1}#m{max-width:30rem;padding:16px;text-align:center}</style></head>
+<style>body[data-pages-shared]{font:16px/1.6 system-ui,sans-serif;margin:0;display:grid;place-items:center;min-height:100vh;background:#14141a;color:#ececf1}#m{max-width:26rem;margin:16px;padding:28px 24px 24px;text-align:center;border:1px solid #2c2c36;border-radius:14px;background:#1c1c24;box-shadow:0 8px 30px rgba(0,0,0,.35)}#m::before{content:"";display:block;width:40px;height:40px;margin:0 auto 14px;border-radius:50%;background:#26262f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23a4a4b0' stroke-width='1.4'%3E%3Crect x='3' y='7' width='10' height='7' rx='1.5'/%3E%3Cpath d='M5 7V5a3 3 0 0 1 6 0v2'/%3E%3C/svg%3E") center/18px no-repeat}</style></head>
 <body data-pages-shared><p id="m">This page is shared with certain people. Open the whole link you were given.</p>
 <script>
 (async()=>{
@@ -13,14 +13,17 @@ try{
 if(!Object.hasOwn(P,id))throw 0;
 const content=new Uint8Array(await open(u(k),P[id]));
 const html=await open(content,C);
+if(document.readyState==="loading")await new Promise((r)=>addEventListener("DOMContentLoaded",r,{once:true}));
+const pb=document.querySelector("[data-pages-bar]")?.outerHTML??"";
 document.open();document.write(new TextDecoder().decode(html));document.close();
+if(pb)document.body.insertAdjacentHTML("beforeend",pb);
 const m=location.pathname.match(/^\/(@[a-z0-9-]+)\/([a-z0-9-]+)\//);
 const bar=document.createElement("div");
-bar.setAttribute("style","position:fixed;left:0;right:0;top:0;z-index:2147483647;font:12px/1.4 system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:6px 12px;text-align:center");
+bar.setAttribute("style","position:relative;z-index:2147483647;margin:0;font:12px/1.4 system-ui,sans-serif;background:#141413;color:#fbfaf7;padding:6px 12px;text-align:center");
 bar.append("Shared privately on pages.flisk.si and not checked by us. Do not enter passwords or payments. ");
 const a=document.createElement("a");a.textContent="Report";a.style.color="#7aa2ff";
 a.href="https://github.com/flisk-sh/pages/issues/new?template=report.yml&title="+encodeURIComponent("Report: "+(m?m[1]+"/"+m[2]:location.pathname));
-bar.append(a);document.body.append(bar);
+bar.append(a);document.body.prepend(bar);
 }catch{document.getElementById("m").textContent="This link is not for you, or it was taken back. Ask for a new one."}
 })();
 </script></body></html>

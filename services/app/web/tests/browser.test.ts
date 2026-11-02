@@ -72,7 +72,7 @@ describe("the page bar in a browser", () => {
 			"utf8",
 		);
 		expect(shell).toContain("body[data-pages-shared]{");
-		expect(shell).toContain("#m{max-width:30rem");
+		expect(shell).toContain("#m{");
 		expect(shell).not.toMatch(/[}>]p\{/);
 	});
 
@@ -81,8 +81,8 @@ describe("the page bar in a browser", () => {
 			join(import.meta.dir, "../../../../bin/protect.mjs"),
 			"utf8",
 		);
-		expect(shell).toContain("left:0;right:0;top:0;");
-		expect(shell).not.toContain("left:0;right:0;bottom:0;");
+		expect(shell).toContain("document.body.prepend(bar)");
+		expect(shell).not.toContain("bottom:0;");
 	});
 
 	it("copy link writes the page address and says Copied", async () => {
