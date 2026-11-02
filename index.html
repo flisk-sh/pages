@@ -87,32 +87,33 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <main>
 <header class="hero">
 <p class="kicker">Flisk · Sales Architect / Product Engineer</p>
-<h1>Run it, find who needs it, pitch it</h1>
-<p class="lede">Show us how you would sell <a href="https://flisk.sh">Flisk</a>, on paper, in your own public repository. About 3–4 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
+<h1>Run it, improve it, pitch it</h1>
+<p class="lede">Show us how you would sell <a href="https://flisk.sh">Flisk</a>, on paper, in your own public repository. About 2–3 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
 </header>
 
 <section>
-<h2>Four parts</h2>
+<h2>Three parts</h2>
 <div class="ex">
 <article><span class="num">1</span><div><h3>Make it run <small>75 min</small></h3><p>Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a>, press <b>Use this template</b>, then in your copy run <code>npx @flisk-sh/flisk import .</code> and <code>flisk up</code> (Docker needed).</p><p class="deliv"><b>Deliver</b>The converted app and a <code>README.md</code>: how to start it, and a section on what was hard.</p></div></article>
-<article><span class="num">2</span><div><h3>Find buyers <small>60 min</small></h3><p>Three real teams that lose time on local setup. You pick the market.</p><p class="deliv"><b>Deliver</b><code>BUYERS.md</code>: one <code>## heading</code> each, a public link showing the pain, and the first message you would send (do not send it).</p></div></article>
+
+<article><span class="num">2</span><div><h3>Product idea <small>15 min</small></h3><p>One feature for AI-heavy workflows.</p><p class="deliv"><b>Deliver</b>An issue in your repository: problem, feature, and the number you would watch.</p></div></article>
 <article><span class="num">3</span><div><h3>Pitch <small>45 min</small></h3><p>One page for an engineering lead building AI agents.</p><p class="deliv"><b>Deliver</b><code>PITCH.md</code> with <code>## Why Flisk</code> (honest versus Compose, Tilt, devcontainers) and <code>## Pricing</code>.</p></div></article>
-<article><span class="num">4</span><div><h3>Product idea <small>15 min</small></h3><p>One feature for AI-heavy workflows.</p><p class="deliv"><b>Deliver</b>An issue in your repository: problem, feature, and the number you would watch.</p></div></article>
+
 </div>
 </section>
 
 <section>
 <h2>Rules</h2>
 <div class="rules"><ul>
-<li><b>Contact no one.</b> No forks, issues, pull requests or comments on the starter, Flisk or your buyers. No <code>@mentions</code> or links to other projects' issues in your issue or commits.</li>
-<li>Keep <code>LICENSE</code> and <code>NOTICE</code>. No emails or phone numbers in <code>BUYERS.md</code>.</li>
+<li><b>Contact no one.</b> No forks, issues, pull requests or comments on the starter or Flisk. No <code>@mentions</code> or links to other projects' issues in your issue or commits.</li>
+<li>Keep <code>LICENSE</code> and <code>NOTICE</code>.</li>
 <li>No <code>.env</code> or <code>node_modules</code> committed. AI assistants are welcome.</li>
 </ul></div>
 </section>
 
 <section>
 <h2>How we review</h2>
-<p>The self-check only confirms everything is there. The founder then scores technical depth, customer insight, clarity and ownership, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
+<p>The self-check only confirms everything is there. The founder then scores technical depth, product sense and clarity, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
 </section>
 
 <section id="self">
@@ -137,7 +138,7 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <footer>Questions? Reply to the message that brought you this link.</footer>
 </main>
 <script type="module">
-import { runChecks } from "./check.js?v=7";
+import { runChecks } from "./check.js?v=8";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }

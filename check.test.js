@@ -1,22 +1,20 @@
 // Tests for check.js: the self-check every candidate sees. Run with `bun test`.
 import { describe, expect, it } from "bun:test";
-import { buyers, crossRef, deadlineOf, mentions, personalData, pitchOk, readmeOk, repoLinks, runChecks, sections } from "./check.js";
+import { crossRef, deadlineOf, mentions, pitchOk, readmeOk, runChecks, sections } from "./check.js";
 
-const BUYER = (n) => `## Team ${n}\nA 12-service AI agent repo whose contributors keep reporting broken local setup: https://github.com/org${n}/app/issues/1\n`;
-const goodBuyers = [1, 2, 3].map(BUYER).join("\n");
 const goodPitch = "## Why Flisk\nOne command instead of a Compose file per service.\n## Pricing\nFree CLI, paid team plan.";
 const goodReadme = "# Voting app on Flisk\n\nRun it: `flisk up`\n\n## What was hard\nThe worker started before Postgres.";
-const TREE = ["LICENSE", "NOTICE", ".flisk/project.json", "services/api/service.json", "services/web/service.json", "README.md", "BUYERS.md", "PITCH.md"];
+const TREE = ["LICENSE", "NOTICE", ".flisk/project.json", "services/api/service.json", "services/web/service.json", "README.md", "PITCH.md"];
 
 function repo(over = {}) {
 	const o = {
-		tree: TREE, readme: goodReadme, buyers: goodBuyers, pitch: goodPitch, issues: [{ title: "idea", body: "Agents need a reset command. Signal: fewer support threads." }], searches: [], contacted: 0, commitMessage: "Convert to Flisk",
+		tree: TREE, readme: goodReadme, pitch: goodPitch, issues: [{ title: "idea", body: "Agents need a reset command. Signal: fewer support threads." }], searches: [], contacted: 0, commitMessage: "Convert to Flisk",
 		created: "2026-11-02T10:00:00Z", commitDate: "2026-11-03T10:00:00Z", runs: [], ...over,
 	};
 	return async (u) => {
 		const ok = (b) => ({ ok: true, json: async () => b, text: async () => b });
 		if (u.includes("raw.githubusercontent")) {
-			const body = { "README.md": o.readme, "BUYERS.md": o.buyers, "PITCH.md": o.pitch }[u.split("/").pop()];
+			const body = { "README.md": o.readme, "PITCH.md": o.pitch }[u.split("/").pop()];
 			return body ? ok(body) : { ok: false };
 		}
 		if (u.includes("/git/trees/")) return ok({ tree: o.tree.map((path) => ({ path })) });
@@ -38,7 +36,7 @@ describe("a complete submission", () => {
 		const r = await run();
 		expect(failed(r)).toEqual([]);
 		expect(r.ready).toBe(true);
-		expect(r.done).toBe(13);
+		expect(r.done).toBe(11);
 	});
 	it("reports CI as a bonus, never as a requirement", async () => {
 		expect((await run({ runs: [{ conclusion: "failure", html_url: "x" }] })).ready).toBe(true);
@@ -49,16 +47,12 @@ describe("a complete submission", () => {
 
 describe("bad: missing or hollow parts", () => {
 	it("fails an empty repository on every part", async () => {
-		const r = await run({ tree: [], readme: "", buyers: "", pitch: "", issues: [], template: null });
-		expect(failed(r)).toEqual(["template", "stack", "readme", "buyers", "pitch", "idea", "license"]);
+		const r = await run({ tree: [], readme: "", pitch: "", issues: [], template: null });
+		expect(failed(r)).toEqual(["template", "stack", "readme", "idea", "pitch", "license"]);
 		expect(r.ready).toBe(false);
 	});
 	it("fails a single service: a conversion means at least two", async () => {
 		expect(failed(await run({ tree: ["LICENSE", "NOTICE", ".flisk/project.json", "service.json"] }))).toEqual(["stack"]);
-	});
-	it("fails buyers that are links only, or fewer than three", async () => {
-		expect(buyers("## A\nhttps://x.com\n## B\nhttps://y.com\n## C\nhttps://z.com")).toBe(0);
-		expect(buyers([1, 2].map(BUYER).join("\n"))).toBe(2);
 	});
 	it("fails a fork: candidates copy the example app, they never fork it", async () => {
 		expect(failed(await run({ fork: true }))).toEqual(["own"]);
@@ -77,11 +71,11 @@ describe("bad: missing or hollow parts", () => {
 });
 
 describe("bad: harm that multiplies with every candidate", () => {
-	it("fails an issue or pull request opened on an example app, Flisk or a buyer", async () => {
+	it("fails an issue or pull request opened on the starter, Flisk or the original app", async () => {
 		const o = { contacted: 1, searches: [] };
 		expect(failed(await run(o))).toEqual(["contact"]);
 		expect(o.searches[0]).toContain("author:u created:>=2026-11-02");
-		for (const r of ["flisk-sh/flisk-task-starter", "dockersamples/example-voting-app", "flisk-sh/flisk", "org1/app", "org3/app"])
+		for (const r of ["flisk-sh/flisk-task-starter", "dockersamples/example-voting-app", "flisk-sh/flisk", "flisk-sh/pages"])
 			expect(o.searches[0]).toContain(`repo:${r}`);
 	});
 	it("is not ready when GitHub refuses the search, and says so", async () => {
@@ -100,10 +94,6 @@ describe("bad: harm that multiplies with every candidate", () => {
 		expect(failed(await run({ tree: TREE.filter((f) => f !== "LICENSE") }))).toEqual(["license"]);
 		expect(failed(await run({ tree: TREE.filter((f) => f !== "NOTICE") }))).toEqual(["license"]);
 	});
-	it("fails emails or phone numbers in BUYERS.md", async () => {
-		expect(failed(await run({ buyers: `${goodBuyers}\nContact: jane@acme.io` }))).toEqual(["privacy"]);
-		expect(failed(await run({ buyers: `${goodBuyers}\nCall +91 98765 43210` }))).toEqual(["privacy"]);
-	});
 });
 
 describe("in between: almost right", () => {
@@ -116,12 +106,6 @@ describe("in between: almost right", () => {
 	it("allows references to the candidate's own issues and old upstream commits", async () => {
 		expect(crossRef("fixes #3 and u/r#4 and https://github.com/u/r/issues/5", "u/r")).toBe(false);
 		expect(failed(await run({ commitMessage: "upstream: see dockersamples/example-voting-app#9", commitDate: "2024-01-01T00:00:00Z" }))).toEqual([]);
-	});
-	it("does not mistake long issue numbers in links for phone numbers", () => {
-		expect(personalData("https://github.com/a/b/issues/1234567890123")).toBe(false);
-	});
-	it("collects linked repositories once, lower-cased", () => {
-		expect(repoLinks("https://github.com/A/B and github.com/a/b.git")).toEqual(["a/b"]);
 	});
 	it("allows .env.example and the committed project.json", async () => {
 		expect(failed(await run({ tree: [...TREE, ".env.example"] }))).toEqual([]);
