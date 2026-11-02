@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Flisk engineering assessment: four practical exercises with an automated self-assessment.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flisk: Sales Architect task</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; --ok:#12805c; --bad:#b3372a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; } }
+:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
+main { max-width:760px; margin:0 auto; padding:40px 16px 72px; }
+.kicker { color:var(--muted); font-size:.85rem; letter-spacing:.04em; text-transform:uppercase; margin:0 0 .4rem; }
+h1 { font-size:1.8rem; margin:0 0 .4rem; }
+h2 { font-size:1.2rem; margin:2.4rem 0 .6rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+a { color:var(--accent); }
+.muted { color:var(--muted); }
+table { width:100%; border-collapse:collapse; margin:.8rem 0; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:.95rem; }
+th { background:var(--cell); font-weight:600; }
+td.n { width:2.4rem; color:var(--muted); }
+details { margin:.3rem 0 .8rem; font-size:.92rem; }
+summary { cursor:pointer; color:var(--accent); }
+details p { margin:.4rem 0; color:var(--muted); }
+button, input { font:inherit; padding:7px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+button { cursor:pointer; }
+button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.row { display:flex; gap:10px; flex-wrap:wrap; margin:.6rem 0; }
+.row input { flex:1; min-width:150px; }
+label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:2px; }
+.field { flex:1; min-width:150px; }
+.field input { width:100%; box-sizing:border-box; }
+.how { padding-left:1.2rem; margin:.6rem 0; }
+.how li { margin:.6rem 0; }
+figure { margin:.6rem 0; }
+figure img { display:block; max-width:100%; height:auto; border:1px solid var(--line); border-radius:8px; }
+figcaption { font-size:.8rem; color:var(--muted); margin-top:4px; }
+pre.term { background:#0d1117; color:#e6edf3; border-radius:8px; padding:12px 14px; overflow-x:auto; font:12.5px/1.5 ui-monospace,monospace; margin:.5rem 0; white-space:pre; }
+.field.wide { flex:3; min-width:240px; }
+td.s { width:2rem; text-align:center; font-weight:700; }
+.ok { color:var(--ok); } .bad { color:var(--bad); }
+#total { font-size:1.3rem; font-weight:700; }
+code { font-family:ui-monospace,monospace; font-size:.9em; }
+p { text-align:left; max-width:none; padding:0; }
+.assess { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:20px; margin:1rem 0; }
+.assess .row { align-items:flex-end; gap:14px; margin:0 0 14px; }
+.assess label { font-size:.85rem; font-weight:600; color:var(--fg); margin-bottom:6px; }
+.assess input { height:42px; padding:0 12px; border-radius:8px; }
+.assess input::placeholder { color:var(--muted); opacity:.6; font-style:italic; }
+.assess input:focus, .assess button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+.assess .hint { font-size:.78rem; color:var(--muted); margin-top:4px; }
+.assess button.primary { height:42px; padding:0 20px; border-radius:8px; font-weight:600; }
+.assess .actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.assess .note { font-size:.85rem; color:var(--muted); margin:14px 0 0; }
+
+.hero { padding:8px 0 8px; }
+.lede { font-size:1.08rem; color:var(--muted); max-width:620px; margin:0 0 1.4rem; }
+.facts { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.facts li { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.facts b { display:block; font-size:1.4rem; line-height:1.2; }
+.facts span { font-size:.82rem; color:var(--muted); }
+section { margin-top:2.6rem; }
+.steps { list-style:none; counter-reset:s; padding:0; margin:0; display:grid; gap:10px; }
+.steps li { counter-increment:s; position:relative; padding:12px 16px 12px 52px; border:1px solid var(--line); border-radius:12px; }
+.steps li::before { content:counter(s); position:absolute; left:14px; top:12px; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--bg); font-weight:700; font-size:.85rem; display:grid; place-items:center; }
+.steps b { display:block; }
+.deadline { margin:12px 0 0; padding:10px 14px; border-left:3px solid var(--accent); background:var(--cell); border-radius:0 8px 8px 0; font-size:.95rem; }
+#deadline { font-weight:600; }
+.ex { display:grid; gap:12px; }
+.ex article { display:flex; gap:14px; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.ex .num { flex:none; width:32px; height:32px; border-radius:8px; background:var(--cell); border:1px solid var(--line); display:grid; place-items:center; font-weight:700; }
+.ex h3 { margin:2px 0 4px; font-size:1.05rem; }
+.ex h3 small { font-weight:400; color:var(--muted); font-size:.8rem; margin-left:6px; }
+.ex p { margin:.3rem 0; }
+.ex .deliv { background:var(--cell); border-radius:8px; padding:8px 12px; font-size:.93rem; }
+.ex .deliv b { display:block; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.rules { margin:14px 0 6px; font-size:.93rem; }
+.rules ul { margin:.3rem 0 0; padding-left:1.2rem; color:var(--muted); }
+.prompts { display:flex; gap:8px; flex-wrap:wrap; margin:.4rem 0; }
+.prompts button { border-radius:8px; }
+.prompts button:hover { border-color:var(--accent); }
+.checks { margin:0; padding-left:1.6rem; display:grid; gap:2px; }
+.checks li { padding:8px 4px; border-bottom:1px solid var(--line); }
+.checks small { float:right; color:var(--muted); font-size:.8rem; margin-left:12px; }
+#out { margin-top:16px; }
+.result { display:flex; align-items:baseline; gap:12px; margin:0 0 6px; }
+#verdict { font-weight:600; }
+footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
+@media (max-width:620px) { main { padding-bottom:140px; } .facts { grid-template-columns:repeat(2,1fr); } .checks small { float:none; display:block; margin:0; } h1 { font-size:1.6rem; } }
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+<p class="kicker">Flisk · Sales Architect / Product Engineer</p>
+<h1>Make it run, then plan what comes next</h1>
+<p class="lede">Show us how you would work on <a href="https://flisk.sh">Flisk</a>: get it running on a real app, then decide what it should become. All in your own fork. About 2 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
+</header>
+
+<section>
+<h2>Two parts</h2>
+<div class="ex">
+<article><span class="num">1</span><div><h3>Technical: make it run <small>75 min</small></h3>
+<p><b>What:</b> Make a real 5-service app (Python, Node.js, .NET, Redis, Postgres) start with one <code>flisk up</code>. You need Git, Node.js, Docker and <a href="https://docs.tilt.dev/install.html">Tilt</a>. If <code>flisk up</code> stops, run <code>npx @flisk-sh/flisk doctor</code>: it names what is missing and how to fix it.</p>
+<ol class="how">
+<li><b>Fork the starter.</b> Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a> and press <b>Fork</b> (top right), then <b>Create fork</b>.
+<figure><img src="img/1-fork.png" alt="The flisk-task-starter repository on GitHub, with the Fork button at the top right" width="770" height="460" loading="lazy"><figcaption>The starter. Press <b>Fork</b>, top right.</figcaption></figure>
+</li>
+<li><b>Clone your fork.</b><pre class="term">git clone https://github.com/YOUR-LOGIN/flisk-task-starter
+cd flisk-task-starter</pre></li>
+<li><b>See the plan.</b> Nothing is written yet. Read what Flisk could not translate: that is your first friction.<pre class="term">$ npx @flisk-sh/flisk import . --dry-run
+Found 5 service(s) and 0 job(s) in ~/flisk-task-starter
+Read only: docker-compose.yml. Lines below name what was not translated.
+
+  .flisk/project.json  [create Flisk project]
+  …
+  vote  (service, vote/)
+    from:      docker-compose.yml [compose]
+    build:     vote/ with Dockerfile
+    port:      80 (from Compose)
+    proxy:     routed through Traefik
+    health:    / (assumed)
+    depends:   redis
+    write:     services/flisk-task-starter/vote/service.json  [create]
+  …
+
+Skipped / not fully imported:
+  docker-compose.yml [compose]: service &quot;vote&quot; keys not translated: volumes, networks
+  docker-compose.yml [compose]: service &quot;result&quot; publishes extra container ports (9229); Flisk routes only 80
+  docker-compose.yml [compose]: service &quot;result&quot; keys not translated: entrypoint, volumes, networks
+  docker-compose.yml [compose]: service &quot;worker&quot; keys not translated: networks
+  docker-compose.yml [compose]: service &quot;redis&quot; keys not translated: volumes, networks
+  docker-compose.yml [compose]: service &quot;db&quot; keys not translated: volumes, networks
+  docker-compose.yml [compose]: service &quot;seed&quot; has profiles [&quot;seed&quot;]; profiles are not enforced by Flisk
+
+Dry run: nothing written.</pre></li>
+<li><b>Write it and start it.</b><pre class="term">npx @flisk-sh/flisk import .
+npx @flisk-sh/flisk up</pre>The first start takes about 90 seconds. Then run <code>npx @flisk-sh/flisk networks</code> for the URLs: the voting page is at <code>/api/vote</code> and the results at <code>/api/result</code>. Open both.</li>
+<li><b>Write your README and push.</b> Replace the starter's <code>README.md</code> with yours: how to start it, and a <code>## What was hard</code> section. Then <code>git add -A &amp;&amp; git commit -m "Run with Flisk" &amp;&amp; git push</code>.</li>
+</ol>
+<p class="deliv"><b>Deliver</b> Your fork with <code>.flisk/project.json</code>, a <code>service.json</code> per service, the starter's <code>LICENSE</code> and <code>NOTICE</code>, and your <code>README.md</code>.</p></div></article>
+<article><span class="num">2</span><div><h3>Product: the next 6 months <small>45 min</small></h3><p><b>What:</b> Predict what Flisk should ship by six months from now. <b>How:</b> Read <a href="https://flisk.sh">flisk.sh</a>, the <a href="https://github.com/flisk-sh/flisk#readme">README</a> and the <a href="https://github.com/flisk-sh/flisk/releases">recent releases</a>, and use what you learned in Part 1. <b>Why:</b> The first hire shapes the roadmap with the founder; we want to see if you understand where Flisk is going and why.</p><p class="deliv"><b>Deliver</b> <code>ROADMAP.md</code> in your fork, in this shape (replace every line in capitals):</p>
+<pre class="term">## Vision
+WHERE FLISK IS GOING, IN ONE OR TWO SENTENCES OF YOUR OWN.
+
+## Next 6 months
+| Item | Who it is for | Impact | Confidence | Ease | ICE | Number to watch |
+|------|---------------|--------|------------|------|-----|-----------------|
+| ITEM | WHO           | 1-10   | 1-10       | 1-10 | I×C×E | METRIC        |
+(at least three rows, highest ICE first: quick wins on top)
+
+## Not now
+ONE THING FLISK SHOULD NOT BUILD YET, AND WHY.</pre></div></article>
+
+</div>
+</section>
+
+<section>
+<h2>Rules</h2>
+<div class="rules"><ul>
+<li><b>Contact no one.</b> Fork the starter, but open no issues, pull requests or comments on it or on Flisk. No links to other projects' issues in your commit messages.</li>
+<li>Keep <code>LICENSE</code> and <code>NOTICE</code>.</li>
+<li>No <code>.env</code> or <code>node_modules</code> committed. AI assistants are welcome.</li>
+</ul></div>
+</section>
+
+<section>
+<h2>How we review</h2>
+<p>The self-check only confirms everything is there. The founder then scores technical depth and product vision, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
+</section>
+
+<section id="self">
+<h2>Self-check</h2>
+<div class="assess">
+<div class="row">
+<div class="field wide"><label for="fork">Your fork</label><input id="fork" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://github.com/you/flisk-task-starter"></div>
+<div class="field"><label for="start">Start date</label><input id="start" type="date"></div>
+</div>
+<div class="actions"><button id="go" class="primary">Run self-check</button><span id="msg" class="muted" role="status"></span></div>
+<p class="note"><b>This does not submit anything.</b> It is only for you: it reads your public fork in your browser and sends nothing to us. Run it as often as you like, up to about 15 times an hour (GitHub's limit without a login). When it says <b>Ready for review</b>, submit by replying to the message that brought you this link, with your fork's URL. Start date is the day you got the link.</p>
+</div>
+<figure class="example"><img src="img/check-result.png" alt="Example self-check result: 2 of 8 checks passed, Not ready yet, with a tick or cross per check" width="600" height="304" loading="lazy"><figcaption>What a result looks like: one line per check. Fix every ✗, run it again.</figcaption></figure>
+<div id="out" hidden>
+<div class="result"><span id="total"></span><span id="verdict"></span></div>
+<table id="rows"></table>
+<p id="gate" class="muted"></p>
+<p id="ci" class="muted"></p>
+<p id="next"></p>
+</div>
+</section>
+<footer>Questions? Reply to the message that brought you this link.</footer>
+</main>
+<script type="module">
+import { runChecks } from "./check.js?v=11";
+const $ = (id) => document.getElementById(id);
+const hash = new URLSearchParams(location.hash.slice(1));
+if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
+const fmt = (d) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function showDeadline() {
+	const m = /^\d{4}-\d{2}-\d{2}$/.test($("start").value) && new Date(`${$("start").value}T00:00:00Z`);
+	if (m) $("deadline").textContent = fmt(new Date(m.getTime() + 3 * 864e5 - 1000));
+}
+showDeadline();
+$("start").addEventListener("input", showDeadline);
+$("go").addEventListener("click", async () => {
+	const m = /^(?:https?:\/\/)?(?:www\.)?(?:github\.com\/)?([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:[\/?#].*)?$/i.exec($("fork").value.trim());
+	const user = m?.[1] || "", repo = m?.[2] || "", start = $("start").value.trim();
+	if (`${user}/${repo}`.toLowerCase() === "flisk-sh/flisk-task-starter") return ($("msg").textContent = "That is the starter. Press Fork on it, then paste the URL of your fork.");
+	$("out").hidden = true;
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Paste your fork's URL and pick your start date.");
+	$("msg").textContent = "Checking…";
+	try {
+		const r = await runChecks({ user, repo, start });
+		$("rows").replaceChildren(...r.rows.map((x) => { const tr = document.createElement("tr"); const a = document.createElement("td"), b = document.createElement("td"); a.className = "s " + (x.ok ? "ok" : "bad"); a.textContent = x.ok ? "✓" : "✗"; b.textContent = x.label; tr.append(a, b); return tr; }));
+		$("total").textContent = `${r.done}/${r.rows.length} checks passed`;
+		$("verdict").textContent = r.ready ? "Ready for review" : "Not ready yet";
+		$("verdict").className = r.ready ? "ok" : "bad";
+		$("gate").textContent = `Repository created on or after your start date: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
+		if (r.contactUnknown) $("msg").textContent = "GitHub limits searches to 10 a minute: the contact check could not run. Wait a minute and check again.";
+		$("ci").textContent = r.ci ? `Bonus: your latest GitHub Actions run ${r.ci.ok ? "passed" : "did not pass"}.` : "";
+		$("next").textContent = r.ready ? `Reply with: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Finish the parts marked ✗ and check again. There is no limit before the deadline.";
+		$("out").hidden = false; if (!r.contactUnknown) $("msg").textContent = "";
+	} catch (e) { $("msg").textContent = /403|rate/i.test(e.message) ? "GitHub is limiting checks from your network for a few minutes. Try again shortly." : `Could not check: ${e.message}. Is the repository public and the name right?`; }
+});
+</script>
+</body>
+</html>
