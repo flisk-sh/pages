@@ -107,7 +107,7 @@ export async function pagesMcpRoute(request, json) {
   const { id, method, params } = msg;
   if (id === undefined) return new Response(null, { status: 202, headers: cors });
   if (method === "initialize") {
-    return json(rpc(id, { protocolVersion: PROTOCOL, capabilities: { tools: {}, prompts: {} }, serverInfo: { name: "flisk-pages", version: "1.0.0" }, instructions: "check_page tells you what to fix before a page can go online. how_to_put_page_online gives the steps and the one command." }));
+    return json(rpc(id, { protocolVersion: PROTOCOL, capabilities: { tools: {}, prompts: {} }, serverInfo: { name: "flisk-pages", version: "1.0.0", icons: [{ src: "https://pages.flisk.si/icon-512.png", mimeType: "image/png", sizes: ["512x512"] }] }, instructions: "check_page tells you what to fix before a page can go online. how_to_put_page_online gives the steps and the one command." }));
   }
   if (method === "ping") return json(rpc(id, {}));
   if (method === "tools/list") return json(rpc(id, { tools: TOOLS }));
