@@ -57,6 +57,24 @@ describe("the page bar in a browser", () => {
 		).not.toContain("mailto:");
 	});
 
+	it("stays inside the screen and hides the share tooltip while its menu is open", async () => {
+		const css =
+			(await open("/@sam/gpu-explainer/")).document.querySelector(
+				"[data-pages-bar] style",
+			)?.textContent ?? "";
+		expect(css).toContain("max-width:calc(100vw - 24px)");
+		expect(css).toContain("[data-share]:hover>a::after");
+	});
+
+	it("puts the private notice at the top, away from the bar at the bottom", () => {
+		const shell = readFileSync(
+			join(import.meta.dir, "../../../../bin/protect.mjs"),
+			"utf8",
+		);
+		expect(shell).toContain("left:0;right:0;top:0;");
+		expect(shell).not.toContain("left:0;right:0;bottom:0;");
+	});
+
 	it("copy link writes the page address and says Copied", async () => {
 		const copied: string[] = [];
 		const w = await open("/@sam/gpu-explainer/", "", {
