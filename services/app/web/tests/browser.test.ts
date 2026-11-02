@@ -66,6 +66,16 @@ describe("the page bar in a browser", () => {
 		expect(css).toContain("[data-share]:hover>a::after");
 	});
 
+	it("scopes the locked page's own styles so they never reach the decrypted page", () => {
+		const shell = readFileSync(
+			join(import.meta.dir, "../../../../bin/protect.mjs"),
+			"utf8",
+		);
+		expect(shell).toContain("body[data-pages-shared]{");
+		expect(shell).toContain("#m{max-width:30rem");
+		expect(shell).not.toMatch(/[}>]p\{/);
+	});
+
 	it("puts the private notice at the top, away from the bar at the bottom", () => {
 		const shell = readFileSync(
 			join(import.meta.dir, "../../../../bin/protect.mjs"),
