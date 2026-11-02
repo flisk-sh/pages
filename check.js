@@ -15,6 +15,7 @@ export const CHECKS = [
 	["Part 3: PITCH.md has a ## Why Flisk section and a ## Pricing section", "pitch"],
 	["Part 4: an issue in your repository with your product idea", "idea"],
 	["No .env, node_modules or generated .flisk files committed", "clean"],
+	["Your own new repository, not a fork of the example app", "own"],
 ];
 
 /** The deadline: the end of the day two days after the start date (UTC). */
@@ -85,6 +86,7 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 		buyers: buyers(buyersMd) >= 3,
 		pitch: pitchOk(pitch),
 		idea: (issues || []).some((i) => !i.pull_request),
+		own: !info.fork,
 		clean: !has(/(^|\/)\.env(\.(?!example$|sample$|template$)[^/]*)?$/) && !has(/(^|\/)node_modules\//) && !has(GENERATED),
 	};
 

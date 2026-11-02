@@ -23,7 +23,7 @@ function repo(over = {}) {
 		if (u.includes("/commits")) return ok([{ sha: "abcdef1234", commit: { committer: { date: o.commitDate } } }]);
 		if (u.includes("/issues")) return ok(o.issues);
 		if (u.includes("/actions/runs")) return ok({ workflow_runs: o.runs });
-		return ok({ private: false, default_branch: "main", created_at: o.created, html_url: "https://github.com/u/r" });
+		return ok({ private: false, fork: !!o.fork, default_branch: "main", created_at: o.created, html_url: "https://github.com/u/r" });
 	};
 }
 const run = (over, start = "2026-11-02") => runChecks({ user: "u", repo: "r", start }, repo(over));
@@ -34,7 +34,7 @@ describe("a complete submission", () => {
 		const r = await run();
 		expect(failed(r)).toEqual([]);
 		expect(r.ready).toBe(true);
-		expect(r.done).toBe(6);
+		expect(r.done).toBe(7);
 	});
 	it("reports CI as a bonus, never as a requirement", async () => {
 		expect((await run({ runs: [{ conclusion: "failure", html_url: "x" }] })).ready).toBe(true);
@@ -55,6 +55,9 @@ describe("bad: missing or hollow parts", () => {
 	it("fails buyers that are links only, or fewer than three", async () => {
 		expect(buyers("## A\nhttps://x.com\n## B\nhttps://y.com\n## C\nhttps://z.com")).toBe(0);
 		expect(buyers([1, 2].map(BUYER).join("\n"))).toBe(2);
+	});
+	it("fails a fork: candidates copy the example app, they never fork it", async () => {
+		expect(failed(await run({ fork: true }))).toEqual(["own"]);
 	});
 	it("fails a pull request counted as the product idea", async () => {
 		expect(failed(await run({ issues: [{ pull_request: {} }] }))).toEqual(["idea"]);
