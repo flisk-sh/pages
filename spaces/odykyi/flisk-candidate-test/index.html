@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Flisk engineering assessment: four practical exercises with an automated self-assessment.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flisk engineering assessment</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; --ok:#12805c; --bad:#b3372a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; } }
+:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
+main { max-width:760px; margin:0 auto; padding:40px 16px 72px; }
+.kicker { color:var(--muted); font-size:.85rem; letter-spacing:.04em; text-transform:uppercase; margin:0 0 .4rem; }
+h1 { font-size:1.8rem; margin:0 0 .4rem; }
+h2 { font-size:1.2rem; margin:2.4rem 0 .6rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+a { color:var(--accent); }
+.muted { color:var(--muted); }
+table { width:100%; border-collapse:collapse; margin:.8rem 0; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:.95rem; }
+th { background:var(--cell); font-weight:600; }
+td.n { width:2.4rem; color:var(--muted); }
+details { margin:.3rem 0 .8rem; font-size:.92rem; }
+summary { cursor:pointer; color:var(--accent); }
+details p { margin:.4rem 0; color:var(--muted); }
+button, input { font:inherit; padding:7px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+button { cursor:pointer; }
+button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.row { display:flex; gap:10px; flex-wrap:wrap; margin:.6rem 0; }
+.row input { flex:1; min-width:150px; }
+label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:2px; }
+.field { flex:1; min-width:150px; }
+.field input { width:100%; box-sizing:border-box; }
+td.s { width:2rem; text-align:center; font-weight:700; }
+.ok { color:var(--ok); } .bad { color:var(--bad); }
+#total { font-size:1.3rem; font-weight:700; }
+code { font-family:ui-monospace,monospace; font-size:.9em; }
+p { text-align:left; max-width:none; padding:0; }
+.assess { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:20px; margin:1rem 0; }
+.assess .row { align-items:flex-end; gap:14px; margin:0 0 14px; }
+.assess label { font-size:.85rem; font-weight:600; color:var(--fg); margin-bottom:6px; }
+.assess input { height:42px; padding:0 12px; border-radius:8px; }
+.assess input::placeholder { color:var(--muted); opacity:.6; font-style:italic; }
+.assess input:focus, .assess button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+.assess .hint { font-size:.78rem; color:var(--muted); margin-top:4px; }
+.assess button.primary { height:42px; padding:0 20px; border-radius:8px; font-weight:600; }
+.assess .actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.assess .note { font-size:.85rem; color:var(--muted); margin:14px 0 0; }
+
+.hero { padding:8px 0 8px; }
+.lede { font-size:1.08rem; color:var(--muted); max-width:620px; margin:0 0 1.4rem; }
+.facts { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.facts li { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.facts b { display:block; font-size:1.4rem; line-height:1.2; }
+.facts span { font-size:.82rem; color:var(--muted); }
+section { margin-top:2.6rem; }
+.steps { list-style:none; counter-reset:s; padding:0; margin:0; display:grid; gap:10px; }
+.steps li { counter-increment:s; position:relative; padding:12px 16px 12px 52px; border:1px solid var(--line); border-radius:12px; }
+.steps li::before { content:counter(s); position:absolute; left:14px; top:12px; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--bg); font-weight:700; font-size:.85rem; display:grid; place-items:center; }
+.steps b { display:block; }
+.deadline { margin:12px 0 0; padding:10px 14px; border-left:3px solid var(--accent); background:var(--cell); border-radius:0 8px 8px 0; font-size:.95rem; }
+#deadline { font-weight:600; }
+.ex { display:grid; gap:12px; }
+.ex article { display:flex; gap:14px; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.ex .num { flex:none; width:32px; height:32px; border-radius:8px; background:var(--cell); border:1px solid var(--line); display:grid; place-items:center; font-weight:700; }
+.ex h3 { margin:2px 0 4px; font-size:1.05rem; }
+.ex p { margin:.3rem 0; }
+.ex .deliv { background:var(--cell); border-radius:8px; padding:8px 12px; font-size:.93rem; }
+.ex .deliv b { display:block; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.rules { margin:14px 0 6px; font-size:.93rem; }
+.rules ul { margin:.3rem 0 0; padding-left:1.2rem; color:var(--muted); }
+.prompts { display:flex; gap:8px; flex-wrap:wrap; margin:.4rem 0; }
+.prompts button { border-radius:8px; }
+.prompts button:hover { border-color:var(--accent); }
+.checks { margin:0; padding-left:1.6rem; display:grid; gap:2px; }
+.checks li { padding:8px 4px; border-bottom:1px solid var(--line); }
+.checks small { float:right; color:var(--muted); font-size:.8rem; margin-left:12px; }
+#out { margin-top:16px; }
+.result { display:flex; align-items:baseline; gap:12px; margin:0 0 6px; }
+#verdict { font-weight:600; }
+footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
+@media (max-width:620px) { .facts { grid-template-columns:repeat(2,1fr); } .checks small { float:none; display:block; margin:0; } h1 { font-size:1.6rem; } }
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+<p class="kicker">Flisk · Engineering assessment</p>
+<h1>Practical assessment</h1>
+<p class="lede">Four short exercises on a real open-source product, <a href="https://flisk.sh">Flisk</a>. You check your own result on this page; we run the same checks.</p>
+<ul class="facts">
+<li><b>2 days</b><span>from your start date</span></li>
+<li><b>4</b><span>exercises</span></li>
+<li><b>10</b><span>automated checks</span></li>
+<li><b>1</b><span>public repository</span></li>
+</ul>
+</header>
+
+<section>
+<h2>How it works</h2>
+<ol class="steps">
+<li><b>Start</b>Your start date is the day you received this link. The repository you submit must be new: created on or after that day.</li>
+<li><b>Work</b>Do the four exercises below and push as you go. Using an AI assistant is allowed; record what really happened.</li>
+<li><b>Check and send</b>Run the self-assessment at the bottom as often as you like. When it says <em>Accepted</em>, reply with your repository link.</li>
+</ol>
+<p class="deadline">Deadline: 23:59 UTC on the second day after your start date. <span id="deadline"></span></p>
+</section>
+
+<section>
+<h2>Exercises</h2>
+<div class="ex">
+<article><span class="num">1</span><div><h3>First run</h3><p>Run <code>npx @flisk-sh/flisk demo</code> twice, then once with Docker stopped.</p><p class="deliv"><b>Deliver</b><code>LOG.md</code>, heading <code># Lab 1</code>: three timings and three points of friction.</p></div></article>
+<article><span class="num">2</span><div><h3>Build</h3><p>Run <code>flisk project agent-stack</code>, then <code>cd flisk-agent-stack &amp;&amp; rm -rf .git &amp;&amp; git init</code> so the work is your own history. Add <code>flisk resource my-api --type backend --stack agents --yes</code>, then <code>flisk up</code>.</p><p class="deliv"><b>Deliver</b>Healthy <code>flisk status --json</code> under <code># Lab 2</code>. A README linking flisk.sh and the Flisk repository. No hand-written container files. Pushed to your new public repository.</p></div></article>
+<article><span class="num">3</span><div><h3>Diagnose</h3><p>Introduce three faults. Find each with <code>flisk doctor</code>, <code>flisk config verify</code> or <code>flisk logs</code>.</p><p class="deliv"><b>Deliver</b>A table under <code># Lab 3</code>: fault, symptom, command, fix, minutes. Three rows.</p></div></article>
+<article><span class="num">4</span><div><h3>Contribute</h3><p>Open a pull request to <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a>, with at least one test of your own.</p><p class="deliv"><b>Deliver</b>The PR link under <code># Lab 4</code>, and <code>GTM.md</code> with three numbered answers: first 100 users, three integrations, one step this week.</p></div></article>
+</div>
+<div class="rules"><b>House rules</b><ul><li>Commit with <code>git commit -s</code>.</li><li>Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files (the starter's <code>.gitignore</code> already excludes them).</li><li>Star the Flisk repository.</li></ul></div>
+<details><summary>Optional: starter prompts for an AI assistant</summary>
+<p class="muted">Click one to copy it, then paste it into your assistant.</p>
+<div class="prompts"><button data-p="Help me with exercise 1 of the Flisk assessment. Run `npx @flisk-sh/flisk demo` twice, then once with Docker stopped. Time each run. Add a '# Lab 1' section to LOG.md with the three timings and three points of friction, each with a one-line fix. Only write what really happened.">Exercise 1</button><button data-p="Help me with exercise 2 of the Flisk assessment. Run `flisk project agent-stack`, add one small real resource with `flisk resource my-api --type backend --stack agents --yes`, run `flisk up` and `flisk status --json`. Then cd flisk-agent-stack, run rm -rf .git and git init so the work is my own history. Do not hand-write container manifests. Add a '# Lab 2' section to LOG.md with the healthy status. Write a README linking https://flisk.sh and https://github.com/flisk-sh/flisk.">Exercise 2</button><button data-p="Help me with exercise 3 of the Flisk assessment. Introduce three faults in my Flisk system: a wrong port, a missing environment variable, a service that starts before its dependency. Find each with `flisk doctor --json`, `flisk config verify --json` or `flisk logs`, then fix it. Add a '# Lab 3' section to LOG.md with a markdown table: fault | symptom | command | fix | minutes. Only record what really happened.">Exercise 3</button><button data-p="Help me with exercise 4 of the Flisk assessment. Read https://github.com/flisk-sh/flisk, find one small real improvement and prepare a pull request to flisk-sh/flisk with tests. Commit with `git commit -s`. Add a test file to my repository. Add a '# Lab 4' section to LOG.md with the PR link. Write GTM.md with three numbered answers: 1. how to get the first 100 to 500 real users, 2. which three tools to integrate first and why, 3. one concrete step this week.">Exercise 4</button></div></details>
+</section>
+
+<section>
+<h2>What is checked</h2>
+<ol class="checks">
+<li>README links flisk.sh and the Flisk repository <small>README.md</small></li>
+<li>LOG.md has Lab 1 to Lab 4, each with 120+ characters <small>LOG.md</small></li>
+<li>Lab 3 table: three rows, five columns <small>LOG.md</small></li>
+<li>Your own resource: four or more <code>service.json</code> (the starter has three) <small>Repository</small></li>
+<li>No <code>.env</code>, <code>node_modules</code> or <code>.flisk</code> files committed <small>Repository</small></li>
+<li>A test of your own: four or more test files (the starter has two, the scaffold adds one) <small>Repository</small></li>
+<li>Last 20 commits signed off <small>Commits</small></li>
+<li>Flisk repository starred <small>Your stars</small></li>
+<li>Pull request to flisk-sh/flisk opened after your start date <small>GitHub search</small></li>
+<li>GTM.md answers 1, 2 and 3, 40+ characters each <small>GTM.md</small></li>
+</ol>
+<p class="muted">Also required: the repository was created on or after your start date, and every commit is before the deadline. All ten must pass. The scoring code and its tests are open: <a href="check.js">check.js</a>, <a href="check.test.js">check.test.js</a>.</p>
+</section>
+
+<section id="self">
+<h2>Self-assessment</h2>
+<div class="assess">
+<div class="row">
+<div class="field"><label for="user">GitHub username</label><input id="user" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your GitHub login"></div>
+<div class="field"><label for="repo">Repository name</label><input id="repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your new repository"></div>
+<div class="field"><label for="start">Start date</label><input id="start" type="date"></div>
+</div>
+<div class="actions"><button id="go" class="primary">Run assessment</button><span id="msg" class="muted" role="status"></span></div>
+<p class="note">Start date is the day you received the link. The check reads only your public repository through the GitHub API, in your browser. Nothing of yours is run or sent to us.</p>
+</div>
+<div id="out" hidden>
+<div class="result"><span id="total"></span><span id="verdict"></span></div>
+<table id="rows"></table>
+<p id="gate" class="muted"></p>
+<p id="next"></p>
+</div>
+</section>
+<footer>Questions? Reply to the email that brought you this link.</footer>
+</main>
+<script type="module">
+import { runChecks } from "./check.js?v=3";
+const $ = (id) => document.getElementById(id);
+const hash = new URLSearchParams(location.hash.slice(1));
+if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
+const fmt = (d) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function showDeadline() {
+	const m = /^\d{4}-\d{2}-\d{2}$/.test($("start").value) && new Date(`${$("start").value}T00:00:00Z`);
+	if (m) $("deadline").textContent = fmt(new Date(m.getTime() + 3 * 864e5 - 1000));
+}
+showDeadline();
+$("start").addEventListener("input", showDeadline);
+for (const b of document.querySelectorAll("button[data-p]"))
+	b.addEventListener("click", async () => {
+		try { await navigator.clipboard.writeText(b.dataset.p); b.textContent = "Copied"; } catch { b.textContent = "Copy failed: select the text yourself"; }
+	});
+$("go").addEventListener("click", async () => {
+	const user = $("user").value.trim(), repo = $("repo").value.trim(), start = $("start").value.trim();
+	$("out").hidden = true;
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Complete all three fields.");
+	$("msg").textContent = "Running…";
+	try {
+		const r = await runChecks({ user, repo, start });
+		$("rows").replaceChildren(...r.rows.map((x) => { const tr = document.createElement("tr"); const a = document.createElement("td"), b = document.createElement("td"); a.className = "s " + (x.ok ? "ok" : "bad"); a.textContent = x.ok ? "✓" : "✗"; b.textContent = `${x.label} (${x.points}/10)`; tr.append(a, b); return tr; }));
+		$("total").textContent = `${r.score}/100`;
+		$("verdict").textContent = r.accepted ? "Accepted. Reply with your repository link." : "Not accepted.";
+		$("verdict").className = r.accepted ? "ok" : "bad";
+		$("gate").textContent = `Repo created after you got the link: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
+		$("next").textContent = r.accepted ? `Repository to send: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Resolve the failed checks and run the assessment again. There is no limit on runs before the deadline.";
+		$("out").hidden = false; $("msg").textContent = "";
+	} catch (e) { $("msg").textContent = `Could not run: ${e.message}. Is the repo public and the name right?`; }
+});
+</script>
+</body>
+</html>
