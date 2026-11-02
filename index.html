@@ -86,6 +86,10 @@ section { margin-top:2.6rem; }
 #out { margin-top:16px; }
 .result { display:flex; align-items:baseline; gap:12px; margin:0 0 6px; }
 #verdict { font-weight:600; }
+#total { font-size:1.6rem; font-weight:700; }
+td.pts { text-align:right; white-space:nowrap; color:var(--muted); font-variant-numeric:tabular-nums; }
+td.grp { background:var(--cell); font-weight:600; font-size:.85rem; }
+td.s.mid { color:#c98a00; }
 footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 @media (max-width:620px) { main { padding-bottom:140px; } .facts { grid-template-columns:repeat(2,1fr); } .checks small { float:none; display:block; margin:0; } h1 { font-size:1.6rem; } }
 </style>
@@ -168,7 +172,7 @@ ONE THING FLISK SHOULD NOT BUILD YET, AND WHY.</pre></div></article>
 
 <section>
 <h2>How we review</h2>
-<p>The self-check only confirms everything is there. The founder then scores technical depth and product vision, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
+<p>The self-check gives a score from 0 to 100: it only counts what is in your fork, the same way every time. <b>80 or more, with a fork, no secrets, the licence kept and no contact with other projects, is ready for review.</b> The founder then scores technical depth and product vision, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
 </section>
 
 <section id="self">
@@ -181,7 +185,7 @@ ONE THING FLISK SHOULD NOT BUILD YET, AND WHY.</pre></div></article>
 <div class="actions"><button id="go" class="primary">Run self-check</button><span id="msg" class="muted" role="status"></span></div>
 <p class="note"><b>This does not submit anything.</b> It is only for you: it reads your public fork in your browser and sends nothing to us. Run it as often as you like, up to about 15 times an hour (GitHub's limit without a login). When it says <b>Ready for review</b>, submit by replying to the message that brought you this link, with your fork's URL. Start date is the day you got the link.</p>
 </div>
-<figure class="example"><img src="img/check-result.png" alt="Example self-check result: 2 of 8 checks passed, Not ready yet, with a tick or cross per check" width="600" height="304" loading="lazy"><figcaption>What a result looks like: one line per check. Fix every ✗, run it again.</figcaption></figure>
+<figure class="example"><img src="img/check-result.png" alt="Example self-check result: 72 out of 100, Not ready yet, grouped into Technical, Product and Rules with points per line" width="605" height="564" loading="lazy"><figcaption>An example result (not a real submission): 72/100. A ✓ is full points, ◐ is partial, ✗ is none. Fix those, check again.</figcaption></figure>
 <div id="out" hidden>
 <div class="result"><span id="total"></span><span id="verdict"></span></div>
 <table id="rows"></table>
@@ -193,7 +197,7 @@ ONE THING FLISK SHOULD NOT BUILD YET, AND WHY.</pre></div></article>
 <footer>Questions? Reply to the message that brought you this link.</footer>
 </main>
 <script type="module">
-import { runChecks } from "./check.js?v=11";
+import { runChecks, READY_AT } from "./check.js?v=12";
 const $ = (id) => document.getElementById(id);
 const hash = new URLSearchParams(location.hash.slice(1));
 if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
@@ -213,14 +217,24 @@ $("go").addEventListener("click", async () => {
 	$("msg").textContent = "Checking…";
 	try {
 		const r = await runChecks({ user, repo, start });
-		$("rows").replaceChildren(...r.rows.map((x) => { const tr = document.createElement("tr"); const a = document.createElement("td"), b = document.createElement("td"); a.className = "s " + (x.ok ? "ok" : "bad"); a.textContent = x.ok ? "✓" : "✗"; b.textContent = x.label; tr.append(a, b); return tr; }));
-		$("total").textContent = `${r.done}/${r.rows.length} checks passed`;
-		$("verdict").textContent = r.ready ? "Ready for review" : "Not ready yet";
+		const cell = (t, c) => { const td = document.createElement("td"); td.textContent = t; if (c) td.className = c; return td; };
+		let group = "";
+		const trs = [];
+		for (const x of r.rows) {
+			if (x.group !== group) { group = x.group; const h = document.createElement("tr"); const th = cell(`${{ technical: "Technical", product: "Product", conduct: "Rules" }[group]}: ${r.parts[group]}/${r.rows.filter((y) => y.group === group).reduce((n, y) => n + y.max, 0)}`, "grp"); th.colSpan = 3; h.append(th); trs.push(h); }
+			const tr = document.createElement("tr");
+			tr.append(cell(x.ok ? "✓" : x.points ? "◐" : "✗", "s " + (x.ok ? "ok" : x.points ? "mid" : "bad")), cell(x.label), cell(`${x.points}/${x.max}`, "pts"));
+			trs.push(tr);
+		}
+		$("rows").replaceChildren(...trs);
+		$("total").textContent = `${r.score}/100`;
+		const say = { ready: "Ready for review", "not-ready": `Not ready yet: you need ${READY_AT} or more and no rule broken`, "not-eligible": "Not eligible: see the dates below" }[r.status];
+		$("verdict").textContent = say;
 		$("verdict").className = r.ready ? "ok" : "bad";
 		$("gate").textContent = `Repository created on or after your start date: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
 		if (r.contactUnknown) $("msg").textContent = "GitHub limits searches to 10 a minute: the contact check could not run. Wait a minute and check again.";
 		$("ci").textContent = r.ci ? `Bonus: your latest GitHub Actions run ${r.ci.ok ? "passed" : "did not pass"}.` : "";
-		$("next").textContent = r.ready ? `Reply with: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Finish the parts marked ✗ and check again. There is no limit before the deadline.";
+		$("next").textContent = r.ready ? `Reply with: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Fix what is marked ✗ or ◐ and check again. There is no limit before the deadline.";
 		$("out").hidden = false; if (!r.contactUnknown) $("msg").textContent = "";
 	} catch (e) { $("msg").textContent = /403|rate/i.test(e.message) ? "GitHub is limiting checks from your network for a few minutes. Try again shortly." : `Could not check: ${e.message}. Is the repository public and the name right?`; }
 });
