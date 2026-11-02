@@ -88,46 +88,31 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <header class="hero">
 <p class="kicker">Flisk · Sales Architect / Product Engineer</p>
 <h1>Run it, find who needs it, pitch it</h1>
-<p class="lede">Show us how you would sell <a href="https://flisk.sh">Flisk</a>, on paper: make it run on a real app, find three teams who need it, write the pitch and price, and propose one feature. You contact no one; it is all in your own repository. About 3 to 4 hours of work, spread over 2 days.</p>
-<ul class="facts">
-<li><b>3–4 h</b><span>of focused work</span></li>
-<li><b>2 days</b><span>from your start date</span></li>
-<li><b>4</b><span>parts</span></li>
-<li><b>1</b><span>public repository</span></li>
-</ul>
+<p class="lede">Show us how you would sell <a href="https://flisk.sh">Flisk</a>, on paper, in your own public repository. About 3–4 hours; deadline 23:59 UTC two days after your start date. <span id="deadline"></span></p>
 </header>
 
 <section>
-<h2>How it works</h2>
-<ol class="steps">
-<li><b>Start</b>Create a new public GitHub repository. It must be created on or after your start date, the day you received this link.</li>
-<li><b>Work</b>Do the four parts below and push as you go. AI assistants are welcome; we use them every day.</li>
-<li><b>Check and send</b>Run the self-check at the bottom. When it says <em>Ready for review</em>, reply with your repository link. The founder reviews every complete submission personally.</li>
-</ol>
-<p class="deadline">Deadline: 23:59 UTC on the second day after your start date. <span id="deadline"></span></p>
-</section>
-
-<section>
-<h2>The four parts</h2>
+<h2>Four parts</h2>
 <div class="ex">
-<article><span class="num">1</span><div><h3>Make it real <small>about 75 min</small></h3><p>Make a real multi-service app (a Python voting page, a Node.js results page, a .NET worker, Redis and Postgres) start with one <code>flisk up</code>. Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a> and press <b>Use this template</b> to create your own new public repository. Then, in your copy, run <code>npx @flisk-sh/flisk import . --dry-run</code> to see the plan, the same without <code>--dry-run</code> to write it, and <code>flisk up</code> to start it. You need Docker running. The <a href="https://github.com/flisk-sh/flisk#readme">Flisk README</a> has the rest.</p><p class="deliv"><b>Deliver</b>Your repository with <code>.flisk/project.json</code> and a <code>service.json</code> per service, the starter's <code>LICENSE</code> and <code>NOTICE</code> kept. Your own <code>README.md</code>: how to start it with <code>flisk up</code>, and a section on what was hard. That friction list is the most useful part for us.</p></div></article>
-<article><span class="num">2</span><div><h3>Find buyers <small>about 60 min</small></h3><p>Find three real teams, companies or open-source projects that lose time on local setup and would pay, or adopt, to stop. You choose the market and say why.</p><p class="deliv"><b>Deliver</b><code>BUYERS.md</code>: one <code>## heading</code> per buyer with who they are, a public link that shows the pain (an issue, a thread, a CONTRIBUTING guide), and the first message you would send them. Write it, do not send it.</p></div></article>
-<article><span class="num">3</span><div><h3>Pitch <small>about 45 min</small></h3><p>Write the one page you would send an engineering lead at a team building AI agents.</p><p class="deliv"><b>Deliver</b><code>PITCH.md</code> with a <code>## Why Flisk</code> section (against Docker Compose, Tilt or devcontainers, honestly, including where they win) and a <code>## Pricing</code> section: what is free, what is paid, for whom.</p></div></article>
-<article><span class="num">4</span><div><h3>Product angle <small>about 15 min</small></h3><p>One feature that would make Flisk more useful for AI-heavy workflows, and how you would know it worked.</p><p class="deliv"><b>Deliver</b>An issue in <em>your</em> repository: the problem, the feature, and the signal you would watch.</p></div></article>
+<article><span class="num">1</span><div><h3>Make it run <small>75 min</small></h3><p>Open <a href="https://github.com/flisk-sh/flisk-task-starter">flisk-sh/flisk-task-starter</a>, press <b>Use this template</b>, then in your copy run <code>npx @flisk-sh/flisk import .</code> and <code>flisk up</code> (Docker needed).</p><p class="deliv"><b>Deliver</b>The converted app and a <code>README.md</code>: how to start it, and a section on what was hard.</p></div></article>
+<article><span class="num">2</span><div><h3>Find buyers <small>60 min</small></h3><p>Three real teams that lose time on local setup. You pick the market.</p><p class="deliv"><b>Deliver</b><code>BUYERS.md</code>: one <code>## heading</code> each, a public link showing the pain, and the first message you would send (do not send it).</p></div></article>
+<article><span class="num">3</span><div><h3>Pitch <small>45 min</small></h3><p>One page for an engineering lead building AI agents.</p><p class="deliv"><b>Deliver</b><code>PITCH.md</code> with <code>## Why Flisk</code> (honest versus Compose, Tilt, devcontainers) and <code>## Pricing</code>.</p></div></article>
+<article><span class="num">4</span><div><h3>Product idea <small>15 min</small></h3><p>One feature for AI-heavy workflows.</p><p class="deliv"><b>Deliver</b>An issue in your repository: problem, feature, and the number you would watch.</p></div></article>
 </div>
-<div class="rules"><b>Please</b><ul><li><b>Contact no one and touch no other repository.</b> Do not fork the starter, and do not open issues, pull requests or comments on the starter, on Flisk, on the app the starter copies, or on your buyers' projects, and do not send your buyer messages. Everything stays in your own repository. A submission that contacted other projects is not reviewed.</li><li><b>Do not ping anyone from your repository either.</b> No <code>@mentions</code> in your issue, and no links to other projects' issues or pull requests in your issue or commit messages: GitHub notifies those people and posts a "mentioned this" note on their issue. Link buyer pain in <code>BUYERS.md</code> only, where it notifies no one.</li><li><b>Keep the starter's <code>LICENSE</code> and <code>NOTICE</code></b>: the app is open source and its licence travels with it.</li><li><b>No personal data.</b> In <code>BUYERS.md</code> name teams and companies, not private people, and write no email addresses or phone numbers. Your repository is public.</li><li>Keep it honest: write what really happened, including what did not work.</li><li>Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files.</li></ul></div>
 </section>
 
 <section>
-<h2>How you are evaluated</h2>
-<p>The self-check below only confirms that all four parts are there. The founder then reads every complete submission and scores four things from 1 to 5:</p>
-<ol class="checks">
-<li><b>Technical depth.</b> Did the app really run? Do you understand why the hard parts were hard? <small>Part 1</small></li>
-<li><b>Customer insight.</b> Are these real buyers with real, linked pain, and would your first message get a reply? <small>Part 2</small></li>
-<li><b>Clarity.</b> Would an engineering lead understand the value in one minute, and believe it? <small>Part 3</small></li>
-<li><b>Ownership.</b> Does the product idea come from what you saw, with a way to measure it? <small>Part 4</small></li>
-</ol>
-<p class="muted">Strong submissions are invited to a 30-minute call: a short live sales conversation with the founder. The self-check code and its tests are open: <a href="check.js">check.js</a>, <a href="check.test.js">check.test.js</a>.</p>
+<h2>Rules</h2>
+<div class="rules"><ul>
+<li><b>Contact no one.</b> No forks, issues, pull requests or comments on the starter, Flisk or your buyers. No <code>@mentions</code> or links to other projects' issues in your issue or commits.</li>
+<li>Keep <code>LICENSE</code> and <code>NOTICE</code>. No emails or phone numbers in <code>BUYERS.md</code>.</li>
+<li>No <code>.env</code> or <code>node_modules</code> committed. AI assistants are welcome.</li>
+</ul></div>
+</section>
+
+<section>
+<h2>How we review</h2>
+<p>The self-check only confirms everything is there. The founder then scores technical depth, customer insight, clarity and ownership, 1 to 5 each. Strong submissions get a 30-minute call. The check is open: <a href="check.js">check.js</a>, <a href="check.test.js">tests</a>.</p>
 </section>
 
 <section id="self">
@@ -139,7 +124,7 @@ footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
 <div class="field"><label for="start">Start date</label><input id="start" type="date"></div>
 </div>
 <div class="actions"><button id="go" class="primary">Run self-check</button><span id="msg" class="muted" role="status"></span></div>
-<p class="note">Start date is the day you received the link. The check reads only your public repository through the GitHub API, in your browser. Nothing of yours is run or sent to us.</p>
+<p class="note">Start date is the day you got this link. The check reads your public repository in your browser; nothing is sent to us. When it says <b>Ready for review</b>, reply with your repository link.</p>
 </div>
 <div id="out" hidden>
 <div class="result"><span id="total"></span><span id="verdict"></span></div>
