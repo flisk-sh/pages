@@ -5,8 +5,8 @@ import { buyers, crossRef, deadlineOf, mentions, personalData, pitchOk, readmeOk
 const BUYER = (n) => `## Team ${n}\nA 12-service AI agent repo whose contributors keep reporting broken local setup: https://github.com/org${n}/app/issues/1\n`;
 const goodBuyers = [1, 2, 3].map(BUYER).join("\n");
 const goodPitch = "## Why Flisk\nOne command instead of a Compose file per service.\n## Pricing\nFree CLI, paid team plan.";
-const goodReadme = "Converted https://github.com/someone/shop to Flisk.\n\nRun it: `flisk up`";
-const TREE = ["LICENSE", ".flisk/project.json", "services/api/service.json", "services/web/service.json", "README.md", "BUYERS.md", "PITCH.md"];
+const goodReadme = "# Voting app on Flisk\n\nRun it: `flisk up`\n\n## What was hard\nThe worker started before Postgres.";
+const TREE = ["LICENSE", "NOTICE", ".flisk/project.json", "services/api/service.json", "services/web/service.json", "README.md", "BUYERS.md", "PITCH.md"];
 
 function repo(over = {}) {
 	const o = {
@@ -27,7 +27,7 @@ function repo(over = {}) {
 		}
 		if (u.includes("/issues")) return ok(o.issues);
 		if (u.includes("/actions/runs")) return ok({ workflow_runs: o.runs });
-		return ok({ private: false, fork: !!o.fork, default_branch: "main", created_at: o.created, html_url: "https://github.com/u/r" });
+		return ok({ private: false, fork: !!o.fork, template_repository: o.template === null ? null : { full_name: o.template || "flisk-sh/flisk-task-starter" }, default_branch: "main", created_at: o.created, html_url: "https://github.com/u/r" });
 	};
 }
 const run = (over, start = "2026-11-02") => runChecks({ user: "u", repo: "r", start }, repo(over));
@@ -38,7 +38,7 @@ describe("a complete submission", () => {
 		const r = await run();
 		expect(failed(r)).toEqual([]);
 		expect(r.ready).toBe(true);
-		expect(r.done).toBe(12);
+		expect(r.done).toBe(13);
 	});
 	it("reports CI as a bonus, never as a requirement", async () => {
 		expect((await run({ runs: [{ conclusion: "failure", html_url: "x" }] })).ready).toBe(true);
@@ -49,12 +49,12 @@ describe("a complete submission", () => {
 
 describe("bad: missing or hollow parts", () => {
 	it("fails an empty repository on every part", async () => {
-		const r = await run({ tree: [], readme: "", buyers: "", pitch: "", issues: [] });
-		expect(failed(r)).toEqual(["stack", "readme", "buyers", "pitch", "idea", "license"]);
+		const r = await run({ tree: [], readme: "", buyers: "", pitch: "", issues: [], template: null });
+		expect(failed(r)).toEqual(["template", "stack", "readme", "buyers", "pitch", "idea", "license"]);
 		expect(r.ready).toBe(false);
 	});
 	it("fails a single service: a conversion means at least two", async () => {
-		expect(failed(await run({ tree: ["LICENSE", ".flisk/project.json", "service.json"] }))).toEqual(["stack"]);
+		expect(failed(await run({ tree: ["LICENSE", "NOTICE", ".flisk/project.json", "service.json"] }))).toEqual(["stack"]);
 	});
 	it("fails buyers that are links only, or fewer than three", async () => {
 		expect(buyers("## A\nhttps://x.com\n## B\nhttps://y.com\n## C\nhttps://z.com")).toBe(0);
@@ -81,7 +81,7 @@ describe("bad: harm that multiplies with every candidate", () => {
 		const o = { contacted: 1, searches: [] };
 		expect(failed(await run(o))).toEqual(["contact"]);
 		expect(o.searches[0]).toContain("author:u created:>=2026-11-02");
-		for (const r of ["dockersamples/example-voting-app", "docker/awesome-compose", "flisk-sh/flisk", "org1/app", "org3/app"])
+		for (const r of ["flisk-sh/flisk-task-starter", "dockersamples/example-voting-app", "flisk-sh/flisk", "org1/app", "org3/app"])
 			expect(o.searches[0]).toContain(`repo:${r}`);
 	});
 	it("is not ready when GitHub refuses the search, and says so", async () => {
@@ -96,8 +96,9 @@ describe("bad: harm that multiplies with every candidate", () => {
 		expect(failed(await run({ issues: [{ title: "idea", body: "like https://github.com/org1/app/issues/1" }] }))).toEqual(["crossrefs"]);
 		expect(failed(await run({ commitMessage: "inspired by org1/app#12" }))).toEqual(["crossrefs"]);
 	});
-	it("fails a dropped LICENSE", async () => {
+	it("fails a dropped LICENSE or NOTICE", async () => {
 		expect(failed(await run({ tree: TREE.filter((f) => f !== "LICENSE") }))).toEqual(["license"]);
+		expect(failed(await run({ tree: TREE.filter((f) => f !== "NOTICE") }))).toEqual(["license"]);
 	});
 	it("fails emails or phone numbers in BUYERS.md", async () => {
 		expect(failed(await run({ buyers: `${goodBuyers}\nContact: jane@acme.io` }))).toEqual(["privacy"]);
@@ -125,10 +126,14 @@ describe("in between: almost right", () => {
 	it("allows .env.example and the committed project.json", async () => {
 		expect(failed(await run({ tree: [...TREE, ".env.example"] }))).toEqual([]);
 	});
-	it("does not count the candidate's own repo or flisk-sh as the original app", () => {
-		expect(readmeOk("https://github.com/u/r and flisk up", "u", "r")).toBe(false);
-		expect(readmeOk("https://github.com/flisk-sh/flisk and flisk up", "u", "r")).toBe(false);
-		expect(readmeOk("https://github.com/a/b but no command", "u", "r")).toBe(false);
+	it("does not accept the starter's own README, or one without what was hard", () => {
+		expect(readmeOk("# Flisk task starter\n`flisk up`\n## What was hard\nx")).toBe(false);
+		expect(readmeOk("# Mine\nRun `flisk up`.")).toBe(false);
+		expect(readmeOk("# Mine\nRun `flisk up`.\n## Friction\nports")).toBe(true);
+	});
+	it("fails a repository not created from the starter template", async () => {
+		expect(failed(await run({ template: null }))).toEqual(["template"]);
+		expect(failed(await run({ template: "someone/else" }))).toEqual(["template"]);
 	});
 	it("accepts packaging or plans as the pricing heading", () => {
 		expect(pitchOk("## Why teams switch\nx\n## Packaging\ny")).toBe(true);

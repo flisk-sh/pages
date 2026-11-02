@@ -9,18 +9,19 @@ const LINK = /https?:\/\/[^\s)>\]]+/i;
 const GENERATED = /(^|\/)\.flisk\/(\.flisk-out|\.project-id|smoke)(\/|$)/;
 
 export const CHECKS = [
+	["Part 1: created with Use this template from flisk-sh/flisk-task-starter", "template"],
 	["Part 1: the app runs with Flisk (.flisk/project.json and 2 or more service.json)", "stack"],
-	["Part 1: README links the original app and says how to start it with flisk up", "readme"],
+	["Part 1: README says how to start it with flisk up and what was hard", "readme"],
 	["Part 2: BUYERS.md names 3 or more buyers, each under its own ## heading with a public link", "buyers"],
 	["Part 3: PITCH.md has a ## Why Flisk section and a ## Pricing section", "pitch"],
 	["Part 4: an issue in your repository with your product idea", "idea"],
 	["No .env, node_modules or generated .flisk files committed", "clean"],
-	["Your own new repository, not a fork of the example app", "own"],
-	["Keeps the original app's LICENSE file", "license"],
+	["Your own new repository, not a fork", "own"],
+	["Keeps the starter's LICENSE and NOTICE files", "license"],
 	["BUYERS.md has no email addresses or phone numbers", "privacy"],
 	["Your issues @mention no one (it would notify real people)", "mentions"],
 	["Your issues and commits link no other project's issues or pull requests (it would post on them)", "crossrefs"],
-	["No issues or pull requests opened on the example apps, Flisk or your buyers since your start date", "contact"],
+	["No issues or pull requests opened on the starter, Flisk, the original app or your buyers since your start date", "contact"],
 ];
 
 /** The deadline: the end of the day two days after the start date (UTC). */
@@ -49,17 +50,14 @@ export function pitchOk(md) {
 	return titles.some((t) => t.includes("why")) && titles.some((t) => /pric|packag|plan/.test(t));
 }
 
-/** README links a GitHub repository other than the candidate's own and flisk's, and shows `flisk up`. */
-export function readmeOk(readme, user, repo) {
-	const own = `github.com/${user}/${repo}`.toLowerCase();
-	const upstream = (readme.match(/github\.com\/[\w.-]+\/[\w.-]+/gi) || [])
-		.map((l) => l.toLowerCase().replace(/\.git$/, ""))
-		.some((l) => l !== own && !l.startsWith("github.com/flisk-sh/"));
-	return upstream && /flisk up\b/.test(readme);
+/** README is the candidate's own: it shows `flisk up` and has a section on what was hard (not the starter's README). */
+export function readmeOk(readme) {
+	return /flisk up\b/.test(readme) && !/^# Flisk task starter/m.test(readme) && /^#+.*(hard|friction|problem|issue|learn)/im.test(readme);
 }
 
-// The example apps candidates copy. Nobody should open an issue or pull request on them as part of this task.
-export const EXAMPLES = ["dockersamples/example-voting-app", "docker/awesome-compose", "flisk-sh/flisk", "flisk-sh/pages"];
+export const STARTER = "flisk-sh/flisk-task-starter";
+// Nobody should open an issue or pull request on these as part of this task: the starter, Flisk, and the app the starter copies.
+export const WATCHED = [STARTER, "flisk-sh/flisk", "flisk-sh/pages", "dockersamples/example-voting-app"];
 const EMAIL = /[\w.+-]+@[\w-]+\.[\w.-]+/;
 const PHONE = /\+?\d[\d\s().-]{8,}\d/;
 // An @login GitHub would notify: not part of an email, a path or a package scope like @flisk-sh/flisk.
@@ -108,7 +106,7 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 
 	const own = `${user}/${repo}`;
 	const startMs = Date.parse(`${start}T00:00:00Z`);
-	const watched = [...new Set([...EXAMPLES, ...repoLinks(buyersMd)])].filter((r) => r !== own.toLowerCase()).slice(0, 12);
+	const watched = [...new Set([...WATCHED, ...repoLinks(buyersMd)])].filter((r) => r !== own.toLowerCase()).slice(0, 12);
 	const q = `author:${user} created:>=${start} ${watched.map((r) => `repo:${r}`).join(" ")}`;
 	const contacted = await json(`${API}/search/issues?per_page=5&q=${encodeURIComponent(q)}`)
 		.then((r) => r.total_count > 0)
@@ -118,12 +116,13 @@ export async function runChecks({ user, repo, start }, get = (u) => fetch(u)) {
 
 	const pass = {
 		stack: has(/(^|\/)\.flisk\/project\.json$/) && paths.filter((p) => p.endsWith("service.json")).length >= 2,
-		readme: readmeOk(readme, user, repo),
+		readme: readmeOk(readme),
 		buyers: buyers(buyersMd) >= 3,
 		pitch: pitchOk(pitch),
 		idea: (issues || []).some((i) => !i.pull_request),
 		own: !info.fork,
-		license: has(/^(LICEN[CS]E|COPYING)(\.[a-z]+)?$/i),
+		license: has(/^LICEN[CS]E(\.[a-z]+)?$/i) && has(/^NOTICE(\.[a-z]+)?$/i),
+		template: (info.template_repository?.full_name || "").toLowerCase() === STARTER,
 		privacy: !personalData(buyersMd),
 		mentions: !mine.some((i) => mentions(`${i.title}\n${i.body || ""}`)),
 		crossrefs: !mine.some((i) => crossRef(`${i.title}\n${i.body || ""}`, own)) && !recent.some((c) => crossRef(c.commit.message || "", own)),
