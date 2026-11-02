@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="description" content="Flisk engineering assessment: four practical exercises with an automated self-assessment.">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flisk: Sales Architect task</title>
+<style>
+:root { --fg:#1b1b1f; --muted:#5b5b66; --bg:#ffffff; --accent:#2b5bd7; --line:#e4e4ea; --cell:#f5f6fa; --ok:#12805c; --bad:#b3372a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; } }
+:root[data-theme="dark"] { --fg:#ececf1; --muted:#a4a4b0; --bg:#14141a; --accent:#7aa2ff; --line:#2c2c36; --cell:#1c1c24; --ok:#4cc38a; --bad:#ff7b6b; }
+body { background:var(--bg); color:var(--fg); font:16px/1.6 system-ui,-apple-system,sans-serif; margin:0; }
+main { max-width:760px; margin:0 auto; padding:40px 16px 72px; }
+.kicker { color:var(--muted); font-size:.85rem; letter-spacing:.04em; text-transform:uppercase; margin:0 0 .4rem; }
+h1 { font-size:1.8rem; margin:0 0 .4rem; }
+h2 { font-size:1.2rem; margin:2.4rem 0 .6rem; border-bottom:1px solid var(--line); padding-bottom:.3rem; }
+a { color:var(--accent); }
+.muted { color:var(--muted); }
+table { width:100%; border-collapse:collapse; margin:.8rem 0; }
+th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top; font-size:.95rem; }
+th { background:var(--cell); font-weight:600; }
+td.n { width:2.4rem; color:var(--muted); }
+details { margin:.3rem 0 .8rem; font-size:.92rem; }
+summary { cursor:pointer; color:var(--accent); }
+details p { margin:.4rem 0; color:var(--muted); }
+button, input { font:inherit; padding:7px 11px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+button { cursor:pointer; }
+button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); }
+.row { display:flex; gap:10px; flex-wrap:wrap; margin:.6rem 0; }
+.row input { flex:1; min-width:150px; }
+label { display:block; font-size:.82rem; color:var(--muted); margin-bottom:2px; }
+.field { flex:1; min-width:150px; }
+.field input { width:100%; box-sizing:border-box; }
+td.s { width:2rem; text-align:center; font-weight:700; }
+.ok { color:var(--ok); } .bad { color:var(--bad); }
+#total { font-size:1.3rem; font-weight:700; }
+code { font-family:ui-monospace,monospace; font-size:.9em; }
+p { text-align:left; max-width:none; padding:0; }
+.assess { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:20px; margin:1rem 0; }
+.assess .row { align-items:flex-end; gap:14px; margin:0 0 14px; }
+.assess label { font-size:.85rem; font-weight:600; color:var(--fg); margin-bottom:6px; }
+.assess input { height:42px; padding:0 12px; border-radius:8px; }
+.assess input::placeholder { color:var(--muted); opacity:.6; font-style:italic; }
+.assess input:focus, .assess button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent); }
+.assess .hint { font-size:.78rem; color:var(--muted); margin-top:4px; }
+.assess button.primary { height:42px; padding:0 20px; border-radius:8px; font-weight:600; }
+.assess .actions { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.assess .note { font-size:.85rem; color:var(--muted); margin:14px 0 0; }
+
+.hero { padding:8px 0 8px; }
+.lede { font-size:1.08rem; color:var(--muted); max-width:620px; margin:0 0 1.4rem; }
+.facts { list-style:none; padding:0; margin:0; display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.facts li { background:var(--cell); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.facts b { display:block; font-size:1.4rem; line-height:1.2; }
+.facts span { font-size:.82rem; color:var(--muted); }
+section { margin-top:2.6rem; }
+.steps { list-style:none; counter-reset:s; padding:0; margin:0; display:grid; gap:10px; }
+.steps li { counter-increment:s; position:relative; padding:12px 16px 12px 52px; border:1px solid var(--line); border-radius:12px; }
+.steps li::before { content:counter(s); position:absolute; left:14px; top:12px; width:26px; height:26px; border-radius:50%; background:var(--accent); color:var(--bg); font-weight:700; font-size:.85rem; display:grid; place-items:center; }
+.steps b { display:block; }
+.deadline { margin:12px 0 0; padding:10px 14px; border-left:3px solid var(--accent); background:var(--cell); border-radius:0 8px 8px 0; font-size:.95rem; }
+#deadline { font-weight:600; }
+.ex { display:grid; gap:12px; }
+.ex article { display:flex; gap:14px; border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.ex .num { flex:none; width:32px; height:32px; border-radius:8px; background:var(--cell); border:1px solid var(--line); display:grid; place-items:center; font-weight:700; }
+.ex h3 { margin:2px 0 4px; font-size:1.05rem; }
+.ex h3 small { font-weight:400; color:var(--muted); font-size:.8rem; margin-left:6px; }
+.ex p { margin:.3rem 0; }
+.ex .deliv { background:var(--cell); border-radius:8px; padding:8px 12px; font-size:.93rem; }
+.ex .deliv b { display:block; font-size:.72rem; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+.rules { margin:14px 0 6px; font-size:.93rem; }
+.rules ul { margin:.3rem 0 0; padding-left:1.2rem; color:var(--muted); }
+.prompts { display:flex; gap:8px; flex-wrap:wrap; margin:.4rem 0; }
+.prompts button { border-radius:8px; }
+.prompts button:hover { border-color:var(--accent); }
+.checks { margin:0; padding-left:1.6rem; display:grid; gap:2px; }
+.checks li { padding:8px 4px; border-bottom:1px solid var(--line); }
+.checks small { float:right; color:var(--muted); font-size:.8rem; margin-left:12px; }
+#out { margin-top:16px; }
+.result { display:flex; align-items:baseline; gap:12px; margin:0 0 6px; }
+#verdict { font-weight:600; }
+footer { margin-top:3rem; color:var(--muted); font-size:.85rem; }
+@media (max-width:620px) { main { padding-bottom:140px; } .facts { grid-template-columns:repeat(2,1fr); } .checks small { float:none; display:block; margin:0; } h1 { font-size:1.6rem; } }
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+<p class="kicker">Flisk · Sales Architect / Product Engineer</p>
+<h1>Land your first Flisk customer</h1>
+<p class="lede">This is the job in miniature: make <a href="https://flisk.sh">Flisk</a> work on a real app, find who needs it, and explain why they should pay. About 3 to 4 hours of work, spread over 2 days.</p>
+<ul class="facts">
+<li><b>3–4 h</b><span>of focused work</span></li>
+<li><b>2 days</b><span>from your start date</span></li>
+<li><b>4</b><span>parts</span></li>
+<li><b>1</b><span>public repository</span></li>
+</ul>
+</header>
+
+<section>
+<h2>How it works</h2>
+<ol class="steps">
+<li><b>Start</b>Create a new public GitHub repository. It must be created on or after your start date, the day you received this link.</li>
+<li><b>Work</b>Do the four parts below and push as you go. AI assistants are welcome; we use them every day.</li>
+<li><b>Check and send</b>Run the self-check at the bottom. When it says <em>Ready for review</em>, reply with your repository link. The founder reviews every complete submission personally.</li>
+</ol>
+<p class="deadline">Deadline: 23:59 UTC on the second day after your start date. <span id="deadline"></span></p>
+</section>
+
+<section>
+<h2>The four parts</h2>
+<div class="ex">
+<article><span class="num">1</span><div><h3>Make it real <small>about 75 min</small></h3><p>Take a real multi-service app and make it start with one <code>flisk up</code>. Pick one: <a href="https://github.com/dockersamples/example-voting-app">example-voting-app</a> (5 services, 3 languages), <a href="https://github.com/docker/awesome-compose/tree/master/react-express-mongodb">react-express-mongodb</a>, or any public app with two or more services you would rather use. Copy it into your new repository (a plain copy, not a fork, and never a pull request to the original), then run <code>npx @flisk-sh/flisk import . --dry-run</code> to see the plan, the same without <code>--dry-run</code> to write it, and <code>flisk up</code> to start it. You need Docker running. The <a href="https://github.com/flisk-sh/flisk#readme">Flisk README</a> has the rest.</p><p class="deliv"><b>Deliver</b>The converted app in your repository, with <code>.flisk/project.json</code> and a <code>service.json</code> per service. A <code>README.md</code> that links the original app, shows how to start it with <code>flisk up</code>, and lists what was hard. That friction list is the most useful part for us.</p></div></article>
+<article><span class="num">2</span><div><h3>Find buyers <small>about 60 min</small></h3><p>Find three real teams, companies or open-source projects that lose time on local setup and would pay, or adopt, to stop. You choose the market and say why.</p><p class="deliv"><b>Deliver</b><code>BUYERS.md</code>: one <code>## heading</code> per buyer with who they are, a public link that shows the pain (an issue, a thread, a CONTRIBUTING guide), and the first message you would send them. Write it, do not send it.</p></div></article>
+<article><span class="num">3</span><div><h3>Pitch <small>about 45 min</small></h3><p>Write the one page you would send an engineering lead at a team building AI agents.</p><p class="deliv"><b>Deliver</b><code>PITCH.md</code> with a <code>## Why Flisk</code> section (against Docker Compose, Tilt or devcontainers, honestly, including where they win) and a <code>## Pricing</code> section: what is free, what is paid, for whom.</p></div></article>
+<article><span class="num">4</span><div><h3>Product angle <small>about 15 min</small></h3><p>One feature that would make Flisk more useful for AI-heavy workflows, and how you would know it worked.</p><p class="deliv"><b>Deliver</b>An issue in <em>your</em> repository: the problem, the feature, and the signal you would watch.</p></div></article>
+</div>
+<div class="rules"><b>Please</b><ul><li><b>Contact no one and touch no other repository.</b> Do not open issues, pull requests or comments on the example apps, on Flisk, or on your buyers' projects, and do not send your buyer messages. Everything stays in your own repository. A submission that contacted other projects is not reviewed.</li><li>Keep it honest: write what really happened, including what did not work.</li><li>Do not commit <code>.env</code>, <code>node_modules</code> or generated Flisk files.</li></ul></div>
+</section>
+
+<section>
+<h2>How you are evaluated</h2>
+<p>The self-check below only confirms that all four parts are there. The founder then reads every complete submission and scores four things from 1 to 5:</p>
+<ol class="checks">
+<li><b>Technical depth.</b> Did the app really run? Do you understand why the hard parts were hard? <small>Part 1</small></li>
+<li><b>Customer insight.</b> Are these real buyers with real, linked pain, and would your first message get a reply? <small>Part 2</small></li>
+<li><b>Clarity.</b> Would an engineering lead understand the value in one minute, and believe it? <small>Part 3</small></li>
+<li><b>Ownership.</b> Does the product idea come from what you saw, with a way to measure it? <small>Part 4</small></li>
+</ol>
+<p class="muted">Strong submissions are invited to a 30-minute call: a short live sales conversation with the founder. The self-check code and its tests are open: <a href="check.js">check.js</a>, <a href="check.test.js">check.test.js</a>.</p>
+</section>
+
+<section id="self">
+<h2>Self-check</h2>
+<div class="assess">
+<div class="row">
+<div class="field"><label for="user">GitHub username</label><input id="user" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your GitHub login"></div>
+<div class="field"><label for="repo">Repository name</label><input id="repo" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="your new repository"></div>
+<div class="field"><label for="start">Start date</label><input id="start" type="date"></div>
+</div>
+<div class="actions"><button id="go" class="primary">Run self-check</button><span id="msg" class="muted" role="status"></span></div>
+<p class="note">Start date is the day you received the link. The check reads only your public repository through the GitHub API, in your browser. Nothing of yours is run or sent to us.</p>
+</div>
+<div id="out" hidden>
+<div class="result"><span id="total"></span><span id="verdict"></span></div>
+<table id="rows"></table>
+<p id="gate" class="muted"></p>
+<p id="ci" class="muted"></p>
+<p id="next"></p>
+</div>
+</section>
+<footer>Questions? Reply to the message that brought you this link.</footer>
+</main>
+<script type="module">
+import { runChecks } from "./check.js?v=5";
+const $ = (id) => document.getElementById(id);
+const hash = new URLSearchParams(location.hash.slice(1));
+if (/^\d{4}-\d{2}-\d{2}$/.test(hash.get("start") || "")) { $("start").value = hash.get("start"); $("start").readOnly = true; $("start").title = "Set by your link"; }
+const fmt = (d) => d.toISOString().slice(0, 16).replace("T", " ") + " UTC";
+function showDeadline() {
+	const m = /^\d{4}-\d{2}-\d{2}$/.test($("start").value) && new Date(`${$("start").value}T00:00:00Z`);
+	if (m) $("deadline").textContent = fmt(new Date(m.getTime() + 3 * 864e5 - 1000));
+}
+showDeadline();
+$("start").addEventListener("input", showDeadline);
+$("go").addEventListener("click", async () => {
+	const user = $("user").value.trim(), repo = $("repo").value.trim(), start = $("start").value.trim();
+	$("out").hidden = true;
+	if (!user || !repo || !/^\d{4}-\d{2}-\d{2}$/.test(start)) return ($("msg").textContent = "Complete all three fields.");
+	$("msg").textContent = "Checking…";
+	try {
+		const r = await runChecks({ user, repo, start });
+		$("rows").replaceChildren(...r.rows.map((x) => { const tr = document.createElement("tr"); const a = document.createElement("td"), b = document.createElement("td"); a.className = "s " + (x.ok ? "ok" : "bad"); a.textContent = x.ok ? "✓" : "✗"; b.textContent = x.label; tr.append(a, b); return tr; }));
+		$("total").textContent = `${r.done}/${r.rows.length} checks passed`;
+		$("verdict").textContent = r.ready ? "Ready for review" : "Not ready yet";
+		$("verdict").className = r.ready ? "ok" : "bad";
+		$("gate").textContent = `Repository created on or after your start date: ${r.gate.started ? "yes" : "NO"}. All commits before the deadline (${fmt(r.deadline)}): ${r.gate.inTime ? "yes" : "NO"}.`;
+		$("ci").textContent = r.ci ? `Bonus: your latest GitHub Actions run ${r.ci.ok ? "passed" : "did not pass"}.` : "";
+		$("next").textContent = r.ready ? `Reply with: ${r.repoUrl} (commit ${r.head.slice(0, 7)})` : "Finish the parts marked ✗ and check again. There is no limit before the deadline.";
+		$("out").hidden = false; $("msg").textContent = "";
+	} catch (e) { $("msg").textContent = /403|rate/i.test(e.message) ? "GitHub is limiting checks from your network for a few minutes. Try again shortly." : `Could not check: ${e.message}. Is the repository public and the name right?`; }
+});
+</script>
+</body>
+</html>
