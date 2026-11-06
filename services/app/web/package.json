@@ -15,7 +15,7 @@
 	},
 	"dependencies": {
 		"@flisk-sh/md2html": "github:flisk-sh/md2html#v0.1.0",
-		"hono": "^4.0.0"
+		"hono": "^4.13.16"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.6.4",
