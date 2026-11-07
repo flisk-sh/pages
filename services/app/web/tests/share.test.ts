@@ -78,6 +78,23 @@ describe("no share sheet", () => {
 describe("the share page's image policy", () => {
 	it("allows the site's own images, so the logo loads", async () => {
 		const html = await (await get("/share")).text();
-		expect(html).toContain("img-src 'self'");
+		expect(html).toContain("img-src 'self' https://devhunt.org");
 	});
+});
+
+describe("the DevHunt footer badge", () => {
+	const BADGE =
+		'<a href="https://devhunt.org/tool/pages" target="_blank" rel="noopener" title="Pages on DevHunt"><img src="https://devhunt.org/badge/pages.svg" alt="Pages - Featured on DevHunt" width="220" height="54" loading="lazy"></a>';
+
+	for (const path of ["/", "/about", "/share"]) {
+		it(`appears in the footer of ${path} and its image host is allowed`, async () => {
+			const html = await (await get(path)).text();
+			const footer = html.slice(
+				html.indexOf("<footer>"),
+				html.indexOf("</footer>"),
+			);
+			expect(footer).toContain(BADGE);
+			expect(html).toMatch(/img-src [^;]*https:\/\/devhunt\.org/);
+		});
+	}
 });

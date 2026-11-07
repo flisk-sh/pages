@@ -7,9 +7,9 @@ import { SITE } from "./site";
 import { links, type Space, spacePath } from "./spaces";
 
 // Spaces are previewed live in sandboxed frames (no allow-same-origin, so a space cannot reach this page), and
-// publishers' GitHub avatars are the only images from elsewhere.
+// publishers' GitHub avatars and the DevHunt footer badge are the only images from elsewhere.
 const POLICY =
-	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com https://devhunt.org; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'";
 
 const STYLE = `
 :root{--bg:${SITE.themeColor.light};--fg:#141413;--muted:#66625b;--faint:#97928a;--line:#e7e2d8;--line2:#d6d0c3;--card:#fff;--soft:#f3f0e9;--accent:#2d4cc8;--accent2:#5b74ff;--mark:#ffe27a;--ink:#141413;--onink:#f4f2ec;--shadow:0 1px 2px rgba(20,20,19,.06),0 12px 40px -12px rgba(20,20,19,.18)}
@@ -93,7 +93,7 @@ h2{font-size:clamp(28px,3.6vw,42px);line-height:1.05;letter-spacing:-.035em;font
 dl{margin:0}dt{font-weight:700;font-size:17px;margin-top:26px;letter-spacing:-.01em}dd{margin:6px 0 0;color:var(--muted)}
 .page h2{margin-top:56px}.page p{color:var(--muted)}.page code{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:.9em}
 footer{margin-top:96px;border-top:1px solid var(--line);padding:28px 0 48px;color:var(--faint);font-size:14px}
-footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}footer a{color:var(--muted)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}footer a{color:var(--muted)}footer .badge{flex-basis:100%}footer .badge img{display:block}
 `;
 
 const rootOf = (base: string) =>
@@ -109,7 +109,7 @@ ${head(base, meta)}
 <main>
 ${body}
 </main>
-<footer><div class="wrap"><span>Every space is public, free and a git branch in <a href="${SITE.repo}">${SITE.repoSlug}</a>. No keys, no database, no tracking.</span><span>Made by <a href="${SITE.author.url}">${esc(SITE.author.name)}</a> · <a href="${root}/about">FAQ</a> · <a href="${root}/spaces.json">spaces.json</a></span></div></footer>
+<footer><div class="wrap"><span>Every space is public, free and a git branch in <a href="${SITE.repo}">${SITE.repoSlug}</a>. No keys, no database, no tracking.</span><span>Made by <a href="${SITE.author.url}">${esc(SITE.author.name)}</a> · <a href="${root}/about">FAQ</a> · <a href="${root}/spaces.json">spaces.json</a></span><div class="badge"><a href="https://devhunt.org/tool/pages" target="_blank" rel="noopener" title="Pages on DevHunt"><img src="https://devhunt.org/badge/pages.svg" alt="Pages - Featured on DevHunt" width="220" height="54" loading="lazy"></a></div></div></footer>
 </body></html>`;
 }
 
@@ -295,7 +295,7 @@ export function aboutPage(base: string): string {
 
 // The share page runs one same-origin script and nothing else. It is the only page that allows scripts.
 const SHARE_POLICY =
-	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self' https://devhunt.org; base-uri 'none'; form-action 'none'";
 
 export function sharePage(
 	base: string,
