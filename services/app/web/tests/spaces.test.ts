@@ -143,11 +143,15 @@ describe("the site around the spaces", () => {
 		expect((await get("/@nobody/")).status).toBe(404);
 	});
 
-	it("the home page lists the newest spaces and allows no scripts", async () => {
+	it("the home page lists the newest spaces and allows only the Flisk bar script", async () => {
 		const html = await (await get("/")).text();
 		expect(html).toContain("How GPUs work");
 		expect(html).toContain("default-src 'none'");
-		expect(html).not.toContain("<script src");
+		expect(html).toContain("script-src https://flisk.si;");
+		expect(html.match(/<script src/g)).toHaveLength(1);
+		expect(html).toContain(
+			'<script src="https://flisk.si/assets/bar.js" defer></script>',
+		);
 	});
 
 	it("spaces.json and llms.txt list every space with its source", async () => {
