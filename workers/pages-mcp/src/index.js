@@ -1,4 +1,4 @@
-// Put My Page Online: a remote, read-only, keyless MCP server at https://pages.flisk.si/mcp for the Claude directory.
+// Pages MCP: a remote, read-only, keyless MCP server at https://pages.flisk.si/mcp for the Claude directory.
 // Paste a page, get the publish check's verdict. No storage, no model, nothing is published from here.
 import { APPLE_TOUCH_PNG_BASE64, FAVICON_ICO_BASE64, ICON_512_PNG_BASE64, ICON_SVG } from "./icons.js";
 import { MAX_BODY_BYTES, overLimit } from "./limits.js";
@@ -8,7 +8,7 @@ const bytesOf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*", ...headers } });
 
-const PAGE = `Put My Page Online (MCP)
+const PAGE = `Pages MCP
 
 Check your web page, then put it online as a free public link on pages.flisk.si.
 

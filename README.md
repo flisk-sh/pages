@@ -119,9 +119,9 @@ get no OIDC token, so publish on `push` to your main branch. To publish under yo
 instead, give a `token` (a personal access token that can fork and open pull requests). The Action runs the CLI from
 its own tagged checkout, so the version you pin is the version that runs.
 
-## Put My Page Online (Claude directory)
+## Pages plugin and Pages MCP (Claude directory)
 
-For people who just want a link: the `put-my-page-online` plugin (`plugins/put-my-page-online`) and a remote, read-only MCP server at `https://pages.flisk.si/mcp` (`workers/pages-mcp`, no key, nothing stored). `check_page` runs the same rules as the publish on a pasted page and says what to fix in plain words; `how_to_put_page_online` gives the steps and the one command. Publishing itself stays `npx -y @flisk-sh/pages publish page.html --wait`, because it needs your own GitHub login. Limits: 30 calls per IP per minute and 300 per hour (`src/limits.js`, Cache API counters like the demo worker), 256 KB per request.
+For people who just want a link: the Pages plugin (`plugins/put-my-page-online`, listed in the Claude directory as Put My Page Online) and the Pages MCP, a remote, read-only MCP server at `https://pages.flisk.si/mcp` (`workers/pages-mcp`, no key, nothing stored). `check_page` runs the same rules as the publish on a pasted page and says what to fix in plain words; `how_to_put_page_online` gives the steps and the one command. Publishing itself stays `npx -y @flisk-sh/pages publish page.html --wait`, because it needs your own GitHub login. Limits: 30 calls per IP per minute and 300 per hour (`src/limits.js`, Cache API counters like the demo worker), 256 KB per request.
 
 ## How it works
 
