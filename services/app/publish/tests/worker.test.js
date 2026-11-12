@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { checkMarkdown, handle, MAX_MARKDOWN_BYTES, newId, newToken, readSession, safeReturn, sha256, signSession } from "../src/worker.js";
+import { ROBOTS, checkMarkdown, handle, MAX_MARKDOWN_BYTES, newId, newToken, readSession, safeReturn, sha256, signSession } from "../src/worker.js";
 
 const env = {
 	PAGES_REPO: "flisk-sh/pages",
@@ -240,5 +240,14 @@ describe("signing in with GitHub", () => {
 		expect(gh.sent).toHaveLength(1);
 		const me = await handle(req("GET", "/v1/me", undefined, { authorization: `Bearer ${session}` }), auth);
 		expect(await me.json()).toEqual({ login: "odykyi" });
+	});
+});
+
+describe("crawlers", () => {
+	it("keeps every crawler off this host, sign-in links included", async () => {
+		const res = await handle(new Request("https://publish.test/robots.txt"), env);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toBe(ROBOTS);
+		expect(ROBOTS).toContain("Disallow: /\n");
 	});
 });
