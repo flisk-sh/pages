@@ -33,10 +33,9 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
       - run: bun run lint
-      - run: bun test
-      - name: Publish worker tests
-        run: bun test
-        working-directory: services/app/publish
+      - name: All tests (web, publish worker, MCP worker, CLI)
+        run: bun run test
+        working-directory: .
       - name: The CLI as npm packs it runs on node alone
         working-directory: .
         run: |
