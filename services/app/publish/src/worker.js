@@ -429,6 +429,8 @@ async function ciPublish(request, env, fetcher, headers, url) {
 	);
 }
 
+export const ROBOTS = "User-agent: *\nDisallow: /\n";
+
 export async function handle(request, env, fetcher = fetch) {
 	const url = new URL(request.url);
 	const origin = url.origin;
@@ -438,6 +440,10 @@ export async function handle(request, env, fetcher = fetch) {
 	if (request.method === "GET" && url.pathname === "/")
 		return Response.redirect(`${env.PAGES_ORIGIN}/about`, 302);
 	if (request.method === "GET" && url.pathname === "/health") return json({ ok: true }, 200);
+	// Nothing here is a page to crawl. GPTBot followed sign-in links from tools.flisk.si into /auth/github ~1,600 times a
+	// day (each a Worker request out of the account's free 100,000), because this host had no robots.txt of its own.
+	if (request.method === "GET" && url.pathname === "/robots.txt")
+		return new Response(ROBOTS, { headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=86400" } });
 	const manage = url.pathname.match(/^\/manage\/([a-z0-9]{10})$/);
 	if (request.method === "GET" && manage)
 		return new Response(managePage(env, manage[1]), {
