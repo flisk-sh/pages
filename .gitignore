@@ -13,3 +13,7 @@ _site/
 
 # Copied in by the npm release (.github/workflows/release-cli.yml); the source is services/app/web/src/check.mjs
 bin/check.mjs
+
+# Local secrets that `wrangler dev` reads, and its cache
+.dev.vars*
+.wrangler/
