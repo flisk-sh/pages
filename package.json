@@ -5,5 +5,8 @@
   "type": "module",
   "workspaces": [
     "services/*/*"
-  ]
+  ],
+  "scripts": {
+    "test": "cd services/app/web && bun test && cd ../publish && bun test && cd ../../../workers/pages-mcp && bun test && cd ../../bin && bun test"
+  }
 }

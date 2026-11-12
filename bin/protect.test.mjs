@@ -18,7 +18,7 @@ async function open(html, id, key) {
 	const code = html.match(/<script>([\s\S]*)<\/script>/)[1];
 	let out = "";
 	appended.length = 0;
-	const g = { location: { hash: `#${id}.${key}`, pathname: "/@sam/for-bob/" }, document: { open() {}, write: (s) => { out = s; }, close() {}, getElementById: () => ({}), createElement: () => ({ setAttribute() {}, append() {}, style: {} }), body: { append(x) { appended.push(x); } } } };
+	const g = { location: { hash: `#${id}.${key}`, pathname: "/@sam/for-bob/" }, document: { readyState: "complete", querySelector: () => null, open() {}, write: (s) => { out = s; }, close() {}, getElementById: () => ({}), createElement: () => ({ setAttribute() {}, append() {}, style: {} }), body: { prepend(x) { appended.push(x); }, insertAdjacentHTML() {} } } };
 	await new Function("location", "document", "crypto", "atob", "TextDecoder", "encodeURIComponent", `return ${code.trim().replace(/;$/, "")}`)(g.location, g.document, crypto, atob, TextDecoder, encodeURIComponent);
 	return out;
 }

@@ -152,9 +152,10 @@ your folder ──PR from your fork──▶ publish.yml ──check──▶ br
 ## Develop
 
 ```bash
+bun install --cwd services/app/web
+bun run test                 # the whole suite from the repo root: web app, publish worker, MCP worker, CLI (bin/)
 cd services/app/web
-bun install
-bun test                     # the check, the pages, the SEO files, the workflow scripts, the eval fixtures
+bun test                     # only the web app: the check, the pages, the SEO files, the workflow scripts, the eval fixtures
 git fetch origin '+refs/heads/space/*:refs/remotes/origin/space/*'
 bun run build                # _site/, as deployed
 bun run dev                  # preview on :4000 with the spaces the last build gathered
