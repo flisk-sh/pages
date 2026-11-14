@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run cron jobs in local development</title>
+<meta name="description" content="Run scheduled jobs on your laptop without waiting for cron: an in-process scheduler, a one-shot job you trigger by hand, and what Flisk does and does not do.">
+<meta name="keywords" content="cron jobs local development, run scheduled jobs locally, node-cron local, apscheduler local dev, test cron job locally">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/cron-jobs-in-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run cron jobs in local development">
+<meta property="og:description" content="Run scheduled jobs on your laptop without waiting for cron: an in-process scheduler, a one-shot job you trigger by hand, and what Flisk does and does not do.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/cron-jobs-in-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run cron jobs in local development","description":"Run scheduled jobs on your laptop without waiting for cron: an in-process scheduler, a one-shot job you trigger by hand, and what Flisk does and does not do.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/cron-jobs-in-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/cron-jobs-in-local-dev/","keywords":"cron jobs local development, run scheduled jobs locally, node-cron local, apscheduler local dev, test cron job locally","wordCount":765,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to run cron jobs in local development","item":"https://pages.flisk.si/@odykyi/workers-and-queues/cron-jobs-in-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Flisk have a built-in cron scheduler?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk starts and supervises processes, but it does not schedule them. Put a scheduler library in a worker, or run the job on demand with flisk run."}},{"@type":"Question","name":"How do I test a cron job without waiting for it to fire?","acceptedAnswer":{"@type":"Answer","text":"Keep the job body in its own function or script and run it directly. With Flisk, flisk run \u003cservice> -- \u003ccommand> runs it with the service's environment and returns the exit code."}},{"@type":"Question","name":"Why did my scheduled job run twice locally?","acceptedAnswer":{"@type":"Answer","text":"Usually two copies of the scheduler are running, or a file watcher restarted the process. Check which processes are alive and use a lock or max-instances setting if the job is not safe to repeat."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to run cron jobs in local development</h1><p class="dek">Flisk has no scheduler of its own. That is fine: a scheduled job is a worker plus a clock, and you can test the job without waiting for the clock.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#separate-the-schedule-from-the-job">Separate the schedule from the job</a></li><li><a href="#an-in-process-scheduler">An in-process scheduler</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Flisk does not include a scheduler, so you have two honest options: run a small worker that owns the schedule (node-cron, APScheduler or similar), or keep the job as a plain command and trigger it by hand while you develop. Most teams do both: the schedule lives in a worker, and the job body is a function you can also run on demand.</p>
+
+<h2 id="separate-the-schedule-from-the-job">Separate the schedule from the job</h2>
+<p>The most useful habit is to keep the work in one function and the timing in another. If the job is <code>runCleanup()</code> and the schedule is a single line that calls it, you can test the job by calling it directly. Waiting five minutes to see whether a cron expression fires is the slowest way to find a bug in the job itself.</p>
+<p>For local work, there are three places the schedule can live:</p>
+<ul>
+<li><strong>Inside a worker process.</strong> A long-running process holds the timer. This is the closest match to a production setup that uses a scheduler library.</li>
+<li><strong>The operating system.</strong> <code>crontab -e</code> on your laptop works, but it lives outside the repository, so nobody else on the team gets it. It also runs when your stack is stopped.</li>
+<li><strong>Nowhere.</strong> You run the command yourself. For most development this is the right choice.</li>
+</ul>
+
+<h2 id="an-in-process-scheduler">An in-process scheduler</h2>
+<p>With Node, the <code>node-cron</code> package takes a standard five-field expression:</p>
+<pre><code>import cron from "node-cron";
+import { runCleanup } from "./jobs/cleanup.js";
+
+let running = false;
+
+cron.schedule("*/5 * * * *", async () =&gt; {
+  if (running) return;          // skip if the last run is still going
+  running = true;
+  try {
+    await runCleanup();
+  } finally {
+    running = false;
+  }
+}, { timezone: "UTC" });
+
+console.log("scheduler started");</code></pre>
+<p>In Python, APScheduler has the same idea, and the overlap guard is built in:</p>
+<pre><code>from apscheduler.schedulers.blocking import BlockingScheduler
+from jobs.cleanup import run_cleanup
+
+sched = BlockingScheduler(timezone="UTC")
+sched.add_job(run_cleanup, "cron", minute="*/5",
+              max_instances=1, coalesce=True)
+sched.start()</code></pre>
+<p><code>max_instances=1</code> prevents two overlapping runs, and <code>coalesce=True</code> merges runs that were missed into one.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Run the scheduler as its own local process, so it has a log and a restart policy like any other service. Create <code>services/shop/scheduler/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "scheduler",
+  "appType": "worker",
+  "command": "node scheduler.js",
+  "dependsOn": ["api"],
+  "env": { "TZ": "UTC" }
+}</code></pre>
+<p>A service with a <code>command</code> runs as a local process on your machine. The scheduler starts after <code>api</code>, its output goes to the same place as every other service's, and if it crashes Flisk restarts it. Read what it did with:</p>
+<pre><code>flisk logs --service scheduler --since 10m</code></pre>
+<p>To run the job now, without waiting for the clock, use <code>flisk run</code>. It starts a command with the environment the service has in the stack:</p>
+<pre><code>flisk run scheduler -- node jobs/run-cleanup.js</code></pre>
+<p>For a local process this runs on your machine from the service folder, with the project <code>.env</code>, the service's <code>env</code> and its <code>PORT</code>. For a container service it runs inside the running container. Either way you get the command's exit code back, which is handy in a script. More on this in <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">running a one-off command in a service</a>.</p>
+<p>If the job is something that should run once whenever the stack starts, such as a seed or a warm-up, a one-shot resource is a better fit than a scheduler. Set <code>"restart": "no"</code> on it, and services that depend on it start after it exits with code 0.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Time zones.</strong> A schedule written as "02:00" means different moments on your laptop and on a server set to UTC. Set the zone explicitly in the scheduler, as the examples do, and keep the machine zone out of it.</li>
+<li><strong>Missed runs.</strong> Nothing fires while the stack is down. If your job depends on every slot running, store a "last run" timestamp and catch up on start.</li>
+<li><strong>Duplicate runs.</strong> If you ever start a second copy of the scheduler, each copy fires the job. Production setups use a lock or a single scheduler process, and your local setup should do the same if the job is not safe to repeat.</li>
+<li><strong>Hot reload restarts the timer.</strong> If your tooling restarts the process on every file save, a job scheduled for the top of the hour can be skipped or run twice during editing.</li>
+<li><strong>Do not copy the production schedule.</strong> A job that sends real email every minute is not something to leave running on a laptop. Run it on demand, or use a long interval.</li>
+</ul>
+
+<p>If the scheduled work is really "process this when something happens", a queue is a better fit than a clock. <a href="/@odykyi/workers-and-queues/nats-for-local-development/">Running NATS locally</a> shows how to set one up.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Flisk have a built-in cron scheduler?</summary><p>No. Flisk starts and supervises processes, but it does not schedule them. Put a scheduler library in a worker, or run the job on demand with flisk run.</p></details><details><summary>How do I test a cron job without waiting for it to fire?</summary><p>Keep the job body in its own function or script and run it directly. With Flisk, flisk run &lt;service&gt; -- &lt;command&gt; runs it with the service&#39;s environment and returns the exit code.</p></details><details><summary>Why did my scheduled job run twice locally?</summary><p>Usually two copies of the scheduler are running, or a file watcher restarted the process. Check which processes are alive and use a lock or max-instances setting if the job is not safe to repeat.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/"><span class="lbl">Guide</span><b>How to run a one-off command inside a running service</b><span>You want to run one script with the same variables the service sees, without copying them into your shell by hand.</span></a><a href="/@odykyi/workers-and-queues/debug-a-stuck-job/"><span class="lbl">Guide</span><b>How to debug a background job that never finishes</b><span>A stuck job is silent. Work through the same short list each time and you will find the cause faster than by guessing.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

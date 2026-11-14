@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run NATS with JetStream for local development</title>
+<meta name="description" content="Run a NATS server with JetStream on your laptop: the plain docker command, the Flisk queue resource, and a Node client that creates a stream and publishes.">
+<meta name="keywords" content="nats local development, nats jetstream docker, run nats locally, nats server docker compose, nats queue local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/nats-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run NATS with JetStream for local development">
+<meta property="og:description" content="Run a NATS server with JetStream on your laptop: the plain docker command, the Flisk queue resource, and a Node client that creates a stream and publishes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/nats-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run NATS with JetStream for local development","description":"Run a NATS server with JetStream on your laptop: the plain docker command, the Flisk queue resource, and a Node client that creates a stream and publishes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/nats-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/nats-for-local-development/","keywords":"nats local development, nats jetstream docker, run nats locally, nats server docker compose, nats queue local","wordCount":860,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to run NATS with JetStream for local development","item":"https://pages.flisk.si/@odykyi/workers-and-queues/nats-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does NATS need JetStream for background jobs?","acceptedAnswer":{"@type":"Answer","text":"Yes, if you cannot lose a message. Core NATS drops a message when no subscriber is connected. JetStream stores it in a stream until a consumer acknowledges it. Start the server with the -js flag to turn it on."}},{"@type":"Question","name":"How do I connect to NATS from my host machine when it runs in Docker?","acceptedAnswer":{"@type":"Answer","text":"Publish port 4222 to 127.0.0.1 and connect to nats://127.0.0.1:4222. The container hostname, such as bus, only resolves for other containers in the same network."}},{"@type":"Question","name":"Does flisk down delete my NATS messages?","acceptedAnswer":{"@type":"Answer","text":"No. The queue resource stores JetStream data in a named volume, and flisk down keeps named volumes. Purge a stream with the nats CLI or remove the volume to start clean."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to run NATS with JetStream for local development</h1><p class="dek">One NATS container, JetStream turned on, and a connection string every service can read. Here is the plain way and the Flisk way.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#core-nats-or-jetstream">Core NATS or JetStream</a></li><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#create-a-stream-and-publish-from-node">Create a stream and publish from Node</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run NATS locally, start one <code>nats</code> container with the <code>-js</code> flag so JetStream (the persistent part) is on, publish port 4222 to your machine, and give your services a single <code>NATS_URL</code>. With Flisk, <code>flisk resource bus --type queue --stack shop</code> writes that container definition for you and hands the URL to every service that lists it in <code>dependsOn</code>.</p>
+
+<h2 id="core-nats-or-jetstream">Core NATS or JetStream</h2>
+<p>NATS has two layers, and picking the wrong one is the most common local surprise.</p>
+<ul>
+<li><strong>Core NATS</strong> is fire-and-forget pub/sub. If nobody is subscribed when you publish, the message is gone. That is fine for presence pings and cache invalidation, and wrong for jobs.</li>
+<li><strong>JetStream</strong> stores messages in a stream on disk and tracks which consumer has acknowledged what. That is what you want for background jobs: a worker that restarts picks up where it stopped.</li>
+</ul>
+<p>JetStream is off unless you start the server with <code>-js</code>. If your first publish works but nothing is stored, check that flag first.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<p>You do not need any tool for this. One command gives you a server with JetStream, a data directory that survives restarts, and the monitoring endpoint on port 8222:</p>
+<pre><code>docker run --rm --name nats \
+  -p 127.0.0.1:4222:4222 -p 127.0.0.1:8222:8222 \
+  -v nats-data:/data \
+  nats:2.11.8-alpine -js -sd /data -m 8222</code></pre>
+<p><code>-sd</code> sets the JetStream storage directory and <code>-m</code> turns on the HTTP monitoring port. Binding to <code>127.0.0.1</code> keeps the server off your Wi-Fi, which matters because a default NATS server has no authentication.</p>
+<p>In Docker Compose the same thing is a service with the same <code>command</code> and a named volume. Services in the same Compose project reach it at <code>nats://nats:4222</code>, and your host machine reaches it at <code>nats://127.0.0.1:4222</code>. Those are two different addresses, and mixing them up causes most "connection refused" reports.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Install the CLI with <code>npm install -g @flisk-sh/flisk</code>, then in a Flisk project run:</p>
+<pre><code>flisk resource bus --type queue --stack shop --yes</code></pre>
+<p>NATS is the default queue framework, so no <code>--framework</code> is needed. The command writes <code>services/shop/bus/service.json</code>. This is the file I got from CLI 1.4.57:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "bus",
+  "appType": "bring-your-own",
+  "framework": "nats",
+  "stack": "shop",
+  "port": 4222,
+  "image": "nats:2.11.8-alpine",
+  "exposeViaProxy": false,
+  "healthCheck": { "port": 4222 },
+  "container": { "command": ["-js", "-sd", "/data", "-m", "8222"] },
+  "volumes": [{ "source": "bus-data", "target": "/data" }],
+  "provides": { "NATS_URL": "nats://bus:4222" }
+}</code></pre>
+<p>It is the same container as the plain command: JetStream on, data in a named volume that <code>flisk down</code> keeps, and a readiness check on the port. Two fields are Flisk's own. <code>exposeViaProxy: false</code> keeps NATS off the HTTP gateway, because it does not speak HTTP. <code>provides</code> means every service that names <code>bus</code> in its <code>dependsOn</code> gets <code>NATS_URL=nats://bus:4222</code> in its environment, so no URL is copied between files.</p>
+<p>Wire a service to it:</p>
+<pre><code>"dependsOn": ["bus"]</code></pre>
+<p>Run <code>flisk config verify</code> afterwards. Then <code>flisk up shop</code> starts the queue first and the dependent service after it.</p>
+<p>To use the <code>nats</code> command line tool or a GUI from your own machine, publish the client and monitoring ports with <code>extraPorts</code>. Flisk binds them to 127.0.0.1 only:</p>
+<pre><code>"extraPorts": [{ "port": 4222 }, { "port": 8222 }]</code></pre>
+<p><code>flisk config verify</code> accepts this. I did not start the container to test the published ports, so after <code>flisk up</code>, check that the ports answer before you rely on them.</p>
+
+<blockquote>Do not add the <code>nats</code> feature to a worker's <code>featuresEnabled</code> to get a queue. In the 1.4.x CLI I checked, <code>flisk doctor</code> reports that no NATS server will start for such a worker. A <code>queue</code> resource is the way to get one.</blockquote>
+
+<h2 id="create-a-stream-and-publish-from-node">Create a stream and publish from Node</h2>
+<p>This uses the <code>nats</code> npm package (version 2). The stream definition is idempotent: running it again with the same settings succeeds.</p>
+<pre><code>import { connect, StringCodec } from "nats";
+
+const sc = StringCodec();
+const nc = await connect({ servers: process.env.NATS_URL });
+
+const jsm = await nc.jetstreamManager();
+await jsm.streams.add({ name: "JOBS", subjects: ["jobs.&gt;"] });
+
+const js = nc.jetstream();
+const ack = await js.publish(
+  "jobs.email",
+  sc.encode(JSON.stringify({ to: "ana@example.com" }))
+);
+console.log("stored as sequence", ack.seq);
+
+await nc.drain();</code></pre>
+<p>The <code>jobs.&gt;</code> subject means "everything under <code>jobs.</code>". A publish that matches no stream gets a "no responders" error, which is a useful signal that the stream is missing. The consumer side, with acknowledgements and retries, is in <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">the retries article</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Old messages come back.</strong> The data volume outlives <code>flisk down</code>, so a stream keeps its messages between runs. Purge one stream with <code>nats stream purge JOBS</code>, or remove the volume (find its full name with <code>docker volume ls</code>) when you want a clean slate.</li>
+<li><strong>The hostname <code>bus</code> only works inside the stack.</strong> From your host shell use <code>nats://127.0.0.1:4222</code>, and only if you published the port.</li>
+<li><strong>Keep it local.</strong> A default NATS server has no authentication, which is acceptable only while the port is bound to 127.0.0.1.</li>
+<li><strong>Need strict ordering or complex routing?</strong> Look at <a href="/@odykyi/workers-and-queues/rabbitmq-for-local-development/">RabbitMQ</a>. For most local job queues NATS is the lighter choice.</li>
+</ul>
+
+<p>With the queue running, the next step is a consumer. <a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/">Run a background worker locally</a> shows how to add one next to your API.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does NATS need JetStream for background jobs?</summary><p>Yes, if you cannot lose a message. Core NATS drops a message when no subscriber is connected. JetStream stores it in a stream until a consumer acknowledges it. Start the server with the -js flag to turn it on.</p></details><details><summary>How do I connect to NATS from my host machine when it runs in Docker?</summary><p>Publish port 4222 to 127.0.0.1 and connect to nats://127.0.0.1:4222. The container hostname, such as bus, only resolves for other containers in the same network.</p></details><details><summary>Does flisk down delete my NATS messages?</summary><p>No. The queue resource stores JetStream data in a named volume, and flisk down keeps named volumes. Purge a stream with the nats CLI or remove the volume to start clean.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/"><span class="lbl">Guide</span><b>How to test queue consumer retries and dead letters locally</b><span>A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</span></a><a href="/@odykyi/workers-and-queues/rabbitmq-for-local-development/"><span class="lbl">Guide</span><b>How to run RabbitMQ for local development with a management UI</b><span>RabbitMQ is a good fit when you need routing rules, per-message TTLs or dead-letter exchanges. Here is how to run it locally and look inside it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

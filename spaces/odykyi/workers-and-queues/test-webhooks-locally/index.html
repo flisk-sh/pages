@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test webhooks locally without a public URL</title>
+<meta name="description" content="Test webhook handlers on your laptop: a tunnel for real providers, and a repeatable local test for signatures, duplicates and retries that needs no internet.">
+<meta name="keywords" content="test webhooks locally, webhook local development, verify webhook signature, stripe webhook local, idempotent webhook handler">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/test-webhooks-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test webhooks locally without a public URL">
+<meta property="og:description" content="Test webhook handlers on your laptop: a tunnel for real providers, and a repeatable local test for signatures, duplicates and retries that needs no internet.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/test-webhooks-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test webhooks locally without a public URL","description":"Test webhook handlers on your laptop: a tunnel for real providers, and a repeatable local test for signatures, duplicates and retries that needs no internet.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/test-webhooks-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/test-webhooks-locally/","keywords":"test webhooks locally, webhook local development, verify webhook signature, stripe webhook local, idempotent webhook handler","wordCount":822,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to test webhooks locally without a public URL","item":"https://pages.flisk.si/@odykyi/workers-and-queues/test-webhooks-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need ngrok to test webhooks locally?","acceptedAnswer":{"@type":"Answer","text":"Only when a real provider must reach your machine. For checking your own handler, sign saved payloads in a test and send them to localhost. That needs no tunnel and no internet."}},{"@type":"Question","name":"Why does my webhook signature check always fail locally?","acceptedAnswer":{"@type":"Answer","text":"Most often the body was parsed and re-serialized before verification. Signatures are computed over the raw bytes, so read the raw body, verify it, and parse it afterwards."}},{"@type":"Question","name":"How do I handle duplicate webhook events?","acceptedAnswer":{"@type":"Answer","text":"Store each event in an inbox keyed by the provider's event ID with a unique constraint. A repeat hits the same key and does nothing, so processing is safe to retry."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to test webhooks locally without a public URL</h1><p class="dek">A tunnel shows you that a webhook arrives. A local test shows you that your handler stays correct when it arrives twice, late or out of order.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-goes-wrong-with-webhooks">What goes wrong with webhooks</a></li><li><a href="#reaching-your-laptop-from-the-internet">Reaching your laptop from the internet</a></li><li><a href="#a-local-test-that-needs-no-tunnel">A local test that needs no tunnel</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To test webhooks locally you have two tools, and they answer different questions. A tunnel (ngrok, cloudflared, or a provider CLI that forwards events) proves a real provider can reach your laptop. A local test with saved payloads proves your handler checks the signature, ignores duplicates and survives a retry, and it needs no internet. Use the tunnel once, and the test every day.</p>
+
+<h2 id="what-goes-wrong-with-webhooks">What goes wrong with webhooks</h2>
+<p>Almost every webhook bug is one of four things:</p>
+<ul>
+<li><strong>Signature checks on the wrong bytes.</strong> The signature is computed over the raw request body. If a JSON parser runs first and you re-serialize, the bytes differ and every check fails.</li>
+<li><strong>Duplicates.</strong> Providers retry when they do not get a fast success response, so your handler will see the same event more than once.</li>
+<li><strong>Slow handlers.</strong> If you do the work inside the request, a slow job makes the provider retry, which produces more duplicates.</li>
+<li><strong>Lost acknowledgements.</strong> You commit your work, but the response never reaches the provider, so it sends the event again.</li>
+</ul>
+<p>The standard design is to verify the signature, write the event to an inbox keyed by the provider's event ID, return success quickly, and let a worker do the real work. A duplicate event hits the same key and does nothing.</p>
+
+<h2 id="reaching-your-laptop-from-the-internet">Reaching your laptop from the internet</h2>
+<p>When you want a real provider to send a real event, you need a public URL that forwards to your machine. Options that work without Flisk:</p>
+<ul>
+<li><code>ngrok http 4000</code> or <code>cloudflared tunnel --url http://localhost:4000</code> prints a public URL for a local port.</li>
+<li>Some providers ship a CLI that forwards events straight to localhost. Stripe's is <code>stripe listen --forward-to localhost:4000/webhooks/stripe</code>, and it prints a signing secret to use for the events it forwards.</li>
+</ul>
+<p>If you tunnel to a Flisk stack, point the tunnel at the port your backend listens on. Flisk backends use ports in the 4000 to 4999 range, and <code>flisk networks</code> prints the URLs your stack exposes. If the gateway rejects requests that arrive with the tunnel's hostname, tunnel to the backend port directly. I did not test every tunnel product against the gateway, so check this on your setup.</p>
+
+<h2 id="a-local-test-that-needs-no-tunnel">A local test that needs no tunnel</h2>
+<p>Flisk does not have a webhook replay command. What it gives you is a stack where the API, the inbox database and the worker all run locally, and that is enough to test the cases that matter. This recipe is the one in the Flisk docs, and it is a pattern you build in your tests, not a Flisk feature.</p>
+<ol>
+<li><strong>Pin the payloads.</strong> Save a few real events as files in your test folder, as exact bytes. Use a dummy signing key that you commit, never a real one.</li>
+<li><strong>Sign them in the test.</strong> The test computes the signature the same way the provider does and sends the raw body.</li>
+<li><strong>Control the clock.</strong> Many providers include a timestamp in the signature and reject old ones. Make the "now" function injectable so a test can move it.</li>
+<li><strong>Reset state first.</strong> Clear the inbox and the worker's output before each scenario.</li>
+</ol>
+<p>The handler that the test exercises looks like this:</p>
+<pre><code>import express from "express";
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+const app = express();
+const KEY = process.env.WEBHOOK_KEY;
+
+app.post("/webhooks/demo", express.raw({ type: "*/*" }), async (req, res) =&gt; {
+  const given = Buffer.from(req.get("x-signature") ?? "", "hex");
+  const want = createHmac("sha256", KEY).update(req.body).digest();
+
+  // timingSafeEqual throws when lengths differ, so compare lengths first
+  const valid = given.length === want.length && timingSafeEqual(given, want);
+  if (valid === false) {
+    return res.status(400).end();
+  }
+
+  const event = JSON.parse(req.body.toString("utf8"));
+  await db.insertInbox(event.id, event);   // unique on event.id, ignore a repeat
+  res.status(200).end();
+});</code></pre>
+<p>Then write scenarios against the running stack, not against mocks of it:</p>
+<ul>
+<li>Deliver an event, commit it to the inbox, then drop the response and deliver it again. Assert one effect.</li>
+<li>Deliver the same event twice at once. Assert one effect.</li>
+<li>Stop the worker, deliver events, start the worker, and assert it drains the inbox.</li>
+<li>Change one byte of the body and assert a 400.</li>
+</ul>
+<p>The worker is a normal service in your stack that reads from the inbox, as in <a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/">running a background worker locally</a>. Running these scenarios against the real stack is the subject of <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not use a live key for local tests.</strong> A dummy key is enough, because you sign the payload yourself.</li>
+<li><strong>Do not trust the event order.</strong> Providers do not promise delivery in the order events happened. Look at the state in the event, not the arrival sequence.</li>
+<li><strong>A tunnel URL changes.</strong> Free tunnel URLs change on restart, so a webhook registered with the provider stops working until you update it.</li>
+<li><strong>Return fast.</strong> Anything slow in the handler belongs in the worker.</li>
+</ul>
+
+<p>Once the inbox is filled and the worker drains it, failures become the next thing to test. <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">Testing consumer retries locally</a> picks up from there.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need ngrok to test webhooks locally?</summary><p>Only when a real provider must reach your machine. For checking your own handler, sign saved payloads in a test and send them to localhost. That needs no tunnel and no internet.</p></details><details><summary>Why does my webhook signature check always fail locally?</summary><p>Most often the body was parsed and re-serialized before verification. Signatures are computed over the raw bytes, so read the raw body, verify it, and parse it afterwards.</p></details><details><summary>How do I handle duplicate webhook events?</summary><p>Store each event in an inbox keyed by the provider&#39;s event ID with a unique constraint. A repeat hits the same key and does nothing, so processing is safe to retry.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/"><span class="lbl">Guide</span><b>How to test queue consumer retries and dead letters locally</b><span>A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</span></a><a href="/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/"><span class="lbl">Guide</span><b>How to share one database between a worker and an API</b><span>Two processes, one database. The setup is simple. The mistakes are about who owns the schema and who picks up which row.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
