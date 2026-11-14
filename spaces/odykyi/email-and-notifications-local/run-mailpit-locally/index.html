@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to catch outgoing email locally with Mailpit</title>
+<meta name="description" content="Run Mailpit as a local SMTP server and inbox so your app&#39;s signup and reset emails land on your laptop instead of real addresses. Docker and Flisk setups.">
+<meta name="keywords" content="mailpit docker, local smtp server, catch emails local development, mailpit setup, fake smtp server">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/run-mailpit-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to catch outgoing email locally with Mailpit">
+<meta property="og:description" content="Run Mailpit as a local SMTP server and inbox so your app&#39;s signup and reset emails land on your laptop instead of real addresses. Docker and Flisk setups.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/run-mailpit-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to catch outgoing email locally with Mailpit","description":"Run Mailpit as a local SMTP server and inbox so your app's signup and reset emails land on your laptop instead of real addresses. Docker and Flisk setups.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/run-mailpit-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/run-mailpit-locally/","keywords":"mailpit docker, local smtp server, catch emails local development, mailpit setup, fake smtp server","wordCount":796,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to catch outgoing email locally with Mailpit","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/run-mailpit-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What port does Mailpit use?","acceptedAnswer":{"@type":"Answer","text":"Port 1025 for SMTP, where your app sends mail, and port 8025 for the web inbox and the REST API. Both can be changed with environment variables or flags."}},{"@type":"Question","name":"Does Mailpit send email to real addresses?","acceptedAnswer":{"@type":"Answer","text":"No. It stores what it receives and never delivers it. It has an optional release feature that can forward a chosen message to a real SMTP server, but only if you configure one."}},{"@type":"Question","name":"Do I need Docker to run Mailpit?","acceptedAnswer":{"@type":"Answer","text":"No. Mailpit is a single binary and is also available through package managers such as Homebrew. Docker is just a convenient way to run it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to catch outgoing email locally with Mailpit</h1><p class="dek">Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-local-mail-catcher-does">What a local mail catcher does</a></li><li><a href="#run-it-without-flisk">Run it without Flisk</a></li><li><a href="#run-it-next-to-your-services-with-flisk">Run it next to your services with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To catch outgoing email in local development, run Mailpit and point your app's SMTP settings at it. Mailpit listens for SMTP on port 1025, keeps every message it receives, and shows them in a web inbox on port 8025. Your app sends mail exactly as it would in production, but the only place it arrives is your own screen.</p>
+
+<h2 id="what-a-local-mail-catcher-does">What a local mail catcher does</h2>
+<p>Almost every app sends email: a welcome message, a password reset, an invoice. In development you want to see those messages, click the links in them and check the layout, without sending anything to a real person. A mail catcher is a small SMTP server that accepts all mail and never forwards it. You get an inbox for every address your tests invent.</p>
+<p>Mailpit is one such tool. It is a single Go binary, also published as a Docker image, with a web UI, a search box and a REST API. It is the maintained successor to MailHog, which many tutorials still mention (see the <a href="/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/">MailHog comparison</a>).</p>
+
+<h2 id="run-it-without-flisk">Run it without Flisk</h2>
+<p>The quickest way is Docker:</p>
+<pre><code>docker run -d --name mailpit \
+  -p 127.0.0.1:1025:1025 \
+  -p 127.0.0.1:8025:8025 \
+  axllent/mailpit</code></pre>
+<p>Open <code>http://localhost:8025</code> for the inbox. Point your app at <code>localhost</code>, port <code>1025</code>, no username, no password, no TLS. With Compose the same thing is a service with two published ports. If you do not want Docker, Mailpit also ships as a plain binary and a Homebrew package, and you start it by running <code>mailpit</code>.</p>
+<p>Three settings are worth knowing, all environment variables:</p>
+<ul>
+<li><code>MP_DATABASE=/data/mailpit.db</code> stores messages in a file instead of memory, so they survive a restart. Mount a volume at <code>/data</code>.</li>
+<li><code>MP_MAX_MESSAGES</code> caps how many messages are kept (the default is 500), so the inbox does not grow forever.</li>
+<li><code>MP_SMTP_AUTH_ACCEPT_ANY=1</code> with <code>MP_SMTP_AUTH_ALLOW_INSECURE=1</code> lets clients that insist on a username and password send anything without errors.</li>
+</ul>
+
+<h2 id="run-it-next-to-your-services-with-flisk">Run it next to your services with Flisk</h2>
+<p>If your app already runs as containers under Flisk, Mailpit is one more resource. Flisk can run any image as a bring-your-own resource. Create it:</p>
+<pre><code>flisk resource mail --type bring-your-own \
+  --image axllent/mailpit:v1.33.1 --no-proxy --stack main --yes</code></pre>
+<p>That writes <code>services/main/mail/service.json</code>. Edit it so it looks like this (the image tag is the one the Flisk docs pin; pick a newer tag if you like):</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "mail",
+  "appType": "bring-your-own",
+  "stack": "main",
+  "port": 8025,
+  "image": "axllent/mailpit:v1.33.1",
+  "exposeViaProxy": false,
+  "healthCheck": { "port": 1025 },
+  "extraPorts": [{ "port": 8025 }],
+  "volumes": [{ "source": "mail-data", "target": "/data" }],
+  "params": { "MP_DATABASE": "/data/mailpit.db" },
+  "provides": {
+    "SMTP_HOST": "mail",
+    "SMTP_PORT": "1025",
+    "MAILPIT_API_URL": "http://mail:8025"
+  }
+}</code></pre>
+<p>What each field does:</p>
+<ul>
+<li><code>port</code> is 8025, the HTTP port of the inbox. SMTP is checked separately by <code>healthCheck</code>, a TCP probe on 1025, because Mailpit does not serve Flisk's default <code>/health</code> route.</li>
+<li><code>extraPorts</code> publishes the inbox on <code>127.0.0.1:8025</code> only, so nothing else on your network can read your test mail. If another program already uses 8025, add a <code>hostPort</code> to that entry.</li>
+<li><code>volumes</code> and <code>params</code> keep the inbox in a named volume that <code>flisk down</code> leaves in place.</li>
+<li><code>provides</code> lists settings that every service naming <code>mail</code> in its <code>dependsOn</code> receives as environment variables. Keep secrets out of it; these values are not secret.</li>
+</ul>
+<p>Then in the service that sends mail, add the dependency:</p>
+<pre><code>"dependsOn": ["mail"]</code></pre>
+<p>Run <code>flisk up main</code>. Inside the Docker network your app reaches the catcher at <code>mail:1025</code>, by the resource name. From your browser, the inbox is at <code>http://127.0.0.1:8025</code>. Read your app's mail settings from <code>SMTP_HOST</code> and <code>SMTP_PORT</code> so the same code works in production with different values.</p>
+<blockquote>Flisk runs a project either as containers or as plain local processes, and does not mix the two yet. If your services run with a <code>command</code> and no Docker, start Mailpit yourself (the Docker command above, or the binary) and use <code>localhost:1025</code>.</blockquote>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Wrong host from inside a container.</strong> <code>localhost</code> in a container is the container itself. Use the resource name (<code>mail</code>) there, and <code>localhost</code> only from programs on your host.</li>
+<li><strong>TLS settings copied from production.</strong> If your code sets <code>secure: true</code> or requires STARTTLS, the connection to a plain Mailpit fails. Drive these from environment variables.</li>
+<li><strong>Mailpit proves delivery to Mailpit, not to a mailbox.</strong> It does not tell you whether Gmail would mark the message as spam, or whether SPF and DKIM pass. Test those with your real provider on a staging domain.</li>
+<li><strong>Port 8025 already taken</strong> by another catcher from an old project. Stop it or change the host port.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once mail arrives, wire your language to it: see <a href="/@odykyi/email-and-notifications-local/nodemailer-local-smtp/">Nodemailer to a local SMTP server</a> or <a href="/@odykyi/email-and-notifications-local/python-django-email-local/">Python and Django</a>. For checking the messages automatically in tests, read <a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">how to assert emails in end-to-end tests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What port does Mailpit use?</summary><p>Port 1025 for SMTP, where your app sends mail, and port 8025 for the web inbox and the REST API. Both can be changed with environment variables or flags.</p></details><details><summary>Does Mailpit send email to real addresses?</summary><p>No. It stores what it receives and never delivers it. It has an optional release feature that can forward a chosen message to a real SMTP server, but only if you configure one.</p></details><details><summary>Do I need Docker to run Mailpit?</summary><p>No. Mailpit is a single binary and is also available through package managers such as Homebrew. Docker is just a convenient way to run it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/"><span class="lbl">Guide</span><b>MailHog is unmaintained: what to use instead in local dev</b><span>If your Compose file or tutorial still says mailhog/mailhog, it works, but nobody is fixing it. Here is what to move to and what changes.</span></a><a href="/@odykyi/email-and-notifications-local/nodemailer-local-smtp/"><span class="lbl">Guide</span><b>How to send email from Node.js to a local SMTP server</b><span>One transport function, driven by environment variables, is enough to send to a local inbox on your laptop and to a real provider in production.</span></a><a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/"><span class="lbl">Guide</span><b>How to test password reset and signup emails in end-to-end tests</b><span>A test that clicks Forgot password has to read the email to finish. A local inbox with an HTTP API turns that into a few lines of code.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

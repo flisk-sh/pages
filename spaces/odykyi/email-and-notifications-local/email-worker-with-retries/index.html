@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to send email from a background worker with retries</title>
+<meta name="description" content="Move email sending out of the request into a worker: an outbox table, retries with backoff, 4xx vs 5xx SMTP errors, and how to test failures locally.">
+<meta name="keywords" content="send email background job, email queue retries, outbox pattern email, smtp retry backoff, email worker local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/email-worker-with-retries/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to send email from a background worker with retries">
+<meta property="og:description" content="Move email sending out of the request into a worker: an outbox table, retries with backoff, 4xx vs 5xx SMTP errors, and how to test failures locally.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/email-worker-with-retries/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to send email from a background worker with retries","description":"Move email sending out of the request into a worker: an outbox table, retries with backoff, 4xx vs 5xx SMTP errors, and how to test failures locally.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/email-worker-with-retries/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/email-worker-with-retries/","keywords":"send email background job, email queue retries, outbox pattern email, smtp retry backoff, email worker local development","wordCount":770,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to send email from a background worker with retries","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/email-worker-with-retries/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why should email be sent from a worker?","acceptedAnswer":{"@type":"Answer","text":"So a slow or failing SMTP server cannot slow down or break the request, and so a message survives a process restart because it is stored before it is sent."}},{"@type":"Question","name":"Which SMTP errors should be retried?","acceptedAnswer":{"@type":"Answer","text":"Reply codes starting with 4 and network errors such as timeouts are temporary and worth retrying with a delay. Codes starting with 5 are permanent and should not be retried."}},{"@type":"Question","name":"How do I avoid sending the same email twice?","acceptedAnswer":{"@type":"Answer","text":"Claim rows safely, for example with FOR UPDATE SKIP LOCKED in Postgres, and give each message a stable ID that your provider can use as an idempotency key."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to send email from a background worker with retries</h1><p class="dek">Sending mail inside a web request makes pages slow and loses messages when SMTP hiccups. A small outbox and a worker fix both problems.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-send-in-the-request">Why not send in the request</a></li><li><a href="#the-outbox-pattern">The outbox pattern</a></li><li><a href="#which-errors-to-retry">Which errors to retry</a></li><li><a href="#run-it-locally-with-flisk">Run it locally with Flisk</a></li><li><a href="#test-the-failure-path-on-purpose">Test the failure path on purpose</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Send email from a background worker, not inside the web request. Write an outbox row in the same database transaction as the change that needs the email, let a worker read pending rows and send them, and retry temporary failures with a growing delay. The request stays fast, a slow SMTP server does not break signups, and a message is not lost when the process restarts.</p>
+
+<h2 id="why-not-send-in-the-request">Why not send in the request</h2>
+<p>SMTP is a network call to a system you do not control. If you call it inside the request, then a slow server makes the page slow, a failure either shows an error to a user whose account was already created, or is swallowed and the email silently never goes out. If you send first and the database commit then fails, the user gets an email about something that did not happen.</p>
+
+<h2 id="the-outbox-pattern">The outbox pattern</h2>
+<p>The fix is to separate "decide to send" from "send":</p>
+<ol>
+<li>In the same transaction that creates the user, insert a row into an <code>outbox</code> table: recipient, template, data, status <code>pending</code>, attempts <code>0</code>, <code>next_attempt_at</code> now.</li>
+<li>A worker loop selects pending rows that are due, sends each, and marks it <code>sent</code>.</li>
+<li>On a temporary failure, it increments attempts, sets <code>next_attempt_at</code> further out, and leaves the row pending.</li>
+<li>After a maximum number of attempts, it marks the row <code>failed</code> and logs it, so a person can look.</li>
+</ol>
+<p>If several workers can run, claim rows with <code>SELECT ... FOR UPDATE SKIP LOCKED</code> in Postgres so two workers never send the same row. Give the message a stable ID too, so a provider that supports idempotency keys can drop a duplicate if a send succeeds but the acknowledgement is lost.</p>
+
+<h2 id="which-errors-to-retry">Which errors to retry</h2>
+<p>SMTP replies tell you what to do. A reply starting with 4 is temporary ("try again later"), so retry. A reply starting with 5 is permanent (bad address, rejected content), so do not retry; mark it failed. A network error such as a refused connection or a timeout is temporary. Here is the core of the loop with Nodemailer, where errors carry <code>responseCode</code> when the server answered:</p>
+<pre><code>function isPermanent(err: any): boolean {
+  return typeof err.responseCode === "number" &amp;&amp; err.responseCode &gt;= 500;
+}
+
+async function handle(row: OutboxRow) {
+  try {
+    await transport.sendMail(render(row));
+    await markSent(row.id);
+  } catch (err: any) {
+    const attempts = row.attempts + 1;
+    if (isPermanent(err) || attempts &gt;= 6) {
+      await markFailed(row.id, String(err.message));
+      return;
+    }
+    const delaySeconds = Math.min(2 ** attempts * 10, 3600);   // 20s, 40s, 80s...
+    await reschedule(row.id, attempts, delaySeconds);
+  }
+}</code></pre>
+<p>Add some random jitter to the delay if many messages can fail together, so they do not all retry at the same second.</p>
+
+<h2 id="run-it-locally-with-flisk">Run it locally with Flisk</h2>
+<p>Create the worker next to your API, and add the Mailpit resource from <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">the Mailpit article</a>:</p>
+<pre><code>flisk resource mailer --type worker --stack main --yes</code></pre>
+<p>In <code>services/main/mailer/service.json</code>, list what it needs to start: <code>"dependsOn": ["mail"]</code>, plus whatever supplies your outbox table. The Postgres that comes with a Flisk project can hold the outbox; see <a href="/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/">sharing one database between a worker and an API</a>. Then follow the worker with <code>flisk logs --service mailer</code>, and watch the inbox at <code>http://127.0.0.1:8025</code>. General worker setup is covered in <a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/">running a background worker locally</a>.</p>
+
+<h2 id="test-the-failure-path-on-purpose">Test the failure path on purpose</h2>
+<p>A retry path that you never run is a retry path that is broken. Start a tiny fake SMTP server that always answers with a temporary error, and point the worker at it:</p>
+<pre><code>pip install aiosmtpd
+python - &lt;&lt;'EOF'
+from aiosmtpd.controller import Controller
+import time
+
+class Busy:
+    async def handle_DATA(self, server, session, envelope):
+        return "451 4.3.0 Try again later"
+
+Controller(Busy(), hostname="0.0.0.0", port=2525).start()
+time.sleep(3600)
+EOF</code></pre>
+<p>Set the worker's <code>SMTP_HOST</code> and <code>SMTP_PORT</code> to that server (port 2525), create a signup, and read the worker's logs. You should see attempt 1, 2, 3 with growing delays, then success once you switch back to Mailpit. Change the reply to a 550 and confirm the row goes straight to <code>failed</code>. More on testing consumers this way is in <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">queue consumer retries and dead letters</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Retrying forever.</strong> Cap attempts and keep failed rows visible.</li>
+<li><strong>Duplicate sends.</strong> Rows in <code>sending</code> state after a crash need a timeout that returns them to pending, which means a message can occasionally go out twice. Use idempotency keys where your provider offers them.</li>
+<li><strong>When not to bother.</strong> A prototype with one email a day does not need an outbox. Add it when losing a message would cost you something.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once the worker sends reliably, add an end-to-end check: <a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">assert emails in end-to-end tests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why should email be sent from a worker?</summary><p>So a slow or failing SMTP server cannot slow down or break the request, and so a message survives a process restart because it is stored before it is sent.</p></details><details><summary>Which SMTP errors should be retried?</summary><p>Reply codes starting with 4 and network errors such as timeouts are temporary and worth retrying with a delay. Codes starting with 5 are permanent and should not be retried.</p></details><details><summary>How do I avoid sending the same email twice?</summary><p>Claim rows safely, for example with FOR UPDATE SKIP LOCKED in Postgres, and give each message a stable ID that your provider can use as an idempotency key.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/"><span class="lbl">Guide</span><b>How to catch outgoing email locally with Mailpit</b><span>Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</span></a><a href="/@odykyi/email-and-notifications-local/nodemailer-local-smtp/"><span class="lbl">Guide</span><b>How to send email from Node.js to a local SMTP server</b><span>One transport function, driven by environment variables, is enough to send to a local inbox on your laptop and to a real provider in production.</span></a><a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/"><span class="lbl">Guide</span><b>How to test password reset and signup emails in end-to-end tests</b><span>A test that clicks Forgot password has to read the email to finish. A local inbox with an HTTP API turns that into a few lines of code.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
