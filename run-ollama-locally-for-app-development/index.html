@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Ollama locally for app development</title>
+<meta name="description" content="Run Ollama on your laptop so your app can call a local model over HTTP: install, pull a model, test the API, and add it to a multi-service stack.">
+<meta name="keywords" content="run ollama locally, ollama for development, local llm api, ollama localhost 11434, ollama docker">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-llm-models/run-ollama-locally-for-app-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Ollama locally for app development">
+<meta property="og:description" content="Run Ollama on your laptop so your app can call a local model over HTTP: install, pull a model, test the API, and add it to a multi-service stack.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-llm-models/run-ollama-locally-for-app-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Ollama locally for app development","description":"Run Ollama on your laptop so your app can call a local model over HTTP: install, pull a model, test the API, and add it to a multi-service stack.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-llm-models/run-ollama-locally-for-app-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-llm-models/run-ollama-locally-for-app-development/","keywords":"run ollama locally, ollama for development, local llm api, ollama localhost 11434, ollama docker","wordCount":748,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local LLMs for development","item":"https://pages.flisk.si/@odykyi/local-llm-models/"},{"@type":"ListItem","position":3,"name":"How to run Ollama locally for app development","item":"https://pages.flisk.si/@odykyi/local-llm-models/run-ollama-locally-for-app-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What port does Ollama use?","acceptedAnswer":{"@type":"Answer","text":"11434 by default, bound to 127.0.0.1. Inside the official container it listens on all interfaces, so you publish the port to reach it from the host."}},{"@type":"Question","name":"Does Ollama need an API key?","acceptedAnswer":{"@type":"Answer","text":"No. OpenAI-compatible clients still insist on a value, so pass any non-empty string such as ollama."}},{"@type":"Question","name":"Do I need Docker to run Ollama?","acceptedAnswer":{"@type":"Answer","text":"No. The native app or ollama serve is simpler and can use your GPU on a Mac. Docker is useful when the model server is one service in a stack."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-llm-models/">Local LLMs for development</a></div>
+<section class="hero"><div><div class="lbl">Local LLMs for development</div><h1>How to run Ollama locally for app development</h1><p class="dek">A local model server gives your app a chat endpoint with no API key and no per-token bill. Here is the shortest path from nothing to a working call, and how to keep it next to your other services.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#install-pull-a-model-check-it-answers">Install, pull a model, check it answers</a></li><li><a href="#call-it-from-code">Call it from code</a></li><li><a href="#run-it-as-a-service-in-your-dev-stack">Run it as a service in your dev stack</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#a-short-checklist-when-it-does-not-answer">A short checklist when it does not answer</a></li></ol></nav></aside>
+<article><p>Install Ollama, run <code>ollama pull</code> for one small model, and your app can call it at <code>http://localhost:11434</code>. It speaks its own API under <code>/api</code> and an OpenAI-compatible API under <code>/v1</code>, so most SDKs work after changing one base URL.</p>
+
+<h2 id="install-pull-a-model-check-it-answers">Install, pull a model, check it answers</h2>
+<p>On macOS and Windows, use the installer from ollama.com. On Linux, use the install script from the same site or your package manager. Then pull a small model first. A 1B to 3B model downloads quickly and is enough to test your wiring. You can switch to a bigger one later.</p>
+<pre><code>ollama pull llama3.2
+ollama run llama3.2 "Say hello in five words"
+curl http://localhost:11434/api/tags</code></pre>
+<p>The last command lists the models on disk as JSON. If it answers, the server is up. The desktop app and <code>ollama serve</code> both listen on <code>127.0.0.1:11434</code> by default, so only your own machine can reach it.</p>
+
+<h2 id="call-it-from-code">Call it from code</h2>
+<p>The native chat endpoint takes a model name and a list of messages:</p>
+<pre><code>curl http://localhost:11434/api/chat -d '{
+  "model": "llama3.2",
+  "messages": [{"role": "user", "content": "What is a port?"}],
+  "stream": false
+}'</code></pre>
+<p>Without <code>"stream": false</code> the server streams one JSON object per line. That is what you want for a chat UI, and a surprise if you pipe the output straight into <code>JSON.parse</code>.</p>
+<p>The OpenAI-compatible route is <code>POST /v1/chat/completions</code>, and <code>GET /v1/models</code> lists the models. If your code already uses an OpenAI client, see <a href="/@odykyi/local-llm-models/point-openai-sdk-at-ollama/">how to point the OpenAI SDK at Ollama</a>.</p>
+
+<h2 id="run-it-as-a-service-in-your-dev-stack">Run it as a service in your dev stack</h2>
+<p>Running Ollama by hand works for one app. It gets awkward when a frontend, an API and a worker all depend on it, and a new teammate has to remember which terminal to open first. In that case, make the model server one more service in the project.</p>
+<p>Flisk has a resource type for this. Inside a Flisk project, run:</p>
+<pre><code>flisk resource brain --type inference --stack llm --yes</code></pre>
+<p>It writes <code>services/llm/brain/service.json</code> with no Dockerfile:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "brain",
+  "appType": "bring-your-own",
+  "stack": "llm",
+  "port": 11434,
+  "healthCheckPath": "/v1/models",
+  "image": "ollama/ollama"
+}</code></pre>
+<p>So an inference resource is a bring-your-own container running the <code>ollama/ollama</code> image on port 11434, health-checked at <code>/v1/models</code>. Ollama is only the default. Anything that answers <code>GET /v1/models</code> can take its place, and the <a href="/@odykyi/local-llm-models/ollama-vs-llama-cpp-vs-vllm-for-local-dev/">engine comparison</a> shows how.</p>
+<p>Start the stack with <code>flisk up llm</code>. Other containers in the stack call the model at <code>http://brain:11434/v1/chat/completions</code>. To reach it from your host as well, publish the port in <code>service.json</code>:</p>
+<pre><code>"extraPorts": [{ "port": 11434 }]</code></pre>
+<p>Flisk publishes that on <code>127.0.0.1</code> only. If Ollama is already running on your host, pick another host port with <code>"hostPort": 11435</code>, or the container will fail to start on the taken port.</p>
+<p>Models are not in the image. Pull one into the running container with <code>flisk run brain -- ollama pull llama3.2</code>. A container service must be running for <code>flisk run</code> to work, since it uses <code>docker exec</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Models are lost on recreate.</strong> The preset mounts no volume, so pulled models disappear when <code>flisk down</code> removes the container. <a href="/@odykyi/local-llm-models/keep-ollama-models-between-restarts/">Add a volume</a> to keep them.</li>
+<li><strong>No GPU on a Mac container.</strong> Docker on macOS cannot use the Apple GPU. For Metal speed, keep the native Ollama app and have containers call it from the host. See <a href="/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/">calling a host Ollama from a container</a>.</li>
+<li><strong>The first request is slow.</strong> Ollama loads the model into memory on the first call and unloads it after five minutes idle by default. Send a warm-up request when the stack starts, or set <code>OLLAMA_KEEP_ALIVE</code>.</li>
+<li><strong>Do not pick a model that does not fit.</strong> A swapping laptop is slower than a smaller model. <a href="/@odykyi/local-llm-models/how-much-ram-to-run-a-local-llm/">Check the memory rule of thumb</a> first.</li>
+</ul>
+<h2 id="a-short-checklist-when-it-does-not-answer">A short checklist when it does not answer</h2>
+<ol>
+<li>Run <code>curl http://localhost:11434/api/tags</code> from the same place your app runs. A host terminal and a container are different places.</li>
+<li>Check the model name exactly as <code>ollama list</code> prints it, including any tag after the colon.</li>
+<li>Watch the server log while you send a request. A model that does not fit in memory shows up there as a load failure, not as an HTTP error from your code.</li>
+<li>Try a smaller model. If that works, the wiring is fine and the problem is size.</li>
+</ol>
+<p>When the model answers, the next step is deciding how your code will talk to it. The OpenAI SDK route is the least work, and it keeps a way back to a hosted API open.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What port does Ollama use?</summary><p>11434 by default, bound to 127.0.0.1. Inside the official container it listens on all interfaces, so you publish the port to reach it from the host.</p></details><details><summary>Does Ollama need an API key?</summary><p>No. OpenAI-compatible clients still insist on a value, so pass any non-empty string such as ollama.</p></details><details><summary>Do I need Docker to run Ollama?</summary><p>No. The native app or ollama serve is simpler and can use your GPU on a Mac. Docker is useful when the model server is one service in a stack.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local LLMs for development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-llm-models/point-openai-sdk-at-ollama/"><span class="lbl">Guide</span><b>How to point the OpenAI SDK at a local Ollama server</b><span>Most LLM code already uses an OpenAI client. You can keep it and change two settings to run against a model on your own machine.</span></a><a href="/@odykyi/local-llm-models/keep-ollama-models-between-restarts/"><span class="lbl">Guide</span><b>How to keep Ollama models when the container restarts</b><span>A model is a file of several gigabytes. If it lives in the container&#39;s own filesystem, every recreate throws it away. One volume fixes that.</span></a><a href="/@odykyi/local-llm-models/ollama-vs-llama-cpp-vs-vllm-for-local-dev/"><span class="lbl">Guide</span><b>Ollama vs llama.cpp vs vLLM for local development</b><span>They all serve open models over an OpenAI-style API. The differences are in setup effort, hardware and how much control you want.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
