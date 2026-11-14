@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run an MLflow tracking server locally for experiments</title>
+<meta name="description" content="Run an MLflow tracking server on your laptop, log parameters and metrics from a script or a container, and keep the runs between restarts. Plain and Flisk way.">
+<meta name="keywords" content="mlflow tracking server local, run mlflow locally, mlflow docker local, mlflow experiment tracking setup, mlflow ui localhost">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run an MLflow tracking server locally for experiments">
+<meta property="og:description" content="Run an MLflow tracking server on your laptop, log parameters and metrics from a script or a container, and keep the runs between restarts. Plain and Flisk way.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run an MLflow tracking server locally for experiments","description":"Run an MLflow tracking server on your laptop, log parameters and metrics from a script or a container, and keep the runs between restarts. Plain and Flisk way.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/","keywords":"mlflow tracking server local, run mlflow locally, mlflow docker local, mlflow experiment tracking setup, mlflow ui localhost","wordCount":763,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to run an MLflow tracking server locally for experiments","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does MLflow need a database to run locally?","acceptedAnswer":{"@type":"Answer","text":"No. A SQLite file is enough for one developer, and MLflow can also use a plain file store. A server such as Postgres matters when several people share the server."}},{"@type":"Question","name":"Why do my runs disappear when the container restarts?","acceptedAnswer":{"@type":"Answer","text":"The tracking data was written to the container's own filesystem. Mount a named volume at the path the server uses for its database and artifacts."}},{"@type":"Question","name":"How does my training code find the tracking server?","acceptedAnswer":{"@type":"Answer","text":"The MLflow client reads the MLFLOW_TRACKING_URI environment variable. Set it to the server address, and the same code works on the host and in a container."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to run an MLflow tracking server locally for experiments</h1><p class="dek">Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-plain-way-a-server-on-your-machine">The plain way: a server on your machine</a></li><li><a href="#where-this-breaks-down">Where this breaks down</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#keep-the-data-or-reset-it">Keep the data, or reset it</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-this">When not to use this</a></li></ol></nav></aside>
+<article><p>To run MLflow locally, start a tracking server (<code>mlflow server</code>) with a backend store for run metadata and a place for artifacts, then point your code at it with the <code>MLFLOW_TRACKING_URI</code> environment variable. A SQLite file is enough for one developer. The part people get wrong is keeping the data: if the server lives in a container without a volume, every restart empties your experiment history.</p>
+
+<h2 id="the-plain-way-a-server-on-your-machine">The plain way: a server on your machine</h2>
+<p>With Python installed, one virtual environment and two commands give you a working server:</p>
+<pre><code>pip install mlflow
+mlflow server --host 127.0.0.1 --port 5000 \
+  --backend-store-uri sqlite:///mlflow.db \
+  --artifacts-destination ./mlartifacts --serve-artifacts</code></pre>
+<p>The UI is at <code>http://127.0.0.1:5000</code>. <code>--serve-artifacts</code> makes the server the only thing a client needs to reach: artifacts such as model files are uploaded through the server instead of written to a path on the client's disk. Without it, a training job inside a container would try to write to its own filesystem and your files would vanish with the container.</p>
+<p>Then in your training code:</p>
+<pre><code>import mlflow
+
+mlflow.set_experiment("churn")
+with mlflow.start_run():
+    mlflow.log_param("C", 1.0)
+    mlflow.log_metric("auc", 0.87)</code></pre>
+<p>The client reads <code>MLFLOW_TRACKING_URI</code> from the environment, so the code never hardcodes an address. That is the property to keep: the same script should run on your host, in a container and in CI by changing one variable.</p>
+
+<h2 id="where-this-breaks-down">Where this breaks down</h2>
+<p>A server on your host is fine until the code that logs runs somewhere else. A container cannot reach <code>127.0.0.1</code> of your machine, so the URI has to change, and you have to remember to start the server first. With Docker Compose you can add an MLflow service with a volume and a health check, see <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a> for the waiting part. That is a good answer if you already live in Compose.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has an MLflow preset. In a Flisk project (see the <a href="https://github.com/flisk-sh/flisk">repository</a> for install steps, or <code>npm install -g @flisk-sh/flisk</code>):</p>
+<pre><code>flisk resource tracking --type database --framework mlflow --stack ml --yes
+flisk up ml</code></pre>
+<p>This writes a plain <code>service.json</code> for a container. What it contains, as generated:</p>
+<ul>
+<li>the image <code>ghcr.io/mlflow/mlflow:v3.17.2</code>, port 5000;</li>
+<li>a named volume <code>tracking-data</code> mounted at <code>/data</code>, which holds the SQLite database and the artifacts, and which <code>flisk down</code> keeps;</li>
+<li>a start command that runs <code>mlflow server</code> with <code>--serve-artifacts</code>, one worker, and an allowed-hosts list that includes the resource name;</li>
+<li>a memory limit of <code>3g</code>;</li>
+<li><code>provides</code> with <code>MLFLOW_TRACKING_URI=http://tracking:5000</code>.</li>
+</ul>
+<p>Any other service in the stack that lists <code>tracking</code> in its <code>dependsOn</code> gets that variable in its environment, so a training service needs no URL in its code:</p>
+<pre><code>{
+  "appName": "trainer",
+  "appType": "bring-your-own",
+  "stack": "ml",
+  "dockerfile": "./Dockerfile",
+  "dependsOn": ["tracking"]
+}</code></pre>
+<p>The UI is published on <code>127.0.0.1:5000</code> only, so nothing else on your network can open it. From a script on your host, set the variable yourself:</p>
+<pre><code>export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+python train.py</code></pre>
+
+<h2 id="keep-the-data-or-reset-it">Keep the data, or reset it</h2>
+<p>Because the data is on a named volume, runs survive <code>flisk down</code> and <code>flisk up</code>. To start from an empty tracking server, stop the stack and remove that volume with Docker, as described in <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keeping Compose volumes between runs, or resetting them</a>. Do this on purpose: it deletes every run and every logged model.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port 5000 on macOS.</strong> The AirPlay Receiver listens on 5000. Docker still publishes MLflow on <code>127.0.0.1:5000</code>, but a browser may reach AirPlay instead. Set <code>hostPort</code> in the <code>extraPorts</code> entry (for example <code>{ "port": 5000, "hostPort": 5001 }</code>), or turn AirPlay Receiver off. Other containers still use <code>tracking:5000</code>.</li>
+<li><strong>403 from the server.</strong> MLflow 3 rejects a request whose <code>Host</code> header it does not know. The preset allows the resource name, loopback and private address ranges. If you reach it through another name, add that name to the allowed hosts in the start command.</li>
+<li><strong>Client and server versions.</strong> Pin the client to the server's version. The server image tag is <code>v3.17.2</code>, so install <code>mlflow==3.17.2</code> in your training image.</li>
+<li><strong>Memory.</strong> The preset reserves up to 3 GB. On a small Docker VM, a crashing tracking server is usually a memory problem, see <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a>.</li>
+</ul>
+
+<h2 id="when-not-to-use-this">When not to use this</h2>
+<p>A SQLite backend and a single worker are for one developer. Do not point a team at it, and do not treat it as a model registry you depend on in production. For shared use, MLflow runs against Postgres and an object store, which is a different setup.</p>
+<p>Next, send the model files somewhere that is not a Docker volume: <a href="/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/">storing MLflow artifacts in MinIO</a> shows the one-line change.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does MLflow need a database to run locally?</summary><p>No. A SQLite file is enough for one developer, and MLflow can also use a plain file store. A server such as Postgres matters when several people share the server.</p></details><details><summary>Why do my runs disappear when the container restarts?</summary><p>The tracking data was written to the container&#39;s own filesystem. Mount a named volume at the path the server uses for its database and artifacts.</p></details><details><summary>How does my training code find the tracking server?</summary><p>The MLflow client reads the MLFLOW_TRACKING_URI environment variable. Set it to the server address, and the same code works on the host and in a container.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/"><span class="lbl">Guide</span><b>How to store MLflow artifacts in MinIO on your laptop</b><span>By default, MLflow artifacts sit in the same volume as its database. Moving them to an S3-compatible store looks like production and keeps the tracking volume small.</span></a><a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/"><span class="lbl">Guide</span><b>How to run model training as a one-shot job in a local stack</b><span>Training is not a server. It runs, writes a result and stops. Treating it as a job keeps it from restarting forever and lets the API wait for the model.</span></a><a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/"><span class="lbl">Guide</span><b>How to run JupyterLab next to your app&#39;s local database</b><span>Notebooks are the quickest way to look at your own data. The setup mistakes are an open server, lost notebooks and a database address that only works from your host.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

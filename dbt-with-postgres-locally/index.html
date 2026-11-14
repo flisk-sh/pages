@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run dbt with a local Postgres database</title>
+<meta name="description" content="Set up dbt-postgres against a local database, write a profile that reads credentials from the environment, run dbt build and wire it as a one-shot local job.">
+<meta name="keywords" content="dbt postgres local setup, dbt profiles.yml environment variables, dbt build local, dbt docker one-shot job, dbt local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/dbt-with-postgres-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run dbt with a local Postgres database">
+<meta property="og:description" content="Set up dbt-postgres against a local database, write a profile that reads credentials from the environment, run dbt build and wire it as a one-shot local job.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/dbt-with-postgres-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run dbt with a local Postgres database","description":"Set up dbt-postgres against a local database, write a profile that reads credentials from the environment, run dbt build and wire it as a one-shot local job.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/dbt-with-postgres-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/dbt-with-postgres-locally/","keywords":"dbt postgres local setup, dbt profiles.yml environment variables, dbt build local, dbt docker one-shot job, dbt local development","wordCount":761,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to run dbt with a local Postgres database","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/dbt-with-postgres-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does dbt support a DATABASE_URL?","acceptedAnswer":{"@type":"Answer","text":"No. The Postgres adapter takes host, port, user, password and database separately. Split the URL into environment variables and read them with env_var in profiles.yml."}},{"@type":"Question","name":"Where does dbt look for profiles.yml?","acceptedAnswer":{"@type":"Answer","text":"In the project folder when you pass --profiles-dir ., otherwise in the .dbt folder of your home directory."}},{"@type":"Question","name":"What is the difference between dbt run and dbt build?","acceptedAnswer":{"@type":"Answer","text":"run builds models only. build runs models, tests, seeds and snapshots in dependency order and stops downstream nodes when a test fails."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to run dbt with a local Postgres database</h1><p class="dek">dbt turns SQL files into tables and views and tests them. Against a local Postgres it takes five minutes to set up, and the main trap is where the connection settings come from.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#set-up-on-the-host">Set up on the host</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#seeds-sources-and-tests-worth-adding-first">Seeds, sources and tests worth adding first</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run dbt against a local Postgres database, install <code>dbt-postgres</code>, create a project with <code>dbt init</code>, and write a <code>profiles.yml</code> that reads host, user, password and database from environment variables. Then <code>dbt debug</code> checks the connection and <code>dbt build</code> runs your models and tests. The same two commands work on your host and in a container.</p>
+
+<h2 id="set-up-on-the-host">Set up on the host</h2>
+<pre><code>python -m venv .venv &amp;&amp; . .venv/bin/activate
+pip install dbt-postgres
+dbt init shop --skip-profile-setup</code></pre>
+<p>Put a <code>profiles.yml</code> in the project folder and tell dbt to look there with <code>--profiles-dir .</code>. Keep credentials out of the file. dbt supports the <code>env_var</code> function in profiles:</p>
+<pre><code>shop:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', '127.0.0.1') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | as_number }}"
+      user: "{{ env_var('DBT_USER') }}"
+      password: "{{ env_var('DBT_PASSWORD') }}"
+      dbname: "{{ env_var('DBT_DB') }}"
+      schema: analytics
+      threads: 4</code></pre>
+<p>Add a model, <code>models/orders_daily.sql</code>:</p>
+<pre><code>select date_trunc('day', created_at) as day, count(*) as orders
+from {{ source('app', 'orders') }}
+group by 1</code></pre>
+<p>Declare the source and a couple of tests in <code>models/schema.yml</code> (<code>unique</code> and <code>not_null</code> on a key column), then run:</p>
+<pre><code>export DBT_USER=app DBT_PASSWORD=secret DBT_DB=app
+dbt debug --profiles-dir .
+dbt build --profiles-dir .</code></pre>
+<p><code>build</code> runs models, tests and seeds in dependency order and stops downstream work when a test fails, which is what you want. Models land in the <code>analytics</code> schema, so they never overwrite your application tables. See <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally for development</a> if you do not have a database yet.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk gives a container a <code>DATABASE_URL</code> when its <code>dependsOn</code> lists <code>postgres</code> or another database resource. dbt does not read a URL, so a short entrypoint splits it into the variables the profile uses. Create the job:</p>
+<pre><code>flisk resource postgres --type database --stack ml --yes
+flisk resource transform --type bring-your-own --stack ml --dockerfile ./Dockerfile --restart no --yes</code></pre>
+<p>The <code>services/ml/transform</code> folder holds the dbt project, <code>profiles.yml</code> and this <code>Dockerfile</code>:</p>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir dbt-postgres
+COPY . .
+RUN chmod +x run.sh
+CMD ["./run.sh"]</code></pre>
+<p>And <code>run.sh</code>:</p>
+<pre><code>#!/bin/sh
+set -e
+eval "$(python - &lt;&lt;'EOF'
+import os
+from urllib.parse import urlparse
+u = urlparse(os.environ["DATABASE_URL"])
+print(f"export DBT_HOST={u.hostname} DBT_PORT={u.port or 5432}")
+print(f"export DBT_USER={u.username} DBT_PASSWORD={u.password} DBT_DB={u.path.lstrip('/')}")
+EOF
+)"
+dbt build --profiles-dir .</code></pre>
+<p>Check that <code>service.json</code> has <code>"restart": "no"</code>, <code>"exposeViaProxy": false</code> and <code>"dependsOn": ["postgres"]</code>, which are the fields for a one-shot job:</p>
+<pre><code>flisk config verify
+flisk up ml
+flisk logs --service transform --tail 100</code></pre>
+<p>The job runs <code>dbt build</code> once and exits. Services that list <code>transform</code> in their own <code>dependsOn</code> start after it exits with 0, so a failing test stops them. This is the same pattern as <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">running migrations</a>, and the general idea is in <a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/">running a one-shot job in a local stack</a>. Keep the migrations that create the source tables in their own job, and make the dbt job wait for it.</p>
+
+<h2 id="seeds-sources-and-tests-worth-adding-first">Seeds, sources and tests worth adding first</h2>
+<p>Three small habits make a dbt project trustworthy early. First, declare every table you read as a <code>source</code> and never write the table name directly in a model, so dbt knows the lineage and you can add freshness checks later. Second, put <code>unique</code> and <code>not_null</code> tests on the key of each model; they catch duplicated joins within seconds. Third, keep small reference data, such as a list of country codes, in the <code>seeds</code> folder as CSV and load it with <code>dbt seed</code>, which <code>dbt build</code> also does. Run <code>dbt docs generate</code> now and then to see the dependency graph of your models, which often shows a model that nothing uses.</p>
+<p>Use <code>dbt build --select orders_daily+</code> to build one model and everything downstream of it while you iterate. The plus sign after a name means its children. Selecting a single model keeps the feedback loop short, and the full <code>dbt build</code> in the job stays the final check.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Passwords with special characters.</strong> The entrypoint reads the URL as plain text. If the password has characters such as <code>@</code> or <code>/</code>, they arrive percent-encoded. Decode them with <code>urllib.parse.unquote</code> before exporting.</li>
+<li><strong>Rebuilding the image for every model change.</strong> While you edit SQL, run <code>dbt build</code> on your host against the published port and use the container for the clean run.</li>
+<li><strong>Wrong schema.</strong> If tables appear in <code>public</code>, your profile has no <code>schema</code> or a model sets its own. Set it explicitly.</li>
+<li><strong>Not for huge data.</strong> Postgres is fine for development samples. Large analytical work belongs in a column store, see <a href="/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/">ClickHouse for local analytics</a>.</li>
+</ul>
+<p>Review model changes by querying them from a notebook, see <a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/">JupyterLab next to your local database</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does dbt support a DATABASE_URL?</summary><p>No. The Postgres adapter takes host, port, user, password and database separately. Split the URL into environment variables and read them with env_var in profiles.yml.</p></details><details><summary>Where does dbt look for profiles.yml?</summary><p>In the project folder when you pass --profiles-dir ., otherwise in the .dbt folder of your home directory.</p></details><details><summary>What is the difference between dbt run and dbt build?</summary><p>run builds models only. build runs models, tests, seeds and snapshots in dependency order and stops downstream nodes when a test fails.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/"><span class="lbl">Guide</span><b>How to run ClickHouse locally for analytics development</b><span>ClickHouse is a column store for aggregating many rows fast. Running one locally is easy. Picking the sort key and keeping the data takes a little more care.</span></a><a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/"><span class="lbl">Guide</span><b>How to run JupyterLab next to your app&#39;s local database</b><span>Notebooks are the quickest way to look at your own data. The setup mistakes are an open server, lost notebooks and a database address that only works from your host.</span></a><a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/"><span class="lbl">Guide</span><b>How to run model training as a one-shot job in a local stack</b><span>Training is not a server. It runs, writes a result and stops. Treating it as a job keeps it from restarting forever and lets the API wait for the model.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

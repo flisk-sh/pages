@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run ClickHouse locally for analytics development</title>
+<meta name="description" content="Run ClickHouse in Docker, create a MergeTree table, load rows, query it from the play UI and from Python, and keep its data between runs of your local stack.">
+<meta name="keywords" content="clickhouse docker local, clickhouse local development, clickhouse mergetree example, clickhouse python connect, clickhouse play ui">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run ClickHouse locally for analytics development">
+<meta property="og:description" content="Run ClickHouse in Docker, create a MergeTree table, load rows, query it from the play UI and from Python, and keep its data between runs of your local stack.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run ClickHouse locally for analytics development","description":"Run ClickHouse in Docker, create a MergeTree table, load rows, query it from the play UI and from Python, and keep its data between runs of your local stack.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/","keywords":"clickhouse docker local, clickhouse local development, clickhouse mergetree example, clickhouse python connect, clickhouse play ui","wordCount":669,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to run ClickHouse locally for analytics development","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which port does ClickHouse use for HTTP?","acceptedAnswer":{"@type":"Answer","text":"8123 for HTTP and 9000 for the native protocol. Application libraries such as clickhouse-connect use HTTP."}},{"@type":"Question","name":"How do I keep ClickHouse data after docker stops?","acceptedAnswer":{"@type":"Answer","text":"Mount a volume at /var/lib/clickhouse. Without a volume the data is deleted when the container is removed."}},{"@type":"Question","name":"Can I update rows in ClickHouse?","acceptedAnswer":{"@type":"Answer","text":"Not efficiently. It is built for appending rows and aggregating them. Use a relational database for data that changes row by row."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to run ClickHouse locally for analytics development</h1><p class="dek">ClickHouse is a column store for aggregating many rows fast. Running one locally is easy. Picking the sort key and keeping the data takes a little more care.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#plain-docker">Plain Docker</a></li><li><a href="#a-table-that-fits-your-queries">A table that fits your queries</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run ClickHouse locally, start the official server image, publish its HTTP port (8123) on loopback, and keep <code>/var/lib/clickhouse</code> on a volume so the data survives a restart. Then create a <code>MergeTree</code> table whose <code>ORDER BY</code> matches how you filter, and query it over HTTP, in the built-in <code>/play</code> page, or from Python.</p>
+
+<h2 id="plain-docker">Plain Docker</h2>
+<pre><code>docker run -d --name ch \
+  -p 127.0.0.1:8123:8123 \
+  -e CLICKHOUSE_USER=default \
+  -e CLICKHOUSE_PASSWORD=flisk \
+  -e CLICKHOUSE_DB=app \
+  -v ch-data:/var/lib/clickhouse \
+  clickhouse/clickhouse-server:25.8-alpine</code></pre>
+<p>Check it with one request:</p>
+<pre><code>curl 'http://127.0.0.1:8123/?user=default&amp;password=flisk' --data-binary 'SELECT 1'</code></pre>
+<p>Port 8123 is HTTP, 9000 is the native protocol used by <code>clickhouse-client</code>. For application code HTTP is enough and passes through every proxy. Pin the image tag to a version you tested, because the default <code>latest</code> moves.</p>
+
+<h2 id="a-table-that-fits-your-queries">A table that fits your queries</h2>
+<p>A ClickHouse table has no row-by-row updates and no primary key in the relational sense. Its <code>ORDER BY</code> clause decides how data is sorted on disk, and queries that filter on the leading columns of that sort key read a small part of the data. Choose it from your most common <code>WHERE</code> clause:</p>
+<pre><code>CREATE TABLE app.events
+(
+    ts      DateTime,
+    user_id UInt64,
+    name    LowCardinality(String),
+    amount  Float64
+)
+ENGINE = MergeTree
+ORDER BY (name, ts);
+
+INSERT INTO app.events
+SELECT now() - number * 60, number % 50, ['view','click','buy'][number % 3 + 1], rand() % 100
+FROM numbers(100000);
+
+SELECT name, count() AS n, round(avg(amount), 1) AS avg_amount
+FROM app.events
+GROUP BY name ORDER BY n DESC;</code></pre>
+<p>Insert in batches of thousands of rows, never one row at a time. Each insert creates a data part on disk, and many tiny parts slow everything down. The built-in query page at <code>http://127.0.0.1:8123/play</code> is enough to try statements: enter the user and password in its fields, paste the query and run it.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk ships ClickHouse as a database preset:</p>
+<pre><code>flisk resource events --type database --framework clickhouse --stack ml --yes</code></pre>
+<p>This writes a <code>service.json</code> with a pinned image (<code>clickhouse/clickhouse-server:25.8-alpine</code>), a health check, a named volume for <code>/var/lib/clickhouse</code> that <code>flisk down</code> does not delete, and the play page published on <code>127.0.0.1:8123</code> only. The login is user <code>default</code>, password <code>flisk</code>, database <code>app</code>. Any service that lists <code>events</code> in <code>dependsOn</code> receives these variables:</p>
+<ul>
+<li><code>CLICKHOUSE_URL</code></li>
+<li><code>CLICKHOUSE_USER</code></li>
+<li><code>CLICKHOUSE_PASSWORD</code></li>
+<li><code>CLICKHOUSE_DB</code></li>
+</ul>
+<pre><code>flisk config verify
+flisk up ml
+flisk status
+flisk run events -- clickhouse-client --password flisk --query "SELECT version()"</code></pre>
+<p><code>flisk run</code> executes a command inside the running container, here the bundled client. See <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">running a one-off command in a service</a>. In a Python service, <code>clickhouse-connect</code> reads the provided variables. A real service needs to parse the host and port out of <code>CLICKHOUSE_URL</code>:</p>
+<pre><code>import os
+from urllib.parse import urlparse
+
+import clickhouse_connect
+
+u = urlparse(os.environ["CLICKHOUSE_URL"])
+client = clickhouse_connect.get_client(
+    host=u.hostname,
+    port=u.port or 8123,
+    username=os.environ["CLICKHOUSE_USER"],
+    password=os.environ["CLICKHOUSE_PASSWORD"],
+    database=os.environ["CLICKHOUSE_DB"],
+)
+rows = client.query("SELECT name, count() FROM events GROUP BY name").result_rows</code></pre>
+<p>Keep the table definition in a file in the repository and apply it from a one-shot job with <code>"restart": "no"</code>, the same way you would run migrations, see <a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/">running a one-shot job in a local stack</a>. To start from scratch, remove the volume: with Compose-style tools that is <code>docker volume rm</code> on the data volume after the stack is down, and see <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keeping volumes between runs</a> for how long-lived volumes behave.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>It is not your OLTP database.</strong> ClickHouse is good at scans and aggregates. It is bad at frequent updates and single-row lookups. Keep orders and accounts in Postgres and copy events into ClickHouse.</li>
+<li><strong>Memory.</strong> A large <code>GROUP BY</code> can use gigabytes. If the container is killed, raise its memory limit or add a <code>LIMIT</code> while developing.</li>
+<li><strong>Default credentials.</strong> The password <code>flisk</code> is for a laptop. The HTTP port stays on loopback, so keep it there.</li>
+<li><strong>Dataset size.</strong> For a few gigabytes of files you only query yourself, <a href="/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/">DuckDB on Parquet files</a> needs no server at all.</li>
+</ul>
+<p>To see the numbers on a page rather than in a console, put a small app on top, see <a href="/@odykyi/data-and-ml-local/streamlit-dashboard-next-to-your-api/">a Streamlit dashboard next to your API</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which port does ClickHouse use for HTTP?</summary><p>8123 for HTTP and 9000 for the native protocol. Application libraries such as clickhouse-connect use HTTP.</p></details><details><summary>How do I keep ClickHouse data after docker stops?</summary><p>Mount a volume at /var/lib/clickhouse. Without a volume the data is deleted when the container is removed.</p></details><details><summary>Can I update rows in ClickHouse?</summary><p>Not efficiently. It is built for appending rows and aggregating them. Use a relational database for data that changes row by row.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/"><span class="lbl">Guide</span><b>DuckDB and Parquet: local analytics without a server</b><span>For files on your disk, an embedded database beats a server. DuckDB reads Parquet directly, runs in your Python process and costs no setup.</span></a><a href="/@odykyi/data-and-ml-local/streamlit-dashboard-next-to-your-api/"><span class="lbl">Guide</span><b>How to run a Streamlit dashboard next to your local API</b><span>Streamlit turns a Python script into a web page. Next to an API it makes a quick internal dashboard, if you get the bind address and the API address right.</span></a><a href="/@odykyi/data-and-ml-local/dbt-with-postgres-locally/"><span class="lbl">Guide</span><b>How to run dbt with a local Postgres database</b><span>dbt turns SQL files into tables and views and tests them. Against a local Postgres it takes five minutes to set up, and the main trap is where the connection settings come from.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

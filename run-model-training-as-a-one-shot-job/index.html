@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run model training as a one-shot job in a local stack</title>
+<meta name="description" content="Run training once at stack start as a container that exits, log to MLflow, and start the model API only after it succeeds. Restart policy and dependsOn explained.">
+<meta name="keywords" content="run training job docker compose, one-shot container job local, ml training job local stack, docker restart no job, train model before api starts">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run model training as a one-shot job in a local stack">
+<meta property="og:description" content="Run training once at stack start as a container that exits, log to MLflow, and start the model API only after it succeeds. Restart policy and dependsOn explained.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run model training as a one-shot job in a local stack","description":"Run training once at stack start as a container that exits, log to MLflow, and start the model API only after it succeeds. Restart policy and dependsOn explained.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/","keywords":"run training job docker compose, one-shot container job local, ml training job local stack, docker restart no job, train model before api starts","wordCount":704,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to run model training as a one-shot job in a local stack","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my training container keep restarting?","acceptedAnswer":{"@type":"Answer","text":"The default restart policy restarts a container that exits cleanly. Set the restart policy to no for a one-shot job."}},{"@type":"Question","name":"How do I make the API wait for training to finish?","acceptedAnswer":{"@type":"Answer","text":"Make the API depend on the job with a completed-successfully condition. In Flisk, listing a restart-no job in dependsOn makes the service start only after the job exits with 0."}},{"@type":"Question","name":"Should training run in the same container as the API?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Training needs different dependencies and runs to completion, while the API runs continuously. Separate containers keep both simple."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to run model training as a one-shot job in a local stack</h1><p class="dek">Training is not a server. It runs, writes a result and stops. Treating it as a job keeps it from restarting forever and lets the API wait for the model.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-restart-policy-matters">Why the restart policy matters</a></li><li><a href="#the-job-itself">The job itself</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#iterate-without-a-rebuild">Iterate without a rebuild</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A training run is a one-shot job: a container that does its work and exits with code 0. Give it a restart policy of <code>no</code>, otherwise Docker starts it again every time it finishes. Make the model API depend on the job, so the API starts only after training succeeded and the model exists. If the job fails, nothing downstream starts, and the failure is visible instead of hidden.</p>
+
+<h2 id="why-the-restart-policy-matters">Why the restart policy matters</h2>
+<p>Containers are designed for servers. With a restart policy such as <code>unless-stopped</code>, a container that exits cleanly is started again, so a training script would retrain in a loop and fill your tracking server with runs. The fix is a policy of <code>no</code>. In plain Compose, that is <code>restart: "no"</code> on the service, and <code>depends_on</code> with <code>condition: service_completed_successfully</code> on whatever needs the result.</p>
+
+<h2 id="the-job-itself">The job itself</h2>
+<p>Keep the training code in its own folder with a Dockerfile:</p>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY train.py .
+CMD ["python", "train.py"]</code></pre>
+<p>Pin <code>mlflow</code> to the tracking server's version in <code>requirements.txt</code>, and pin <code>scikit-learn</code>. The script logs to the server named in <code>MLFLOW_TRACKING_URI</code> and registers the model under a name with an alias, so the API asks for "the champion" and never for a file path:</p>
+<pre><code>import mlflow
+import mlflow.sklearn
+from mlflow import MlflowClient
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import train_test_split
+
+X, y = load_iris(return_X_y=True)
+X_tr, X_te, y_tr, y_te = train_test_split(X, y, random_state=0)
+
+mlflow.set_experiment("iris")
+with mlflow.start_run():
+    model = LogisticRegression(max_iter=200).fit(X_tr, y_tr)
+    mlflow.log_param("max_iter", 200)
+    mlflow.log_metric("accuracy", model.score(X_te, y_te))
+    mlflow.sklearn.log_model(model, name="model", registered_model_name="iris")
+
+client = MlflowClient()
+newest = max(int(v.version) for v in client.search_model_versions("name='iris'"))
+client.set_registered_model_alias("iris", "champion", str(newest))</code></pre>
+<p>The API then loads <code>mlflow.sklearn.load_model("models:/iris@champion")</code> at startup, which needs the <code>mlflow</code> package in the API image too.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>You need a tracking server and the job. Create both in one stack:</p>
+<pre><code>flisk resource tracking --type database --framework mlflow --stack ml --yes
+flisk resource train --type bring-your-own --stack ml --dockerfile ./Dockerfile --restart no --yes</code></pre>
+<p>Put the Dockerfile and <code>train.py</code> in <code>services/ml/train</code>. The CLI writes <code>"restart": "no"</code> into <code>service.json</code>. Edit that file so the job waits for the tracking server and has no public route:</p>
+<pre><code>{
+  "appName": "train",
+  "appType": "bring-your-own",
+  "stack": "ml",
+  "port": 4002,
+  "dockerfile": "./Dockerfile",
+  "restart": "no",
+  "exposeViaProxy": false,
+  "dependsOn": ["tracking"]
+}</code></pre>
+<p>Because <code>tracking</code> declares <code>MLFLOW_TRACKING_URI</code> in its <code>provides</code>, the job gets the variable and <code>train.py</code> needs no address. Now make the model API wait for the job, and for the tracking server it will read from:</p>
+<pre><code>"dependsOn": ["tracking", "train"]</code></pre>
+<p>In Flisk, a service that lists a <code>restart: "no"</code> job in <code>dependsOn</code> starts only after the job exited with 0. If the job fails, the services after it are not started. Check it:</p>
+<pre><code>flisk config verify
+flisk up ml
+flisk status
+flisk logs --service train --tail 100</code></pre>
+<p>In <code>flisk status</code> the job should show as exited, not running. The run is in the MLflow UI at <code>http://127.0.0.1:5000</code>. This is the same pattern Flisk uses for database migrations, see <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">running migrations with a migrator</a>.</p>
+
+<h2 id="iterate-without-a-rebuild">Iterate without a rebuild</h2>
+<p>While you change the model, a container rebuild per experiment is slow. Run the script on your host against the published server and use the job for the clean, repeatable run:</p>
+<pre><code>export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+python train.py</code></pre>
+<p>To rerun the containerised job from scratch, stop the stack with <code>flisk down</code> and start it again. The tracking data is on a volume, so earlier runs stay.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A job that never exits.</strong> If the script waits on something, dependents wait forever. Add timeouts and exit non-zero on failure.</li>
+<li><strong>Data on the container filesystem.</strong> Anything the job writes outside a volume or the tracking server is gone when the container is removed.</li>
+<li><strong>Retrain on every start.</strong> This setup retrains each time you bring the stack up. For a long training, skip it when a model with the alias already exists, or keep training out of the default stack and start it on demand with <code>flisk up</code> on a stack that has it.</li>
+<li><strong>Reproducibility.</strong> Set random seeds and pin library versions, or two runs of the same code give different metrics.</li>
+</ul>
+<p>Next, put the registered model behind an endpoint with <a href="/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/">serving a scikit-learn model with FastAPI</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my training container keep restarting?</summary><p>The default restart policy restarts a container that exits cleanly. Set the restart policy to no for a one-shot job.</p></details><details><summary>How do I make the API wait for training to finish?</summary><p>Make the API depend on the job with a completed-successfully condition. In Flisk, listing a restart-no job in dependsOn makes the service start only after the job exits with 0.</p></details><details><summary>Should training run in the same container as the API?</summary><p>Usually not. Training needs different dependencies and runs to completion, while the API runs continuously. Separate containers keep both simple.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"><span class="lbl">Guide</span><b>How to run an MLflow tracking server locally for experiments</b><span>Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</span></a><a href="/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/"><span class="lbl">Guide</span><b>How to serve a scikit-learn model with FastAPI locally</b><span>A model behind an HTTP endpoint is just a web service that loads a file. The details that bite are when you load it, which versions you pin and how callers know it is ready.</span></a><a href="/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/"><span class="lbl">Guide</span><b>How to store MLflow artifacts in MinIO on your laptop</b><span>By default, MLflow artifacts sit in the same volume as its database. Moving them to an S3-compatible store looks like production and keeps the tracking volume small.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
