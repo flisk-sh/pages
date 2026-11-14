@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test eventual consistency without sleep calls</title>
+<meta name="description" content="Replace fixed sleeps in end-to-end tests with a polling helper that waits for the result, fails with a clear message and uses unique ids per test.">
+<meta name="keywords" content="test eventual consistency, wait for async event in test, flaky end-to-end tests events, polling helper test, asynchronous integration test">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/test-eventual-consistency/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test eventual consistency without sleep calls">
+<meta property="og:description" content="Replace fixed sleeps in end-to-end tests with a polling helper that waits for the result, fails with a clear message and uses unique ids per test.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/test-eventual-consistency/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test eventual consistency without sleep calls","description":"Replace fixed sleeps in end-to-end tests with a polling helper that waits for the result, fails with a clear message and uses unique ids per test.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/test-eventual-consistency/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/test-eventual-consistency/","keywords":"test eventual consistency, wait for async event in test, flaky end-to-end tests events, polling helper test, asynchronous integration test","wordCount":808,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to test eventual consistency without sleep calls","item":"https://pages.flisk.si/@odykyi/event-driven-local/test-eventual-consistency/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long should the timeout be in an eventual consistency test?","acceptedAnswer":{"@type":"Answer","text":"Long enough for a slow machine, short enough that a real failure is reported quickly. For a local pipeline that normally settles in well under a second, ten seconds is a common choice."}},{"@type":"Question","name":"Can I use a test library's built-in wait function?","acceptedAnswer":{"@type":"Answer","text":"Yes. Libraries such as Playwright and Testing Library have retrying assertions, and Awaitility does this on the JVM. The helper in this article is the same idea in a few lines for plain API tests."}},{"@type":"Question","name":"How do I test that an event was not processed?","acceptedAnswer":{"@type":"Answer","text":"Wait for a later marker event to be processed first, then assert the absence. Or assert on a record the consumer writes when it intentionally skips an event."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to test eventual consistency without sleep calls</h1><p class="dek">A test that sleeps for two seconds is slow when the system is fast and flaky when it is slow. Poll for the outcome instead.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-sleep-is-the-wrong-tool">Why sleep is the wrong tool</a></li><li><a href="#an-eventually-helper">An eventually helper</a></li><li><a href="#asserting-that-something-did-not-happen">Asserting that something did not happen</a></li><li><a href="#check-the-stack-is-ready-first">Check the stack is ready first</a></li><li><a href="#tune-the-timeout-not-the-interval">Tune the timeout, not the interval</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>In an event-driven system, the effect of an action shows up later, so a test must wait for it. Do not call <code>sleep</code>. Write a small <code>eventually</code> helper that runs a check repeatedly until it passes or a timeout expires, and have the test fail with the last observed value so you can see what was missing.</p>
+
+<h2 id="why-sleep-is-the-wrong-tool">Why sleep is the wrong tool</h2>
+<p>A fixed sleep has to be longer than the slowest case you ever see, so every test pays the worst-case price, and it still fails on a loaded CI machine. Worse, it hides real problems: a test that passes after a three second sleep may be telling you that a consumer is slow. Polling returns as soon as the condition holds, so the common case is fast, and the timeout only matters when something is broken.</p>
+
+<h2 id="an-eventually-helper">An eventually helper</h2>
+<pre><code>export async function eventually(check, { timeoutMs = 10000, everyMs = 100 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() &lt; deadline) {
+    try {
+      last = await check();
+      if (last) return last;
+    } catch (err) {
+      last = err;
+    }
+    await new Promise((r) =&gt; setTimeout(r, everyMs));
+  }
+  throw new Error(`timed out after ${timeoutMs} ms, last result: ${JSON.stringify(last)}`);
+}</code></pre>
+<p>Use it with a check that returns something truthy when the condition is met:</p>
+<pre><code>test("placing an order creates an invoice", async () =&gt; {
+  const orderId = crypto.randomUUID();
+  await fetch(`${API}/orders`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: orderId, total: 4200 }),
+  });
+
+  const invoice = await eventually(async () =&gt; {
+    const res = await fetch(`${BILLING}/invoices?orderId=${orderId}`);
+    const rows = await res.json();
+    return rows.length === 1 ? rows[0] : null;
+  });
+
+  expect(invoice.total).toBe(4200);
+});</code></pre>
+<p>The pieces that make this reliable:</p>
+<ul>
+<li><strong>A unique id per test.</strong> The test creates its own order id and looks only for that one. Parallel tests and leftovers from an earlier run cannot confuse it.</li>
+<li><strong>Assert the exact count.</strong> Checking <code>rows.length === 1</code>, not "at least one", is how a duplicate-processing bug shows up.</li>
+<li><strong>A clear failure.</strong> The error includes the last value. "last result: null" and "last result: two rows" point at different bugs.</li>
+</ul>
+
+<h2 id="asserting-that-something-did-not-happen">Asserting that something did not happen</h2>
+<p>"No email is sent for a cancelled order" cannot be polled for, because absence has no moment where it becomes true. Two honest options. First, test the cause: assert that the consumer logged or recorded that it skipped the event. Second, publish a marker event after the one you care about, wait until the marker's effect is visible, and then assert the absence. Events on one stream are handled in order by a single consumer, so once the marker is processed, the earlier event has been too. State this assumption in a comment, because it fails with several consumers.</p>
+
+<h2 id="check-the-stack-is-ready-first">Check the stack is ready first</h2>
+<p>Many "eventual" failures are really a consumer that has not started yet. Make the test run wait for readiness before the first action. With Flisk, <code>flisk status --strict</code> exits with code 1 when any service is not ready or nothing is running, so it works as a gate in a shell script:</p>
+<pre><code>flisk up shop
+until flisk status --strict; do sleep 2; done
+bun test e2e/</code></pre>
+<p>Add a limit to that loop in CI so a broken stack fails instead of hanging. When a test times out, the quickest next look is <code>flisk logs --service billing --since 2m</code>, which prints the last two minutes of that service's output. For the wider setup of tests against a running stack, see <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a> and <a href="/@odykyi/testing-and-shipping/playwright-against-a-local-stack/">Playwright against a local stack</a>.</p>
+
+<h2 id="tune-the-timeout-not-the-interval">Tune the timeout, not the interval</h2>
+<p>Choose the timeout from what the system promises. If the pipeline normally settles in under a second, ten seconds leaves room for a slow machine, and failing at ten seconds is still quick. A very short interval, under 50 ms, mostly adds load. For tests that need to be repeatable, also make the system deterministic where you can: use a fixed clock, and avoid retry delays in the test environment by setting them to a few milliseconds through configuration.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Shared data.</strong> Tests that read "the latest invoice" instead of their own break when run in parallel.</li>
+<li><strong>Swallowing errors.</strong> If <code>check</code> throws a typo error, the helper keeps retrying for ten seconds. The last error in the message tells you which it was, so do read it.</li>
+<li><strong>Polling an internal table.</strong> Prefer asserting through a public API or read model, which is what users depend on. Querying the database directly couples the test to the schema.</li>
+<li><strong>Unit tests that poll.</strong> A pure function does not need waiting. Keep polling for end-to-end tests only.</li>
+</ul>
+<p>When a test times out and the log is silent, the question becomes where the event went. <a href="/@odykyi/event-driven-local/debug-event-never-delivered/">Debugging an event that never arrived</a> goes through it in order.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long should the timeout be in an eventual consistency test?</summary><p>Long enough for a slow machine, short enough that a real failure is reported quickly. For a local pipeline that normally settles in well under a second, ten seconds is a common choice.</p></details><details><summary>Can I use a test library&#39;s built-in wait function?</summary><p>Yes. Libraries such as Playwright and Testing Library have retrying assertions, and Awaitility does this on the JVM. The helper in this article is the same idea in a few lines for plain API tests.</p></details><details><summary>How do I test that an event was not processed?</summary><p>Wait for a later marker event to be processed first, then assert the absence. Or assert on a record the consumer writes when it intentionally skips an event.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/"><span class="lbl">Guide</span><b>How to keep events in order for one entity</b><span>You do not need the whole stream in order. You need the events for one order, one account or one user in order, and that is a much easier promise to keep.</span></a><a href="/@odykyi/event-driven-local/debug-event-never-delivered/"><span class="lbl">Guide</span><b>Why your event was never delivered: a debugging checklist</b><span>An event vanished somewhere between two services. Do not guess. Follow it hop by hop and stop at the first place it is missing.</span></a><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

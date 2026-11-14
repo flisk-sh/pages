@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to make an event consumer idempotent with a dedupe table</title>
+<meta name="description" content="Brokers deliver events at least once, so duplicates will come. Record each event id in Postgres in the same transaction as the work, and skip repeats.">
+<meta name="keywords" content="idempotent consumer, event deduplication, at-least-once delivery, processed events table, duplicate messages">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/idempotent-event-consumer/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to make an event consumer idempotent with a dedupe table">
+<meta property="og:description" content="Brokers deliver events at least once, so duplicates will come. Record each event id in Postgres in the same transaction as the work, and skip repeats.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/idempotent-event-consumer/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to make an event consumer idempotent with a dedupe table","description":"Brokers deliver events at least once, so duplicates will come. Record each event id in Postgres in the same transaction as the work, and skip repeats.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/idempotent-event-consumer/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/idempotent-event-consumer/","keywords":"idempotent consumer, event deduplication, at-least-once delivery, processed events table, duplicate messages","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to make an event consumer idempotent with a dedupe table","item":"https://pages.flisk.si/@odykyi/event-driven-local/idempotent-event-consumer/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between idempotent and exactly-once?","acceptedAnswer":{"@type":"Answer","text":"Exactly-once delivery cannot be achieved in general across a network. An idempotent consumer gets exactly-once effects on top of at-least-once delivery, by making repeated handling harmless."}},{"@type":"Question","name":"How long should I keep rows in the processed events table?","acceptedAnswer":{"@type":"Answer","text":"At least as long as the broker can redeliver the same message, plus a margin. A few days is common. After that a duplicate would be treated as new, so choose a window longer than any retry or replay you expect."}},{"@type":"Question","name":"Can I deduplicate in the broker instead?","acceptedAnswer":{"@type":"Answer","text":"Partly. Some brokers drop duplicate publishes within a short window, but that does not cover redelivery to a consumer after a crash. Keep the consumer-side guard."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to make an event consumer idempotent with a dedupe table</h1><p class="dek">If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-duplicates-are-normal">Why duplicates are normal</a></li><li><a href="#the-dedupe-table">The dedupe table</a></li><li><a href="#when-the-side-effect-is-not-in-your-database">When the side effect is not in your database</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>An idempotent consumer produces the same result whether it handles an event once or five times. The simplest way to get there is a <code>processed_events</code> table with the event id as primary key: in one transaction, insert the id and do the work, and if the insert finds the id already there, skip the work.</p>
+
+<h2 id="why-duplicates-are-normal">Why duplicates are normal</h2>
+<p>Most brokers promise at-least-once delivery, not exactly-once. A message is redelivered when a consumer crashes before it acknowledges, when an acknowledgement is lost, when a visibility timeout expires on a slow job, or when a producer retries after a timeout. A transactional outbox adds one more source, see <a href="/@odykyi/event-driven-local/transactional-outbox-postgres/">the outbox article</a>. You cannot remove duplicates at the broker. You handle them in the consumer.</p>
+<p>Some operations are naturally idempotent: "set the status to shipped" gives the same row however often you run it. Others are not: "add 10 to the balance", "send the welcome email", "insert a row". Those need a guard.</p>
+
+<h2 id="the-dedupe-table">The dedupe table</h2>
+<pre><code>CREATE TABLE processed_events (
+  consumer     text        NOT NULL,
+  event_id     uuid        NOT NULL,
+  processed_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (consumer, event_id)
+);</code></pre>
+<p>The <code>consumer</code> column lets several consumers in one database track the same event separately. The event id must come from the producer, never from the consumer: generate it once when the event is created, as the outbox does.</p>
+<p>The handler claims the id and does the work in one transaction:</p>
+<pre><code>async function handle(event) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const claim = await client.query(
+      `INSERT INTO processed_events (consumer, event_id)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      ["billing", event.id]
+    );
+    if (claim.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return; // seen before, acknowledge and move on
+    }
+    await client.query(
+      "UPDATE accounts SET balance = balance + $1 WHERE id = $2",
+      [event.data.amount, event.data.accountId]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err; // do not acknowledge, the broker will redeliver
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>The order matters. Because the claim and the balance update commit together, a crash in the middle rolls back both, and the redelivered event is processed from scratch. If you inserted the id first in its own transaction and crashed before the update, the event would be marked done and the work lost.</p>
+<p>Acknowledge the message only after <code>handle</code> returns. Acknowledging a duplicate is correct: you have handled it, by doing nothing.</p>
+
+<h2 id="when-the-side-effect-is-not-in-your-database">When the side effect is not in your database</h2>
+<p>The trick only works when the effect and the claim share a transaction. Sending an email or calling a payment API cannot join it. Two options:</p>
+<ul>
+<li>Pass the event id as an idempotency key to the other system, if it supports one. Many payment APIs do.</li>
+<li>Write the intent to your own table in the transaction (an <code>emails_to_send</code> row, keyed by event id) and let a separate worker perform it. The worker's own retries then need the same care.</li>
+</ul>
+<p>There is always a small window when an external call succeeds and your commit fails. Design the external call so that repeating it is harmless.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>The setup is a database and a queue next to your consumer service:</p>
+<pre><code>flisk resource shop-db --type database --stack shop --yes
+flisk resource bus --type queue --stack shop --yes
+flisk resource billing --type worker --stack shop --yes</code></pre>
+<p>Put <code>"dependsOn": ["shop-db", "bus"]</code> in the worker's <code>service.json</code>, and it receives <code>DATABASE_URL</code> and <code>NATS_URL</code>, as described in the Flisk docs. Create <code>processed_events</code> in a migration. To prove the guard works, replay one event on purpose from a script with <code>flisk run billing -- bun run scripts/send-duplicate.ts</code>, where the script publishes the same event id twice, and then check the balance changed once. A test that sends each event twice is the best regression test you can write for this.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Same id, different content.</strong> If a producer reuses an id for a changed event, the consumer drops the update. Treat the id as the identity of one fact.</li>
+<li><strong>Unbounded growth.</strong> The table gets a row per event. Delete rows older than your longest redelivery window, a few days is usual, with a scheduled job.</li>
+<li><strong>Wrong key.</strong> A random id generated in the consumer on each delivery never matches, and nothing is deduplicated.</li>
+<li><strong>Check-then-insert.</strong> A <code>SELECT</code> to see if the id exists, then an <code>INSERT</code>, races when two copies run at once. Let the primary key decide.</li>
+</ul>
+<p>Deduplication solves repeats, not disorder. If events for the same entity can arrive out of sequence, read <a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/">keeping events in order per entity</a> next.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between idempotent and exactly-once?</summary><p>Exactly-once delivery cannot be achieved in general across a network. An idempotent consumer gets exactly-once effects on top of at-least-once delivery, by making repeated handling harmless.</p></details><details><summary>How long should I keep rows in the processed events table?</summary><p>At least as long as the broker can redeliver the same message, plus a margin. A few days is common. After that a duplicate would be treated as new, so choose a window longer than any retry or replay you expect.</p></details><details><summary>Can I deduplicate in the broker instead?</summary><p>Partly. Some brokers drop duplicate publishes within a short window, but that does not cover redelivery to a consumer after a crash. Keep the consumer-side guard.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/transactional-outbox-postgres/"><span class="lbl">Guide</span><b>How to use the transactional outbox pattern with Postgres</b><span>Saving data and publishing an event are two writes to two systems, and one of them can fail. An outbox table turns them into one.</span></a><a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/"><span class="lbl">Guide</span><b>How to keep events in order for one entity</b><span>You do not need the whole stream in order. You need the events for one order, one account or one user in order, and that is a much easier promise to keep.</span></a><a href="/@odykyi/event-driven-local/test-eventual-consistency/"><span class="lbl">Guide</span><b>How to test eventual consistency without sleep calls</b><span>A test that sleeps for two seconds is slow when the system is fast and flaky when it is slow. Poll for the outcome instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

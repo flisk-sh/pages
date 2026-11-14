@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep events in order for one entity</title>
+<meta name="description" content="Brokers rarely guarantee global order. Put a per-entity version number in each event and have the consumer apply, ignore or park events accordingly.">
+<meta name="keywords" content="event ordering, out of order events, per aggregate ordering, event sequence number, message ordering guarantee">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/keep-events-in-order-per-entity/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep events in order for one entity">
+<meta property="og:description" content="Brokers rarely guarantee global order. Put a per-entity version number in each event and have the consumer apply, ignore or park events accordingly.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/keep-events-in-order-per-entity/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep events in order for one entity","description":"Brokers rarely guarantee global order. Put a per-entity version number in each event and have the consumer apply, ignore or park events accordingly.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/keep-events-in-order-per-entity/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/keep-events-in-order-per-entity/","keywords":"event ordering, out of order events, per aggregate ordering, event sequence number, message ordering guarantee","wordCount":803,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to keep events in order for one entity","item":"https://pages.flisk.si/@odykyi/event-driven-local/keep-events-in-order-per-entity/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does a message queue guarantee ordering?","acceptedAnswer":{"@type":"Answer","text":"Usually only within narrow limits, for example per partition or per single consumer, and redelivery of failed messages can still break it. Design the consumer to detect out-of-order events instead of assuming order."}},{"@type":"Question","name":"Is a timestamp good enough to order events?","acceptedAnswer":{"@type":"Answer","text":"Rarely. Clocks differ between services, and two events can share a millisecond. A per-entity version number assigned in the same transaction as the change is reliable."}},{"@type":"Question","name":"What if I only need the latest state?","acceptedAnswer":{"@type":"Answer","text":"Then ordering matters less. Store the version or timestamp with the state and ignore any event older than what you hold, so a late event cannot overwrite newer data."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to keep events in order for one entity</h1><p class="dek">You do not need the whole stream in order. You need the events for one order, one account or one user in order, and that is a much easier promise to keep.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#where-disorder-comes-from">Where disorder comes from</a></li><li><a href="#number-the-events-per-entity">Number the events per entity</a></li><li><a href="#the-consumer-rule">The consumer rule</a></li><li><a href="#what-to-do-with-a-gap">What to do with a gap</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>You cannot rely on events arriving in the order they were created, but you can make the consumer detect disorder. Give every event a version number that counts up per entity (per order, per account), and have the consumer apply an event only when its version is exactly one more than the last it applied. Older versions are ignored, and gaps are parked until the missing event arrives.</p>
+
+<h2 id="where-disorder-comes-from">Where disorder comes from</h2>
+<p>Even a single queue can deliver events out of order. A failed message is redelivered after later ones have already been handled. Two consumer instances take consecutive messages and finish in the opposite order. A producer publishes from two processes. A retry sends an old event after a newer one. Global ordering would need one producer and one consumer handling one message at a time, which removes the reason to use a queue.</p>
+<p>The useful guarantee is smaller: events about the same entity are applied in order. Different entities may interleave freely.</p>
+
+<h2 id="number-the-events-per-entity">Number the events per entity</h2>
+<p>The producer owns the counter. If you already store entity changes in a table, the version can be a column that increments in the same transaction that changes the entity:</p>
+<pre><code>UPDATE orders
+SET status = $2, version = version + 1
+WHERE id = $1
+RETURNING version;</code></pre>
+<p>The returned <code>version</code> goes into the event next to the order id. Because the update takes a row lock, two concurrent changes to one order get different versions, in commit order. Put both the entity id and the version in the envelope, see <a href="/@odykyi/event-driven-local/version-event-schemas/">versioning event schemas</a> for the other fields.</p>
+
+<h2 id="the-consumer-rule">The consumer rule</h2>
+<p>The consumer keeps the last applied version per entity and compares:</p>
+<ul>
+<li><strong>version = last + 1:</strong> apply it and store the new last version.</li>
+<li><strong>version &lt;= last:</strong> it is a duplicate or stale event, skip it and acknowledge.</li>
+<li><strong>version &gt; last + 1:</strong> something is missing. Do not apply it.</li>
+</ul>
+<pre><code>async function apply(client, e) {
+  const cur = await client.query(
+    "SELECT version FROM order_view WHERE id = $1 FOR UPDATE",
+    [e.data.orderId]
+  );
+  const last = cur.rows[0]?.version ?? 0;
+
+  if (e.data.version &lt;= last) return "skip";
+  if (e.data.version &gt; last + 1) return "gap";
+
+  await client.query(
+    `INSERT INTO order_view (id, status, version) VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET status = $2, version = $3`,
+    [e.data.orderId, e.data.status, e.data.version]
+  );
+  return "applied";
+}</code></pre>
+<p>The row lock with <code>FOR UPDATE</code> stops two workers from applying versions 3 and 4 of the same order at once. A first event for a new entity finds no row, so <code>last</code> is 0 and version 1 is accepted.</p>
+
+<h2 id="what-to-do-with-a-gap">What to do with a gap</h2>
+<p>You have three honest options, and the right one depends on how a gap can happen in your system:</p>
+<ol>
+<li><strong>Reject and let the broker redeliver.</strong> Do not acknowledge, or negatively acknowledge with a delay. The missing event is usually just late, and the redelivery will succeed after it arrives. Limit the attempts, or a lost event blocks that entity forever.</li>
+<li><strong>Park it.</strong> Save the event in a <code>pending_events</code> table keyed by entity and version, and after each successful apply check whether the next version is waiting.</li>
+<li><strong>Fetch the truth.</strong> Call the producer's API for the current state and overwrite, which makes you self-healing but couples you to the producer.</li>
+</ol>
+<p>For local work, option one with a small retry count is the easiest to build and to test, see <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">testing consumer retries locally</a>.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk does not reorder anything for you: ordering is a property of your events and your consumer. What it gives you is a way to reproduce disorder on your machine. Run a queue and a consumer as usual (<code>flisk resource bus --type queue --stack shop</code>, <code>flisk resource order-view --type worker --stack shop</code>, and <code>"dependsOn": ["bus"]</code> in the consumer), then use a test script that publishes versions 1, 3, 2 and 2 again, started with <code>flisk run order-view -- bun run scripts/out-of-order.ts</code>. Assert that the final view is at version 3 with the right status. Run the script after every change to the consumer.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Per-entity counters that skip numbers.</strong> A database sequence can leave gaps after a rollback, so a counter taken from one is unsafe here. Increment a column in the entity row instead.</li>
+<li><strong>Ordering across entities.</strong> Do not depend on "customer created" arriving before "order created". Make the consumer cope, for example by creating a placeholder customer row.</li>
+<li><strong>One slow entity blocks the rest.</strong> If you retry gaps in place, one stuck order holds the queue. Park it and move on.</li>
+<li><strong>Too much machinery.</strong> If the consumer overwrites the whole state from each event, ordering errors only matter for the last event. Compare timestamps or versions and keep the newest.</li>
+</ul>
+<p>Next, a way to see this working end to end: <a href="/@odykyi/event-driven-local/test-eventual-consistency/">testing eventual consistency</a> without sleeps.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does a message queue guarantee ordering?</summary><p>Usually only within narrow limits, for example per partition or per single consumer, and redelivery of failed messages can still break it. Design the consumer to detect out-of-order events instead of assuming order.</p></details><details><summary>Is a timestamp good enough to order events?</summary><p>Rarely. Clocks differ between services, and two events can share a millisecond. A per-entity version number assigned in the same transaction as the change is reliable.</p></details><details><summary>What if I only need the latest state?</summary><p>Then ordering matters less. Store the version or timestamp with the state and ignore any event older than what you hold, so a late event cannot overwrite newer data.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a><a href="/@odykyi/event-driven-local/version-event-schemas/"><span class="lbl">Guide</span><b>How to version event schemas without breaking consumers</b><span>A producer can ship on Tuesday. A consumer might ship next month, or be replaying events from last year. The schema has to survive both.</span></a><a href="/@odykyi/event-driven-local/test-eventual-consistency/"><span class="lbl">Guide</span><b>How to test eventual consistency without sleep calls</b><span>A test that sleeps for two seconds is slow when the system is fast and flaky when it is slow. Poll for the outcome instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

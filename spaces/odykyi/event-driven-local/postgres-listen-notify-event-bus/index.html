@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use Postgres LISTEN/NOTIFY as a lightweight event bus</title>
+<meta name="description" content="NOTIFY wakes listeners when a transaction commits, but it does not store messages. Use it as a wake-up signal on top of a table, with Node examples.">
+<meta name="keywords" content="postgres listen notify, pg_notify node, postgres pub sub, notify trigger postgres, postgres as message bus">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/postgres-listen-notify-event-bus/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use Postgres LISTEN/NOTIFY as a lightweight event bus">
+<meta property="og:description" content="NOTIFY wakes listeners when a transaction commits, but it does not store messages. Use it as a wake-up signal on top of a table, with Node examples.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/postgres-listen-notify-event-bus/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use Postgres LISTEN/NOTIFY as a lightweight event bus","description":"NOTIFY wakes listeners when a transaction commits, but it does not store messages. Use it as a wake-up signal on top of a table, with Node examples.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/postgres-listen-notify-event-bus/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/postgres-listen-notify-event-bus/","keywords":"postgres listen notify, pg_notify node, postgres pub sub, notify trigger postgres, postgres as message bus","wordCount":728,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to use Postgres LISTEN/NOTIFY as a lightweight event bus","item":"https://pages.flisk.si/@odykyi/event-driven-local/postgres-listen-notify-event-bus/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Postgres NOTIFY guarantee delivery?","acceptedAnswer":{"@type":"Answer","text":"No. A notification reaches only sessions that are listening when the transaction commits. Anyone disconnected misses it. Keep the data in a table and use NOTIFY only to wake the reader."}},{"@type":"Question","name":"What is the maximum NOTIFY payload size?","acceptedAnswer":{"@type":"Answer","text":"Under 8000 bytes in a default Postgres build. Send an id and have the listener read the row."}},{"@type":"Question","name":"Can I use LISTEN/NOTIFY through PgBouncer?","acceptedAnswer":{"@type":"Answer","text":"Not in transaction pooling mode, because the session that issued LISTEN can be reassigned. Use a direct connection or session pooling for the listener."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to use Postgres LISTEN/NOTIFY as a lightweight event bus</h1><p class="dek">Postgres can push a message to waiting clients when a transaction commits. It is a good wake-up call and a poor message queue.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-basics">The basics</a></li><li><a href="#what-it-does-not-do">What it does not do</a></li><li><a href="#table-for-truth-notify-for-speed">Table for truth, notify for speed</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Postgres <code>LISTEN</code> and <code>NOTIFY</code> let one connection subscribe to a named channel and be woken when another session sends a notification on it. Notifications are delivered only when the sending transaction commits, they are not stored, and the payload is limited to under 8000 bytes. So use them as a signal that says "look at the table now", and keep the data in the table.</p>
+
+<h2 id="the-basics">The basics</h2>
+<p>In two <code>psql</code> sessions:</p>
+<pre><code>-- session A
+LISTEN order_events;
+
+-- session B
+NOTIFY order_events, 'order 123 created';
+-- or from code or a trigger:
+SELECT pg_notify('order_events', 'order 123 created');</code></pre>
+<p>Session A receives the message the next time it checks, and <code>psql</code> prints it after its next command. The channel name is an identifier, so keep it lowercase and simple. Notifications sent inside a transaction that rolls back are never delivered, which is why this works well with data changes: the signal exists only if the data does.</p>
+
+<h2 id="what-it-does-not-do">What it does not do</h2>
+<ul>
+<li><strong>No storage.</strong> If nobody is listening when the notification is sent, it is gone. A service that restarts misses everything sent while it was down.</li>
+<li><strong>No acknowledgement and no retry.</strong> Postgres does not know whether your handler worked.</li>
+<li><strong>No consumer groups.</strong> Every listener gets every message, so two copies of a worker both react.</li>
+<li><strong>Small payloads.</strong> Under 8000 bytes in the default configuration. Send an id, not the record.</li>
+<li><strong>Identical notifications can merge.</strong> Inside one transaction, repeats of the same channel and payload are delivered once.</li>
+</ul>
+<p>These limits are why LISTEN/NOTIFY should not replace a queue for work that must happen. They are also why it pairs well with a table.</p>
+
+<h2 id="table-for-truth-notify-for-speed">Table for truth, notify for speed</h2>
+<p>The robust design: write the work to a table (an outbox, see <a href="/@odykyi/event-driven-local/transactional-outbox-postgres/">the outbox article</a>), and send a notification from a trigger so the relay wakes immediately instead of waiting for its next poll:</p>
+<pre><code>CREATE FUNCTION notify_outbox() RETURNS trigger AS $$
+BEGIN
+  PERFORM pg_notify('outbox', NEW.id::text);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER outbox_notify
+AFTER INSERT ON outbox
+FOR EACH ROW EXECUTE FUNCTION notify_outbox();</code></pre>
+<p>The listener does three things: it listens on a dedicated connection, drains the table when a notification arrives, and also drains on a timer and at startup, so a missed notification costs only a delay:</p>
+<pre><code>import pg from "pg";
+
+const listener = new pg.Client({ connectionString: process.env.DATABASE_URL });
+await listener.connect();
+await listener.query("LISTEN outbox");
+
+let running = false;
+async function drain() {
+  if (running) return;
+  running = true;
+  try {
+    while ((await drainOnce()) &gt; 0) {}   // drainOnce: your batch query
+  } finally {
+    running = false;
+  }
+}
+
+listener.on("notification", () =&gt; drain());
+setInterval(drain, 5000);   // safety net for missed notifications
+await drain();              // catch up on start</code></pre>
+<p>The guard flag collapses a burst of notifications into one drain loop. The timer is not optional: it is what makes the design correct, with the notification only making it fast.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>This needs nothing beyond Postgres, which Flisk runs as a database resource:</p>
+<pre><code>flisk resource shop-db --type database --stack shop --yes
+flisk resource outbox-relay --type worker --stack shop --yes</code></pre>
+<p>With <code>"dependsOn": ["shop-db"]</code> in the relay, it receives <code>DATABASE_URL</code> according to the Flisk docs. Create the trigger in a migration, see <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>. I did not test notifications through the Flisk-managed Postgres, but the feature is part of Postgres itself, so the quickest check is to insert a row and watch the relay's output with <code>flisk logs --service outbox-relay --since 1m</code>. Use a direct database connection for the listener; see the pitfall below about poolers.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Connection poolers.</strong> A listener needs a long-lived session. A pooler in transaction mode, such as PgBouncer, can hand your connection to someone else, and the subscription is lost. Connect the listener directly.</li>
+<li><strong>Reconnects.</strong> After a dropped connection, <code>LISTEN</code> is gone. Re-run it on reconnect and drain the table, because you missed notifications while disconnected.</li>
+<li><strong>Do not use a pool client.</strong> A pooled connection returned to the pool keeps listening or loses its state. Use one dedicated <code>pg.Client</code>.</li>
+<li><strong>Heavy fan-out.</strong> Notifying on every row change of a busy table adds load at commit time. Notify per batch or per entity if you see contention.</li>
+</ul>
+<p>For two or three services on a laptop, a trigger and a timer are enough. When you need several competing consumers with retries, move to a real broker, as in <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Postgres NOTIFY guarantee delivery?</summary><p>No. A notification reaches only sessions that are listening when the transaction commits. Anyone disconnected misses it. Keep the data in a table and use NOTIFY only to wake the reader.</p></details><details><summary>What is the maximum NOTIFY payload size?</summary><p>Under 8000 bytes in a default Postgres build. Send an id and have the listener read the row.</p></details><details><summary>Can I use LISTEN/NOTIFY through PgBouncer?</summary><p>Not in transaction pooling mode, because the session that issued LISTEN can be reassigned. Use a direct connection or session pooling for the listener.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/transactional-outbox-postgres/"><span class="lbl">Guide</span><b>How to use the transactional outbox pattern with Postgres</b><span>Saving data and publishing an event are two writes to two systems, and one of them can fail. An outbox table turns them into one.</span></a><a href="/@odykyi/event-driven-local/debug-event-never-delivered/"><span class="lbl">Guide</span><b>Why your event was never delivered: a debugging checklist</b><span>An event vanished somewhere between two services. Do not guess. Follow it hop by hop and stop at the first place it is missing.</span></a><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

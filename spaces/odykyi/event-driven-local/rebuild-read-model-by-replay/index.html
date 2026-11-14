@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to rebuild a read model by replaying events</title>
+<meta name="description" content="Build the new table beside the old one, replay events from the start with a checkpoint, then switch over. Covers the commit-order trap with bigserial positions.">
+<meta name="keywords" content="rebuild read model, replay events projection, event projection checkpoint, cqrs read model, projection rebuild">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/rebuild-read-model-by-replay/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to rebuild a read model by replaying events">
+<meta property="og:description" content="Build the new table beside the old one, replay events from the start with a checkpoint, then switch over. Covers the commit-order trap with bigserial positions.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/rebuild-read-model-by-replay/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to rebuild a read model by replaying events","description":"Build the new table beside the old one, replay events from the start with a checkpoint, then switch over. Covers the commit-order trap with bigserial positions.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/rebuild-read-model-by-replay/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/rebuild-read-model-by-replay/","keywords":"rebuild read model, replay events projection, event projection checkpoint, cqrs read model, projection rebuild","wordCount":883,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to rebuild a read model by replaying events","item":"https://pages.flisk.si/@odykyi/event-driven-local/rebuild-read-model-by-replay/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How is a read model different from a cache?","acceptedAnswer":{"@type":"Answer","text":"A cache can be dropped and refilled on demand from the source of truth. A read model is built from the event history by a handler, shaped for queries, and kept up to date continuously. It is rebuilt rather than refilled on a miss."}},{"@type":"Question","name":"Can I rebuild a read model without downtime?","acceptedAnswer":{"@type":"Answer","text":"Yes. Build a new table beside the old one with its own checkpoint, let it catch up, switch reads to it and then drop the old table."}},{"@type":"Question","name":"Do I need event sourcing to have read models?","acceptedAnswer":{"@type":"Answer","text":"No. You can project from any ordered stream of events, including events published by other services, as long as you can replay them from a known position."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to rebuild a read model by replaying events</h1><p class="dek">A read model is disposable. If you can rebuild it from the events, you can change its shape whenever the questions change.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-projection-is">What a projection is</a></li><li><a href="#store-a-checkpoint">Store a checkpoint</a></li><li><a href="#the-rebuild-procedure">The rebuild procedure</a></li><li><a href="#the-commit-order-trap">The commit-order trap</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To rebuild a read model, create the new table next to the old one, read every event from the start in order, apply each to the new table while saving a checkpoint of the last position handled, and when it has caught up with the live stream, point queries at the new table and drop the old one. The events stay untouched throughout.</p>
+
+<h2 id="what-a-projection-is">What a projection is</h2>
+<p>A projection (or read model) is a table built from events for one kind of question: "orders per customer", "stock by warehouse", "revenue by day". It is derived data. When you add a column, fix a bug in the handler or want a new view, you do not migrate it, you rebuild it. That only works if the events are complete and your handlers are deterministic: same events in, same table out. Avoid calling other services or reading the clock inside a projection handler.</p>
+
+<h2 id="store-a-checkpoint">Store a checkpoint</h2>
+<p>A projection needs to remember how far it has read, so a restart continues instead of starting over:</p>
+<pre><code>CREATE TABLE projection_checkpoints (
+  name     text PRIMARY KEY,
+  position bigint NOT NULL
+);</code></pre>
+<p>The loop reads events with a position greater than the checkpoint, applies them, and updates the checkpoint in the same transaction as the read model change. That single transaction is what makes a crash safe: either the table and the checkpoint both moved, or neither did. It also makes the projection idempotent without a dedupe table, as the position acts as the event identity. The events come from a table such as the one in <a href="/@odykyi/event-driven-local/minimal-event-store-postgres/">the minimal event store</a>.</p>
+<pre><code>async function runBatch(pool, name, apply) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const cp = await client.query(
+      "SELECT position FROM projection_checkpoints WHERE name = $1 FOR UPDATE",
+      [name]
+    );
+    const from = cp.rows[0]?.position ?? 0;
+    const { rows } = await client.query(
+      "SELECT position, type, data FROM events WHERE position &gt; $1 ORDER BY position LIMIT 500",
+      [from]
+    );
+    for (const e of rows) await apply(client, e);
+    if (rows.length) {
+      await client.query(
+        `INSERT INTO projection_checkpoints (name, position) VALUES ($1, $2)
+         ON CONFLICT (name) DO UPDATE SET position = $2`,
+        [name, rows[rows.length - 1].position]
+      );
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (e) {
+    await client.query("ROLLBACK");
+    throw e;
+  } finally {
+    client.release();
+  }
+}</code></pre>
+<p>Note the <code>FOR UPDATE</code> on the checkpoint row, which stops two copies of the projector from running the same batch. If the checkpoint row does not exist yet, create it with position 0 first, or the lock has nothing to hold.</p>
+
+<h2 id="the-rebuild-procedure">The rebuild procedure</h2>
+<ol>
+<li>Create the new table, for example <code>order_summary_v2</code>, and a checkpoint named <code>order_summary_v2</code> at position 0.</li>
+<li>Run the projector against the new name until a batch returns zero rows. The old projection keeps serving queries meanwhile.</li>
+<li>Leave the new projector running so it stays current. Compare a few rows against the old table, or compare counts.</li>
+<li>Switch the query code to read from the new table, deploy, and drop the old table and its checkpoint.</li>
+</ol>
+<p>This avoids downtime and gives you a way back: until you drop the old table, you can point reads at it again.</p>
+
+<h2 id="the-commit-order-trap">The commit-order trap</h2>
+<p>If <code>position</code> comes from a <code>bigserial</code> column, positions are assigned when rows are inserted, not when transactions commit. Two writers can get positions 10 and 11, and 11 can commit first. A projector that reads <code>position &gt; 9</code> in between sees 11 but not 10, saves the checkpoint at 11, and event 10 is skipped for good when it commits later. This is rare locally and real in production under load. Ways to deal with it:</p>
+<ul>
+<li>Append events from a single writer process, so inserts are serialized.</li>
+<li>Have the projector stay a short distance behind, ignoring events newer than a few seconds, so slow transactions finish first. It is a heuristic, not a proof.</li>
+<li>Read only events whose transaction id is older than the oldest running transaction, using <code>pg_snapshot_xmin(pg_current_snapshot())</code> against an <code>xmin</code>-style column you store. This is the exact fix and takes care to get right.</li>
+</ul>
+<p>Whichever you pick, write it down, because it explains a missing row six months later.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Run the projector as a worker with the database as a dependency, and run rebuilds as one-off commands that use the service's own environment:</p>
+<pre><code>flisk resource summary-projector --type worker --stack shop --yes
+# in its service.json: "dependsOn": ["shop-db"]
+
+flisk run summary-projector -- bun run scripts/rebuild.ts --name order_summary_v2</code></pre>
+<p>The <code>flisk run</code> command runs your command with the environment the service has in the stack, so the script gets the same <code>DATABASE_URL</code> as the live projector. Because the checkpoint lives in the database, you can stop and rerun the rebuild at any point. <code>flisk logs --service summary-projector --since 5m</code> shows its progress lines. To start a rebuild from a clean database, see <a href="/@odykyi/local-database-guide/reset-a-local-database/">resetting a local database</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Non-deterministic handlers.</strong> Using <code>now()</code> or a random id inside a handler gives a different table on every rebuild. Take time from the event.</li>
+<li><strong>Old event shapes.</strong> A rebuild reads the whole history. Make sure the handler can read every version, see <a href="/@odykyi/event-driven-local/version-event-schemas/">versioning event schemas</a>.</li>
+<li><strong>Big batches.</strong> A single transaction over millions of events holds locks and bloats. Batches of a few hundred are fine.</li>
+<li><strong>Side effects in handlers.</strong> A rebuild must not send emails. Projections write tables only.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How is a read model different from a cache?</summary><p>A cache can be dropped and refilled on demand from the source of truth. A read model is built from the event history by a handler, shaped for queries, and kept up to date continuously. It is rebuilt rather than refilled on a miss.</p></details><details><summary>Can I rebuild a read model without downtime?</summary><p>Yes. Build a new table beside the old one with its own checkpoint, let it catch up, switch reads to it and then drop the old table.</p></details><details><summary>Do I need event sourcing to have read models?</summary><p>No. You can project from any ordered stream of events, including events published by other services, as long as you can replay them from a known position.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/minimal-event-store-postgres/"><span class="lbl">Guide</span><b>How to build a minimal event store in Postgres</b><span>You do not need a special database to try event sourcing. One table and one constraint get you most of the way.</span></a><a href="/@odykyi/event-driven-local/version-event-schemas/"><span class="lbl">Guide</span><b>How to version event schemas without breaking consumers</b><span>A producer can ship on Tuesday. A consumer might ship next month, or be replaying events from last year. The schema has to survive both.</span></a><a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/"><span class="lbl">Guide</span><b>How to keep events in order for one entity</b><span>You do not need the whole stream in order. You need the events for one order, one account or one user in order, and that is a much easier promise to keep.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

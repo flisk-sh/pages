@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to implement a saga with compensating actions</title>
+<meta name="description" content="A saga splits one business process across services and undoes done steps when a later one fails. Orchestration or choreography, with a Postgres state table.">
+<meta name="keywords" content="saga pattern, compensating transaction, saga orchestration vs choreography, distributed transaction microservices">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/saga-compensating-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to implement a saga with compensating actions">
+<meta property="og:description" content="A saga splits one business process across services and undoes done steps when a later one fails. Orchestration or choreography, with a Postgres state table.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/saga-compensating-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to implement a saga with compensating actions","description":"A saga splits one business process across services and undoes done steps when a later one fails. Orchestration or choreography, with a Postgres state table.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/saga-compensating-actions/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/saga-compensating-actions/","keywords":"saga pattern, compensating transaction, saga orchestration vs choreography, distributed transaction microservices","wordCount":807,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to implement a saga with compensating actions","item":"https://pages.flisk.si/@odykyi/event-driven-local/saga-compensating-actions/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is a saga the same as a distributed transaction?","acceptedAnswer":{"@type":"Answer","text":"No. A distributed transaction such as two-phase commit locks resources across systems until all agree. A saga commits each step locally and undoes earlier steps with compensating actions if a later one fails, so it is eventually consistent."}},{"@type":"Question","name":"What if a compensating action fails?","acceptedAnswer":{"@type":"Answer","text":"Retry it until it succeeds, which requires it to be idempotent. If it cannot succeed, move the saga to a failed state that raises an alert, because a person has to resolve it."}},{"@type":"Question","name":"Should I use a workflow engine instead of writing an orchestrator?","acceptedAnswer":{"@type":"Answer","text":"For long-running or complex processes, engines such as Temporal handle persistence, timers and retries for you. A small state table is enough for a few steps and is easier to run locally."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to implement a saga with compensating actions</h1><p class="dek">You cannot wrap three services in one database transaction. A saga is the next best thing: do each step, and know how to undo it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-concrete-example">A concrete example</a></li><li><a href="#choreography-or-orchestration">Choreography or orchestration</a></li><li><a href="#a-minimal-orchestrator-state-table">A minimal orchestrator state table</a></li><li><a href="#testing-failures-on-purpose">Testing failures on purpose</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A saga is a sequence of local transactions across services, where each step has a compensating action that undoes it. If step three fails, you run the compensations for steps two and one in reverse order. The result is not atomic, because other services can see the in-between state, but it ends in a consistent place.</p>
+
+<h2 id="a-concrete-example">A concrete example</h2>
+<p>Placing an order touches three services: inventory reserves stock, payment authorizes a charge, shipping books a courier. The steps and their undo actions:</p>
+<table>
+<thead><tr><th>Step</th><th>Service</th><th>Compensation</th></tr></thead>
+<tbody>
+<tr><td>Reserve stock</td><td>inventory</td><td>Release the reservation</td></tr>
+<tr><td>Authorize payment</td><td>payment</td><td>Void the authorization</td></tr>
+<tr><td>Book courier</td><td>shipping</td><td>Cancel the booking</td></tr>
+</tbody>
+</table>
+<p>If the courier booking fails, the saga voids the payment and releases the stock. Note that a compensation is a new business action, not a database rollback. "Cancel the booking" can itself fail, so compensations must be retryable and idempotent, see <a href="/@odykyi/event-driven-local/idempotent-event-consumer/">the idempotent consumer article</a>.</p>
+
+<h2 id="choreography-or-orchestration">Choreography or orchestration</h2>
+<ul>
+<li><strong>Choreography:</strong> no coordinator. Inventory emits <code>stock.reserved</code>, payment reacts and emits <code>payment.authorized</code>, and so on. Failures emit events that earlier services react to. It has few moving parts, but the process exists only in your head: to answer "what step is order 42 at?" you read the logs of three services.</li>
+<li><strong>Orchestration:</strong> one service owns the process. It sends commands, waits for replies and decides what comes next. The flow is written in one place and its state is queryable. The cost is one more component, and the temptation to put business rules in it.</li>
+</ul>
+<p>For two or three steps, choreography is fine. Once there are branches, timeouts or more than three participants, orchestration is easier to debug. Both work locally.</p>
+
+<h2 id="a-minimal-orchestrator-state-table">A minimal orchestrator state table</h2>
+<p>The orchestrator persists where each saga is, so a restart does not lose it:</p>
+<pre><code>CREATE TABLE sagas (
+  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id   uuid NOT NULL,
+  state      text NOT NULL,          -- reserving, charging, booking, done, compensating, failed
+  step_log   jsonb NOT NULL DEFAULT '[]',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+<p>On each reply event, the orchestrator loads the row, decides the next move from a small transition table, and updates the row and sends the next command in one transaction (use <a href="/@odykyi/event-driven-local/transactional-outbox-postgres/">an outbox</a> for the send). A sketch of the decision logic:</p>
+<pre><code>const next = {
+  "reserving:stock.reserved":    { state: "charging", send: "payment.authorize" },
+  "charging:payment.authorized": { state: "booking",  send: "shipping.book" },
+  "booking:shipping.booked":     { state: "done" },
+  "booking:shipping.failed":     { state: "compensating", send: "payment.void" },
+  "charging:payment.declined":   { state: "compensating", send: "stock.release" },
+};
+
+function step(saga, event) {
+  const t = next[`${saga.state}:${event.type}`];
+  if (!t) return null; // unexpected, log it and keep the state
+  return t;
+}</code></pre>
+<p>A real version would have a longer table and would track which compensations are still pending. The shape stays the same: current state plus incoming event gives the next state and the next command. A plain lookup table is easy to unit test without any broker.</p>
+
+<h2 id="testing-failures-on-purpose">Testing failures on purpose</h2>
+<p>The compensation path is where the bugs hide, and it never runs on a happy-path demo. Give each participant a way to fail on demand, for example an environment variable such as <code>FAIL_AT=shipping</code>, and write a test per failing step that asserts the final state: stock released, payment voided, order marked failed. Also test a duplicate reply event and a reply that arrives after the saga timed out.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Each participant is a small service in one stack, with a shared queue for events and a database for each service that owns data:</p>
+<pre><code>flisk resource bus --type queue --stack shop --yes
+flisk resource orchestrator --stack shop --yes
+flisk resource inventory --stack shop --yes
+flisk resource payment --stack shop --yes
+flisk resource shipping --stack shop --yes</code></pre>
+<p>List <code>"bus"</code> in each service's <code>dependsOn</code> so it receives <code>NATS_URL</code>. To run a failure scenario, put <code>FAIL_AT</code> under the service's <code>params</code> (non-secret values), run <code>flisk config regenerate</code> and restart the service with <code>flisk restart shipping</code>. Follow one order through the stack with <code>flisk logs --service orchestrator shipping --since 5m</code>, which prints recent lines from only those services. Putting a shared saga id in every event and every log line makes this readable.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Not every step can be undone.</strong> An email already sent cannot be unsent. Put irreversible steps last, and use a "pending" state for steps that need a human.</li>
+<li><strong>Timeouts.</strong> A participant that never answers leaves the saga stuck. Store a deadline in the state row and let the orchestrator fail the saga when it passes.</li>
+<li><strong>Lost isolation.</strong> Between steps, other requests see reserved stock or an authorized charge. Model those states explicitly instead of hiding them.</li>
+<li><strong>Using a saga for one database.</strong> If all the data is in one Postgres, use a normal transaction.</li>
+</ul>
+<p>To see the saga's state across time instead of only the latest row, look at storing the events themselves in <a href="/@odykyi/event-driven-local/minimal-event-store-postgres/">a minimal event store</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is a saga the same as a distributed transaction?</summary><p>No. A distributed transaction such as two-phase commit locks resources across systems until all agree. A saga commits each step locally and undoes earlier steps with compensating actions if a later one fails, so it is eventually consistent.</p></details><details><summary>What if a compensating action fails?</summary><p>Retry it until it succeeds, which requires it to be idempotent. If it cannot succeed, move the saga to a failed state that raises an alert, because a person has to resolve it.</p></details><details><summary>Should I use a workflow engine instead of writing an orchestrator?</summary><p>For long-running or complex processes, engines such as Temporal handle persistence, timers and retries for you. A small state table is enough for a few steps and is easier to run locally.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/transactional-outbox-postgres/"><span class="lbl">Guide</span><b>How to use the transactional outbox pattern with Postgres</b><span>Saving data and publishing an event are two writes to two systems, and one of them can fail. An outbox table turns them into one.</span></a><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a><a href="/@odykyi/event-driven-local/minimal-event-store-postgres/"><span class="lbl">Guide</span><b>How to build a minimal event store in Postgres</b><span>You do not need a special database to try event sourcing. One table and one constraint get you most of the way.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
