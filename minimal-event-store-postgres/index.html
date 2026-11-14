@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build a minimal event store in Postgres</title>
+<meta name="description" content="One append-only table, a primary key on stream and version for optimistic concurrency, and a fold to get current state. Includes SQL and Node code.">
+<meta name="keywords" content="event store postgres, event sourcing postgres, append-only event table, optimistic concurrency events, event sourcing example">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/minimal-event-store-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build a minimal event store in Postgres">
+<meta property="og:description" content="One append-only table, a primary key on stream and version for optimistic concurrency, and a fold to get current state. Includes SQL and Node code.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/minimal-event-store-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build a minimal event store in Postgres","description":"One append-only table, a primary key on stream and version for optimistic concurrency, and a fold to get current state. Includes SQL and Node code.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/minimal-event-store-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/minimal-event-store-postgres/","keywords":"event store postgres, event sourcing postgres, append-only event table, optimistic concurrency events, event sourcing example","wordCount":812,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to build a minimal event store in Postgres","item":"https://pages.flisk.si/@odykyi/event-driven-local/minimal-event-store-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is Postgres a good event store?","acceptedAnswer":{"@type":"Answer","text":"For small and medium systems, yes. It gives you transactions, a unique constraint for concurrency control and familiar tooling. Dedicated event stores add features such as subscriptions and built-in projections, which you may want later."}},{"@type":"Question","name":"What is the difference between event sourcing and an outbox?","acceptedAnswer":{"@type":"Answer","text":"Event sourcing stores events as the source of truth and derives state from them. An outbox is a temporary table of events to publish, next to state that is stored the usual way."}},{"@type":"Question","name":"Do I need snapshots?","acceptedAnswer":{"@type":"Answer","text":"Not at first. Load time grows with stream length, so add snapshots only when measurements show that rebuilding state from a long stream is too slow."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to build a minimal event store in Postgres</h1><p class="dek">You do not need a special database to try event sourcing. One table and one constraint get you most of the way.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-event-sourcing-means-here">What event sourcing means here</a></li><li><a href="#the-table">The table</a></li><li><a href="#appending-with-optimistic-concurrency">Appending with optimistic concurrency</a></li><li><a href="#reading-the-state">Reading the state</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A minimal event store in Postgres is a single append-only table with a primary key on <code>(stream_id, version)</code>. Appending an event with the next version fails if someone else appended first, which gives you optimistic concurrency. The current state of an entity is a fold over its events, read in version order.</p>
+
+<h2 id="what-event-sourcing-means-here">What event sourcing means here</h2>
+<p>Instead of storing the current state of an order and overwriting it, you store every fact that happened to it: <code>OrderPlaced</code>, <code>ItemAdded</code>, <code>OrderPaid</code>. The state is computed by replaying those facts. You gain a complete history and the ability to rebuild any view later. You pay in complexity: queries need read models, and past events cannot be edited, only corrected by new events. If you only want an audit trail, an ordinary table plus a history table is simpler. Use event sourcing when the history is the product.</p>
+
+<h2 id="the-table">The table</h2>
+<pre><code>CREATE TABLE events (
+  position   bigserial   NOT NULL UNIQUE,
+  stream_id  text        NOT NULL,
+  version    integer     NOT NULL,
+  type       text        NOT NULL,
+  data       jsonb       NOT NULL,
+  metadata   jsonb       NOT NULL DEFAULT '{}',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (stream_id, version)
+);</code></pre>
+<ul>
+<li><code>stream_id</code> identifies one entity, for example <code>order-123</code>.</li>
+<li><code>version</code> starts at 1 for each stream and goes up by one.</li>
+<li><code>position</code> is a global counter, useful for projections that read all events in one pass. It can have gaps and is not strictly commit-ordered, see <a href="/@odykyi/event-driven-local/rebuild-read-model-by-replay/">rebuilding a read model</a>.</li>
+</ul>
+<p>Make the table append-only in practice. Do not write <code>UPDATE</code> or <code>DELETE</code> statements against it, and if you want the database to enforce it, revoke those privileges from the application role.</p>
+
+<h2 id="appending-with-optimistic-concurrency">Appending with optimistic concurrency</h2>
+<p>The caller says which version it expects the stream to be at. The insert uses the next number, and the primary key rejects a conflicting writer:</p>
+<pre><code>async function append(client, streamId, expectedVersion, newEvents) {
+  let version = expectedVersion;
+  try {
+    for (const e of newEvents) {
+      version += 1;
+      await client.query(
+        "INSERT INTO events (stream_id, version, type, data) VALUES ($1, $2, $3, $4)",
+        [streamId, version, e.type, JSON.stringify(e.data)]
+      );
+    }
+  } catch (err) {
+    if (err.code === "23505") {
+      throw new Error(`stream ${streamId} changed, reload and retry`);
+    }
+    throw err;
+  }
+}</code></pre>
+<p>Run this inside a transaction so that a batch of events lands together. The error code <code>23505</code> is Postgres's unique violation. The usual response is to reload the stream, run the decision again on the fresh state, and retry a limited number of times.</p>
+
+<h2 id="reading-the-state">Reading the state</h2>
+<pre><code>async function load(client, streamId) {
+  const { rows } = await client.query(
+    "SELECT version, type, data FROM events WHERE stream_id = $1 ORDER BY version",
+    [streamId]
+  );
+  const state = rows.reduce(evolve, { status: "new", items: [] });
+  return { state, version: rows.length ? rows[rows.length - 1].version : 0 };
+}
+
+function evolve(s, e) {
+  switch (e.type) {
+    case "OrderPlaced": return { ...s, status: "placed" };
+    case "ItemAdded":   return { ...s, items: [...s.items, e.data.sku] };
+    case "OrderPaid":   return { ...s, status: "paid" };
+    default:            return s;   // ignore events this code does not know
+  }
+}</code></pre>
+<p>The pattern is: load, decide (a function that checks business rules and returns new events), append with the loaded version. Keep <code>evolve</code> free of side effects and checks, because it must accept every event in history. Long streams get slow to load; add a snapshot table later when you measure a problem, not before.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>The event store is a table in your service's database, so what you need from Flisk is the database and a place to run the migration:</p>
+<pre><code>flisk resource shop-db --type database --stack shop --yes
+flisk resource orders --stack shop --yes</code></pre>
+<p>Add <code>"dependsOn": ["shop-db"]</code> to the service, and per the Flisk docs it receives <code>DATABASE_URL</code> for the stack's database. Put the <code>CREATE TABLE</code> in a migration run by a migrator resource rather than in the service's start script, see <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>. To look at the events while you develop, connect with <code>psql</code> as described in <a href="/@odykyi/local-database-guide/connect-to-a-local-database-from-your-machine/">connecting to a local Postgres</a> and run <code>SELECT * FROM events WHERE stream_id = 'order-123' ORDER BY version</code>. If you reset the database to start clean, see <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Fixing history.</strong> A wrong event stays. Append a correcting event, such as <code>ItemRemoved</code>, and handle it in <code>evolve</code>.</li>
+<li><strong>Changing event shapes.</strong> Old events never change, so you need to read every version you ever wrote, see <a href="/@odykyi/event-driven-local/version-event-schemas/">versioning event schemas</a>.</li>
+<li><strong>Publishing events.</strong> The store is not a broker. Use an outbox or have a poller read by <code>position</code> to publish, see <a href="/@odykyi/event-driven-local/transactional-outbox-postgres/">the outbox article</a>.</li>
+<li><strong>Personal data.</strong> Events are permanent, so deleting a user's data on request is hard. Keep personal fields out of events, or encrypt them per user and delete the key.</li>
+</ul>
+<p>With events stored, the payoff is building views from them, which the next article covers.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is Postgres a good event store?</summary><p>For small and medium systems, yes. It gives you transactions, a unique constraint for concurrency control and familiar tooling. Dedicated event stores add features such as subscriptions and built-in projections, which you may want later.</p></details><details><summary>What is the difference between event sourcing and an outbox?</summary><p>Event sourcing stores events as the source of truth and derives state from them. An outbox is a temporary table of events to publish, next to state that is stored the usual way.</p></details><details><summary>Do I need snapshots?</summary><p>Not at first. Load time grows with stream length, so add snapshots only when measurements show that rebuilding state from a long stream is too slow.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/rebuild-read-model-by-replay/"><span class="lbl">Guide</span><b>How to rebuild a read model by replaying events</b><span>A read model is disposable. If you can rebuild it from the events, you can change its shape whenever the questions change.</span></a><a href="/@odykyi/event-driven-local/version-event-schemas/"><span class="lbl">Guide</span><b>How to version event schemas without breaking consumers</b><span>A producer can ship on Tuesday. A consumer might ship next month, or be replaying events from last year. The schema has to survive both.</span></a><a href="/@odykyi/event-driven-local/transactional-outbox-postgres/"><span class="lbl">Guide</span><b>How to use the transactional outbox pattern with Postgres</b><span>Saving data and publishing an event are two writes to two systems, and one of them can fail. An outbox table turns them into one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

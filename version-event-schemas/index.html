@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to version event schemas without breaking consumers</title>
+<meta name="description" content="Add fields, never repurpose them, and put a type and version in every event envelope. How to evolve event payloads while old consumers keep running.">
+<meta name="keywords" content="event schema versioning, event envelope, backward compatible events, schema evolution events, upcasting events">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/version-event-schemas/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to version event schemas without breaking consumers">
+<meta property="og:description" content="Add fields, never repurpose them, and put a type and version in every event envelope. How to evolve event payloads while old consumers keep running.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/version-event-schemas/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to version event schemas without breaking consumers","description":"Add fields, never repurpose them, and put a type and version in every event envelope. How to evolve event payloads while old consumers keep running.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/version-event-schemas/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/version-event-schemas/","keywords":"event schema versioning, event envelope, backward compatible events, schema evolution events, upcasting events","wordCount":767,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to version event schemas without breaking consumers","item":"https://pages.flisk.si/@odykyi/event-driven-local/version-event-schemas/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a schema registry for event versioning?","acceptedAnswer":{"@type":"Answer","text":"Not to start. A JSON Schema file per event type in your repo, fixtures for each version and a CI check for breaking changes cover most small systems. A registry becomes useful when many teams publish to shared topics."}},{"@type":"Question","name":"Should the version be an integer or semantic version?","acceptedAnswer":{"@type":"Answer","text":"An integer is enough for payload schemas. You only need to know which shape to expect and the order of versions, so major and minor numbers add little."}},{"@type":"Question","name":"Can I change an event that is already stored?","acceptedAnswer":{"@type":"Answer","text":"Avoid it. Stored events are history. Upcast them when reading, so the stored data stays as it was and your code handles every version."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to version event schemas without breaking consumers</h1><p class="dek">A producer can ship on Tuesday. A consumer might ship next month, or be replaying events from last year. The schema has to survive both.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-events-are-harder-than-apis">Why events are harder than APIs</a></li><li><a href="#put-the-metadata-in-an-envelope">Put the metadata in an envelope</a></li><li><a href="#changes-that-are-safe">Changes that are safe</a></li><li><a href="#changes-that-break-consumers">Changes that break consumers</a></li><li><a href="#upcast-old-events-in-the-consumer">Upcast old events in the consumer</a></li><li><a href="#check-before-you-ship">Check before you ship</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Treat an event as a public contract. Keep changes additive (new optional fields only), put an event type and a schema version in an envelope around every payload, and when you must break the shape, publish a new version alongside the old one until every consumer has moved. Consumers should ignore fields they do not know.</p>
+
+<h2 id="why-events-are-harder-than-apis">Why events are harder than APIs</h2>
+<p>With an HTTP API you can deploy server and client together, and the server answers only current requests. Events differ in two ways. Producers and consumers deploy on different schedules, so for some time both old and new code are live. And events are stored: a consumer that replays last month's stream, or a new consumer reading history, meets every shape you ever published. A breaking change is not fixed by a redeploy.</p>
+
+<h2 id="put-the-metadata-in-an-envelope">Put the metadata in an envelope</h2>
+<p>Keep the business data separate from the fields every event needs. The CloudEvents specification names a similar set (<code>id</code>, <code>type</code>, <code>source</code>, <code>time</code>), and you can use it directly or write a smaller version of your own:</p>
+<pre><code>{
+  "id": "6f1c0a6e-8d0a-4f5e-9d1e-2b7a4c1f9a10",
+  "type": "order.created",
+  "version": 2,
+  "occurredAt": "2026-11-14T09:30:00Z",
+  "producer": "orders-api",
+  "data": {
+    "orderId": "ord_123",
+    "total": 4200,
+    "currency": "EUR"
+  }
+}</code></pre>
+<ul>
+<li><code>id</code> is unique per event and is what consumers deduplicate on.</li>
+<li><code>type</code> says what happened, in the past tense: <code>order.created</code>, not <code>create.order</code>.</li>
+<li><code>version</code> is the version of the <code>data</code> schema for that type, an integer that only goes up.</li>
+<li><code>occurredAt</code> is when it happened, not when it was published.</li>
+</ul>
+
+<h2 id="changes-that-are-safe">Changes that are safe</h2>
+<ul>
+<li>Adding an optional field. Old consumers ignore it, new consumers read it with a default when it is missing.</li>
+<li>Adding a new event type. Consumers that do not know it must skip it, not crash.</li>
+<li>Loosening a constraint, for example allowing a longer string.</li>
+</ul>
+
+<h2 id="changes-that-break-consumers">Changes that break consumers</h2>
+<ul>
+<li>Removing or renaming a field.</li>
+<li>Changing a type, such as an integer amount in cents to a decimal string.</li>
+<li>Changing the meaning of a field without changing its name. This is the worst one, because nothing fails: the numbers are simply wrong.</li>
+<li>Making an optional field required.</li>
+</ul>
+<p>For a breaking change, publish a new version. Two ways to do it: emit both <code>order.created</code> version 1 and version 2 for a transition period, or publish version 2 only and have each consumer upgrade old events on read.</p>
+
+<h2 id="upcast-old-events-in-the-consumer">Upcast old events in the consumer</h2>
+<p>An upcaster is a pure function that turns an old shape into the current one before the handler sees it. The handler then only knows the latest version:</p>
+<pre><code>const upcasters = {
+  "order.created": {
+    1: (d) =&gt; ({ ...d, currency: "EUR" }),   // v1 had no currency
+  },
+};
+
+function toLatest(event, latest) {
+  let { version, data } = event;
+  const steps = upcasters[event.type] ?? {};
+  while (version &lt; latest) {
+    data = steps[version](data);
+    version += 1;
+  }
+  return data;
+}</code></pre>
+<p>Unit-test each upcaster with a saved real example of the old event. When you can answer "what did version 1 look like" from a fixture file in the repo, you can change the code with confidence. Fixtures are also the cheapest contract test: the producer's tests validate that its output matches a JSON Schema file, and each consumer's tests run its handler against the fixtures for every version it claims to support. Keep schema and fixtures in a shared folder, which is easy in a monorepo, see <a href="/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">monorepo local dev setup</a>.</p>
+
+<h2 id="check-before-you-ship">Check before you ship</h2>
+<p>Add a step to CI that compares the new schema with the previous one and fails when a field disappears or a type changes. A simple version diffs the JSON Schema files in git. Dedicated tools exist, such as schema registries with compatibility modes, but a diff in a script catches most mistakes. With Flisk you run your services as usual with <code>flisk up</code>, and the schema checks stay ordinary tests in your repo, there is nothing Flisk-specific to configure.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Strict validation in consumers.</strong> A consumer that rejects unknown fields turns every additive change into an outage. Validate the fields you use, ignore the rest.</li>
+<li><strong>Reusing a field.</strong> Never give an old field a new meaning. Add a new field and deprecate the old one.</li>
+<li><strong>Version in the topic name only.</strong> A subject like <code>orders.v2</code> splits history across two streams and makes replay harder. Prefer the version in the envelope, unless you want a clean break.</li>
+<li><strong>No removal plan.</strong> Decide when version 1 stops being published, and check consumer logs for it before you stop.</li>
+</ul>
+<p>Once events are versioned, the next risk is order: <a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/">keeping events in order per entity</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a schema registry for event versioning?</summary><p>Not to start. A JSON Schema file per event type in your repo, fixtures for each version and a CI check for breaking changes cover most small systems. A registry becomes useful when many teams publish to shared topics.</p></details><details><summary>Should the version be an integer or semantic version?</summary><p>An integer is enough for payload schemas. You only need to know which shape to expect and the order of versions, so major and minor numbers add little.</p></details><details><summary>Can I change an event that is already stored?</summary><p>Avoid it. Stored events are history. Upcast them when reading, so the stored data stays as it was and your code handles every version.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a><a href="/@odykyi/event-driven-local/rebuild-read-model-by-replay/"><span class="lbl">Guide</span><b>How to rebuild a read model by replaying events</b><span>A read model is disposable. If you can rebuild it from the events, you can change its shape whenever the questions change.</span></a><a href="/@odykyi/event-driven-local/minimal-event-store-postgres/"><span class="lbl">Guide</span><b>How to build a minimal event store in Postgres</b><span>You do not need a special database to try event sourcing. One table and one constraint get you most of the way.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

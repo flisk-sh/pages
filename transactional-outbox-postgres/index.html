@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use the transactional outbox pattern with Postgres</title>
+<meta name="description" content="Write the row and the event in one Postgres transaction, then let a relay publish it. Includes the table, the relay query and a NATS example.">
+<meta name="keywords" content="transactional outbox pattern, outbox pattern postgres, dual write problem, publish event after commit, outbox relay">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/event-driven-local/transactional-outbox-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use the transactional outbox pattern with Postgres">
+<meta property="og:description" content="Write the row and the event in one Postgres transaction, then let a relay publish it. Includes the table, the relay query and a NATS example.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/event-driven-local/transactional-outbox-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use the transactional outbox pattern with Postgres","description":"Write the row and the event in one Postgres transaction, then let a relay publish it. Includes the table, the relay query and a NATS example.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/event-driven-local/transactional-outbox-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/event-driven-local/transactional-outbox-postgres/","keywords":"transactional outbox pattern, outbox pattern postgres, dual write problem, publish event after commit, outbox relay","wordCount":921,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Event-driven systems locally","item":"https://pages.flisk.si/@odykyi/event-driven-local/"},{"@type":"ListItem","position":3,"name":"How to use the transactional outbox pattern with Postgres","item":"https://pages.flisk.si/@odykyi/event-driven-local/transactional-outbox-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the outbox pattern guarantee exactly-once delivery?","acceptedAnswer":{"@type":"Answer","text":"No. It guarantees that an event is never lost once the transaction commits, which is at-least-once delivery. A relay crash after publishing but before marking the row sent causes a second publish, so consumers must deduplicate."}},{"@type":"Question","name":"Can I use the outbox pattern with a database other than Postgres?","acceptedAnswer":{"@type":"Answer","text":"Yes. Any database with transactions works. The relay query uses FOR UPDATE SKIP LOCKED, which Postgres, MySQL 8 and Oracle support, so on other databases you may need another way to claim rows."}},{"@type":"Question","name":"Should I use change data capture instead of a polling relay?","acceptedAnswer":{"@type":"Answer","text":"Change data capture tools such as Debezium read the database log and remove the polling loop. They add another service to run. For a local setup and modest volume, a polling relay is simpler to understand and debug."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/event-driven-local/">Event-driven systems locally</a></div>
+<section class="hero"><div><div class="lbl">Event-driven systems locally</div><h1>How to use the transactional outbox pattern with Postgres</h1><p class="dek">Saving data and publishing an event are two writes to two systems, and one of them can fail. An outbox table turns them into one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-dual-write-problem">The dual-write problem</a></li><li><a href="#the-outbox-table">The outbox table</a></li><li><a href="#the-relay">The relay</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>The transactional outbox pattern means your service inserts the business row and an "event to send" row in the same database transaction, and a separate relay process reads the unsent rows and publishes them to the broker. Either both rows commit or neither does, so you never save an order without its event or send an event for an order that rolled back.</p>
+
+<h2 id="the-dual-write-problem">The dual-write problem</h2>
+<p>Take a request handler that creates an order and then publishes <code>order.created</code>. Whatever order you do it in, there is a window where one write succeeds and the other does not:</p>
+<ul>
+<li>Insert, then publish: the process crashes between the two, and the order exists but nobody hears about it.</li>
+<li>Publish, then insert: the insert fails, and consumers react to an order that does not exist.</li>
+<li>Publish inside the transaction, before commit: the commit fails, same result as above.</li>
+</ul>
+<p>Retrying does not fix this, because the crash can take the retry logic with it. You need the two facts to be stored together, and a database transaction is the one tool that does that.</p>
+
+<h2 id="the-outbox-table">The outbox table</h2>
+<p>Add a table next to your business tables, in the same database:</p>
+<pre><code>CREATE TABLE outbox (
+  id           bigserial PRIMARY KEY,
+  event_id     uuid NOT NULL DEFAULT gen_random_uuid(),
+  type         text NOT NULL,
+  payload      jsonb NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  published_at timestamptz
+);
+
+CREATE INDEX outbox_unpublished ON outbox (id) WHERE published_at IS NULL;</code></pre>
+<p>The partial index keeps the relay query fast even after millions of published rows. <code>gen_random_uuid()</code> is built into Postgres 13 and later. The <code>event_id</code> is the identity of the event and travels to every consumer; it is what makes deduplication possible later.</p>
+<p>In the handler, write both rows in one transaction:</p>
+<pre><code>await client.query("BEGIN");
+const { rows } = await client.query(
+  "INSERT INTO orders (customer_id, total) VALUES ($1, $2) RETURNING id",
+  [customerId, total]
+);
+await client.query(
+  "INSERT INTO outbox (type, payload) VALUES ($1, $2)",
+  ["order.created", JSON.stringify({ orderId: rows[0].id, total })]
+);
+await client.query("COMMIT");</code></pre>
+
+<h2 id="the-relay">The relay</h2>
+<p>The relay is a small loop. It locks a batch of unsent rows, publishes each one, marks them sent and commits. <code>FOR UPDATE SKIP LOCKED</code> means a second relay copy would skip the rows the first one holds instead of waiting.</p>
+<pre><code>import pg from "pg";
+import { connect, StringCodec } from "nats";
+
+const sc = StringCodec();
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
+const nc = await connect({ servers: process.env.NATS_URL });
+const js = nc.jetstream();
+
+async function drainOnce() {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `SELECT id, event_id, type, payload FROM outbox
+       WHERE published_at IS NULL ORDER BY id LIMIT 50
+       FOR UPDATE SKIP LOCKED`
+    );
+    for (const r of rows) {
+      const body = { id: r.event_id, type: r.type, data: r.payload };
+      await js.publish(`events.${r.type}`, sc.encode(JSON.stringify(body)), {
+        msgID: r.event_id,
+      });
+    }
+    if (rows.length) {
+      await client.query(
+        "UPDATE outbox SET published_at = now() WHERE id = ANY($1)",
+        [rows.map((r) =&gt; r.id)]
+      );
+    }
+    await client.query("COMMIT");
+    return rows.length;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+while (true) {
+  const n = await drainOnce();
+  if (n === 0) await new Promise((r) =&gt; setTimeout(r, 500));
+}</code></pre>
+<p>This assumes a JetStream stream that covers <code>events.&gt;</code> already exists; see <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>. The <code>msgID</code> option sets the message ID header, which JetStream uses to drop duplicates published within its duplicate window (two minutes by default). That is a bonus, not a guarantee.</p>
+
+<blockquote>The outbox gives you at-least-once delivery. If the relay publishes and then crashes before the commit, the row is sent again on restart. Consumers must tolerate duplicates, see <a href="/@odykyi/event-driven-local/idempotent-event-consumer/">making a consumer idempotent</a>.</blockquote>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>A stack for this has four pieces: the API, the relay, Postgres and a queue. Create them from the CLI:</p>
+<pre><code>flisk resource shop-db --type database --stack shop --yes
+flisk resource bus --type queue --stack shop --yes
+flisk resource orders-api --stack shop --yes
+flisk resource outbox-relay --type worker --stack shop --yes</code></pre>
+<p>Then add dependencies in the two service files, so each gets the connection strings it needs:</p>
+<pre><code>"dependsOn": ["shop-db"]            // orders-api
+"dependsOn": ["shop-db", "bus"]     // outbox-relay</code></pre>
+<p>Per the Flisk docs, a service that depends on a database resource receives <code>DATABASE_URL</code>, and the queue resource provides <code>NATS_URL</code> to its dependents. Run <code>flisk config verify</code> to check the files, and <code>flisk up shop</code> to start. The CREATE TABLE belongs in your migrations, not in a service start script; see <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>. If the relay does not see events, <code>flisk run outbox-relay -- printenv DATABASE_URL</code> shows which database it uses.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Run one relay.</strong> With several relays, rows are claimed in parallel and the order of publishing is no longer the order of <code>id</code>. If order matters, keep a single relay or read <a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/">keeping events in order per entity</a>.</li>
+<li><strong>Clean up.</strong> Delete published rows older than a day or two with a scheduled job, or the table grows without bound.</li>
+<li><strong>Publish failures block the batch.</strong> A poison message that always throws will stop the relay on that row. Log the event id and decide whether to skip it.</li>
+<li><strong>Polling delay.</strong> A 500 ms sleep adds up to half a second of latency. Postgres can wake the relay immediately, see <a href="/@odykyi/event-driven-local/postgres-listen-notify-event-bus/">LISTEN/NOTIFY as an event bus</a>.</li>
+</ul>
+<p>You may not need an outbox when losing an event is harmless, or when the broker publish is the only write. For everything else, the next step is the receiving end: a consumer that survives the duplicates this pattern creates.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the outbox pattern guarantee exactly-once delivery?</summary><p>No. It guarantees that an event is never lost once the transaction commits, which is at-least-once delivery. A relay crash after publishing but before marking the row sent causes a second publish, so consumers must deduplicate.</p></details><details><summary>Can I use the outbox pattern with a database other than Postgres?</summary><p>Yes. Any database with transactions works. The relay query uses FOR UPDATE SKIP LOCKED, which Postgres, MySQL 8 and Oracle support, so on other databases you may need another way to claim rows.</p></details><details><summary>Should I use change data capture instead of a polling relay?</summary><p>Change data capture tools such as Debezium read the database log and remove the polling loop. They add another service to run. For a local setup and modest volume, a polling relay is simpler to understand and debug.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Event-driven systems locally</span></div>
+<div class="rgrid"><a href="/@odykyi/event-driven-local/idempotent-event-consumer/"><span class="lbl">Guide</span><b>How to make an event consumer idempotent with a dedupe table</b><span>If your consumer sends an email or adds to a balance twice when an event arrives twice, it is not idempotent yet. Here is the smallest fix that works.</span></a><a href="/@odykyi/event-driven-local/postgres-listen-notify-event-bus/"><span class="lbl">Guide</span><b>How to use Postgres LISTEN/NOTIFY as a lightweight event bus</b><span>Postgres can push a message to waiting clients when a transaction commits. It is a good wake-up call and a poor message queue.</span></a><a href="/@odykyi/event-driven-local/keep-events-in-order-per-entity/"><span class="lbl">Guide</span><b>How to keep events in order for one entity</b><span>You do not need the whole stream in order. You need the events for one order, one account or one user in order, and that is a much easier promise to keep.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
