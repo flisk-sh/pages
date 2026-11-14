@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local development for a Go API with live reload</title>
+<meta name="description" content="Set up a Go net/http API for local development: run it with go run, add live reload, test it, and see how Flisk scaffolds it in local or Docker mode.">
+<meta name="keywords" content="go live reload, go api local development, golang hot reload, go run watch files, go net/http local dev docker">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/go-api-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Local development for a Go API with live reload">
+<meta property="og:description" content="Set up a Go net/http API for local development: run it with go run, add live reload, test it, and see how Flisk scaffolds it in local or Docker mode.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/go-api-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Local development for a Go API with live reload","description":"Set up a Go net/http API for local development: run it with go run, add live reload, test it, and see how Flisk scaffolds it in local or Docker mode.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/go-api-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/go-api-local-dev/","keywords":"go live reload, go api local development, golang hot reload, go run watch files, go net/http local dev docker","wordCount":727,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Local development for a Go API with live reload","item":"https://pages.flisk.si/@odykyi/stack-recipes/go-api-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does go run reload on file changes?","acceptedAnswer":{"@type":"Answer","text":"No. go run compiles and runs once. For live reload use a watcher such as air or watchexec, or set dev.liveReload to true in a Flisk Docker service."}},{"@type":"Question","name":"What happens if my Go code does not compile with liveReload on?","acceptedAnswer":{"@type":"Answer","text":"The watcher keeps the last good build running and shows the compile error, so the service stays up until you fix the code."}},{"@type":"Question","name":"Can I run a Go API with Flisk without Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. flisk resource with --language go and --local writes a service with command go run . that runs as a plain process, with no Docker or Tilt."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Local development for a Go API with live reload</h1><p class="dek">Go has no built-in watch mode, so live reload is a choice you make. Here are the options and what Flisk scaffolds for each runtime.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-go-dev-loops-feel-slow">Why Go dev loops feel slow</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#the-flisk-way-as-a-local-process">The Flisk way, as a local process</a></li><li><a href="#the-flisk-way-in-docker">The Flisk way, in Docker</a></li><li><a href="#test-the-handler-before-you-run-the-stack">Test the handler before you run the stack</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>The Go toolchain has no file watcher: <code>go run .</code> compiles and runs once. For live reload you add a watcher such as <a href="https://github.com/air-verse/air">air</a>, or you let your dev tool rebuild on change. Flisk scaffolds a Go <code>net/http</code> API in two modes, a plain process with <code>go run .</code> and a Docker mode where live reload is opt-in.</p>
+
+<h2 id="why-go-dev-loops-feel-slow">Why Go dev loops feel slow</h2>
+<p>A Go build is fast, but a manual loop of stop, build, start adds up over a day. The simple fix is a watcher that restarts the binary on a file change. Air is the popular one, and <code>watchexec -r -e go -- go run .</code> works as well. In containers a second cost appears: if every change rebuilds the whole image, you wait for Docker layers instead of the compiler.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<pre><code>go install github.com/air-verse/air@latest
+air</code></pre>
+<p>Keep each service in its own module (<code>go.mod</code> per folder) so a change in one API does not rebuild another. Test with <code>go test ./...</code>. Read configuration from the environment and listen on <code>PORT</code>, so the same binary runs in any tool.</p>
+
+<h2 id="the-flisk-way-as-a-local-process">The Flisk way, as a local process</h2>
+<p>With <code>--local</code> the scaffold needs no Docker. It writes <code>go.mod</code>, <code>main.go</code> and <code>main_test.go</code>, and a <code>command</code> of <code>go run .</code>.</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource orders --language go --local --stack app --yes
+flisk up --only orders</code></pre>
+<p>The service has a <code>/health</code> route, so Flisk can wait for it before it starts anything that depends on it. A local <code>go run .</code> does not reload by itself. If you want reload there, write your own command in <code>service.json</code>, for example <code>air</code>, and keep the other fields.</p>
+<blockquote>Local mode has no live reload for Go by default. Change <code>command</code> to a watcher, or restart the service with <code>flisk restart orders</code> after a change.</blockquote>
+
+<h2 id="the-flisk-way-in-docker">The Flisk way, in Docker</h2>
+<p>Without <code>--local</code>, the same command creates a Go service that runs in a container behind Traefik:</p>
+<pre><code>flisk resource orders --language go --stack app --yes
+flisk up</code></pre>
+<p>By default there is no live update in this mode: when you change a file, Tilt rebuilds the image. That is correct but slower than a watcher. To turn the live loop on, add one field to the service's <code>service.json</code>:</p>
+<pre><code>{
+  "appName": "orders",
+  "appType": "backend",
+  "language": "go",
+  "dev": { "liveReload": true }
+}</code></pre>
+<p>With <code>liveReload</code> on, a watcher (<code>flisk-go-watch</code>) rebuilds the program when a <code>.go</code> file changes, without a new image build. If the code does not compile, the last good build keeps running, so one typo does not take the service down. Changes to <code>go.mod</code> or <code>go.sum</code> still rebuild the image, because new dependencies must be installed.</p>
+<p>The image is based on <code>golang:1.23</code> with <code>GOTOOLCHAIN=auto</code>, so a newer Go version in your <code>go.mod</code> can be fetched by the toolchain. The API is served at <code>http://api.&lt;project&gt;.localhost/api/orders</code>, with <code>/api/orders</code> stripped before it reaches your handler, so register routes at <code>/health</code> and <code>/items</code>, not under the prefix. If you need a CORS rule for a frontend, the scaffold already allows <code>*.localhost</code> origins.</p>
+
+<h2 id="test-the-handler-before-you-run-the-stack">Test the handler before you run the stack</h2>
+<p>A Go HTTP handler is easy to test without a server. The scaffold ships a <code>main_test.go</code> that exercises the router, and you can follow the same pattern for new routes: build a request with <code>httptest.NewRequest</code>, send it to the handler with <code>httptest.NewRecorder</code>, and check the status and body. Running <code>go test ./...</code> takes a moment, and it catches a broken route before you wait for a container to restart. Keep the router in a function that returns an <code>http.Handler</code> so tests and <code>main</code> use the same code.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>One module per service folder.</strong> The scaffold expects a <code>go.mod</code> in each service directory. A shared parent module will confuse the image build.</li>
+<li><strong>Listen on <code>PORT</code>.</strong> Flisk passes the port in the environment. Do not hard-code 8080.</li>
+<li><strong>Bind all interfaces in a container.</strong> Traefik reaches the container over the Docker network, so listening on <code>localhost</code> only is not enough in Docker mode.</li>
+<li><strong>Slow first build.</strong> The first image build downloads modules and takes longer than the ones after it.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If the live reload does not behave, read <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>. For the same idea in Rust, see <a href="/@odykyi/stack-recipes/rust-api-local-dev/">Rust API local dev</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does go run reload on file changes?</summary><p>No. go run compiles and runs once. For live reload use a watcher such as air or watchexec, or set dev.liveReload to true in a Flisk Docker service.</p></details><details><summary>What happens if my Go code does not compile with liveReload on?</summary><p>The watcher keeps the last good build running and shows the compile error, so the service stays up until you fix the code.</p></details><details><summary>Can I run a Go API with Flisk without Docker?</summary><p>Yes. flisk resource with --language go and --local writes a service with command go run . that runs as a plain process, with no Docker or Tilt.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/rust-api-local-dev/"><span class="lbl">Guide</span><b>Rust API local dev: axum, cargo watch and Docker</b><span>Rust compiles slowly the first time and fast after that, if the cache survives. This is how to keep the loop short with and without containers.</span></a><a href="/@odykyi/stack-recipes/bun-and-hono-api/"><span class="lbl">Guide</span><b>Bun and Hono API: local dev setup with live reload</b><span>Bun starts fast and has a built-in watcher, and Hono is a small router that fits it. This is the setup, with and without Flisk.</span></a><a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/"><span class="lbl">Guide</span><b>Run an existing Dockerfile in a local dev stack</b><span>Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

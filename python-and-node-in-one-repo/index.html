@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run Python and Node services in one repo</title>
+<meta name="description" content="Run a Python API and a Node app from one repository with one command: per-service runtimes, startup order, env vars, logs and what to do about a database.">
+<meta name="keywords" content="python and node in one repo, run python and node together, polyglot monorepo local dev, run fastapi and node service locally, multiple languages one command dev">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/python-and-node-in-one-repo/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run Python and Node services in one repo">
+<meta property="og:description" content="Run a Python API and a Node app from one repository with one command: per-service runtimes, startup order, env vars, logs and what to do about a database.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/python-and-node-in-one-repo/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run Python and Node services in one repo","description":"Run a Python API and a Node app from one repository with one command: per-service runtimes, startup order, env vars, logs and what to do about a database.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/python-and-node-in-one-repo/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/python-and-node-in-one-repo/","keywords":"python and node in one repo, run python and node together, polyglot monorepo local dev, run fastapi and node service locally, multiple languages one command dev","wordCount":829,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Run Python and Node services in one repo","item":"https://pages.flisk.si/@odykyi/stack-recipes/python-and-node-in-one-repo/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Flisk run Python and Node services together?","acceptedAnswer":{"@type":"Answer","text":"Yes. Give each service its own service.json with a command, for example uvicorn for Python and npm run dev for Node. flisk up starts both as local processes in dependsOn order, with no Docker."}},{"@type":"Question","name":"Does Flisk install Python or Node for me?","acceptedAnswer":{"@type":"Answer","text":"No. The toolchain field only declares the version a command needs, and flisk up stops with TOOLCHAIN_MISMATCH if the program on PATH differs. Use a version manager to switch versions."}},{"@type":"Question","name":"Can I mix local processes and Docker containers in one project?","acceptedAnswer":{"@type":"Answer","text":"Not for services built from a Dockerfile. A project cannot mix command services with Dockerfile-built services. Ready-made image services such as Postgres can run next to command services if Docker is running."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Run Python and Node services in one repo</h1><p class="dek">Two languages mean two toolchains, two dependency managers and two ways to start. Here is how to keep one command anyway.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-goes-wrong-in-a-polyglot-repo">What goes wrong in a polyglot repo</a></li><li><a href="#common-ways-to-do-it-without-flisk">Common ways to do it without Flisk</a></li><li><a href="#the-flisk-way-one-manifest-per-service">The Flisk way: one manifest per service</a></li><li><a href="#env-vars-and-daily-commands">Env vars and daily commands</a></li><li><a href="#pitfalls-and-limits">Pitfalls and limits</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To run a Python service and a Node service from one repository, give each its own folder, dependency manager and start command, then use one tool to start them in the right order. A <code>Procfile</code>, a <code>Makefile</code> or Docker Compose all work. Flisk does it with one <code>service.json</code> per service, where the Python one runs <code>uvicorn</code> and the Node one runs <code>npm run dev</code>, started by a single <code>flisk up</code>.</p>
+
+<h2 id="what-goes-wrong-in-a-polyglot-repo">What goes wrong in a polyglot repo</h2>
+<p>Each language brings its own tools. Python wants a virtual environment and a lock file. Node wants <code>node_modules</code> and a specific major version. If you run both from the repo root, you tend to hit the same problems: the wrong Python or Node version on one machine, a service started before the one it calls, and logs from two processes mixed in two terminals. The fix is not to unify the toolchains. It is to keep them separate and put one start command above them.</p>
+
+<h2 id="common-ways-to-do-it-without-flisk">Common ways to do it without Flisk</h2>
+<ul>
+<li><strong>A Procfile with a runner</strong> (<code>foreman</code>, <code>overmind</code> or <code>honcho</code>): one line per process, prefixed logs, no ordering.</li>
+<li><strong>A Makefile target</strong> that starts both with <code>&amp;</code>: short, but stopping it cleanly is on you.</li>
+<li><strong>Docker Compose</strong> with one image per language: strong isolation and a clear <code>depends_on</code>, at the cost of Dockerfiles and a slower edit loop.</li>
+<li><strong>A version manager</strong> such as <code>mise</code> or <code>asdf</code> with a <code>.tool-versions</code> file, so everyone gets the same Python and Node.</li>
+</ul>
+<p>Any of these is reasonable. Pick Compose when you need containers anyway, and a Procfile when you want the least machinery.</p>
+
+<h2 id="the-flisk-way-one-manifest-per-service">The Flisk way: one manifest per service</h2>
+<p>Flisk runs a service as a plain process when its manifest has a <code>command</code>. There is no Docker, no Tilt and no generated file for such services. Put each service in its own folder with its own <code>service.json</code>, for example <code>services/app/api/service.json</code> and <code>services/app/web/service.json</code>.</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "toolchain": "python@3.12",
+  "command": "uvicorn main:app --reload --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "toolchain": "node@22",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "API_URL": "http://localhost:4000" }
+}</code></pre>
+<p>The manifests passed <code>flisk config verify</code> when this was tried. Run the stack:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk up</code></pre>
+<p>What Flisk does, per the manifest:</p>
+<ul>
+<li>It runs each <code>command</code> from the service's own directory, so Python commands find <code>main.py</code> and Node commands find <code>package.json</code>.</li>
+<li>It passes <code>PORT</code> to each process, so your code should read the port from the environment.</li>
+<li>It starts services in <code>dependsOn</code> order and waits up to 60 seconds for each to answer its <code>healthCheckPath</code> before it starts the next.</li>
+<li>It prefixes every log line with the service name and writes each service's log to <code>.flisk/native/logs/&lt;service&gt;.log</code>.</li>
+<li>It restarts a crashed process with a growing delay of 1, 2, 4 and 8 seconds.</li>
+</ul>
+<p>The optional <code>toolchain</code> says which runtime the command needs. <code>flisk doctor</code> and <code>flisk up</code> compare it with the program on your <code>PATH</code> and stop with <code>TOOLCHAIN_MISMATCH</code> if the version differs. Flisk installs nothing, so use <code>pyenv</code>, <code>nvm</code>, <code>mise</code> or similar to switch. Without <code>toolchain</code>, a <code>.python-version</code> or <code>.nvmrc</code> in the service folder is only a hint that produces a warning.</p>
+
+<h2 id="env-vars-and-daily-commands">Env vars and daily commands</h2>
+<p>The <code>env</code> block supports <code>${VAR}</code> and <code>${VAR:-default}</code>, so a service can read a value from your shell and fall back to a default. Useful commands:</p>
+<pre><code>flisk up --only api
+flisk up --dry-run
+flisk logs --service api --tail 50
+flisk doctor
+flisk down</code></pre>
+<p><code>--only</code> starts one service and what it needs, <code>--dry-run</code> prints the plan, and <code>flisk logs</code> prints the last lines of one service. Edit Python code and <code>uvicorn --reload</code> restarts the API. Edit Node code and your dev server (Vite, <code>node --watch</code>, or whatever <code>npm run dev</code> runs) reloads. The live reload belongs to the tools, not to Flisk.</p>
+
+<h2 id="pitfalls-and-limits">Pitfalls and limits</h2>
+<ul>
+<li><strong>A project is either local processes or containers.</strong> You cannot mix <code>command</code> services with services built from a Dockerfile. Flisk stops with <code>MIXED_RUNTIME</code>. Ready-made images such as Postgres are the exception: they can sit next to <code>command</code> services, and they need Docker running.</li>
+<li><strong>Dependencies are yours to install.</strong> Run <code>pip install</code> and <code>npm install</code> before the first start. Flisk does not create a virtualenv.</li>
+<li><strong>Origins differ in native mode.</strong> The frontend runs on <code>http://localhost:3000</code>. If the browser calls the Python API directly, add that origin to the API's CORS settings or use a dev proxy.</li>
+<li><strong>Windows and shell syntax.</strong> A <code>command</code> is run by a shell. Keep it plain, and test it on every platform your team uses.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Add a worker in a third language by following <a href="/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/">a Python worker next to a Node API</a>, or read <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a> for the general approach. For the Python and React pair in detail, see <a href="/@odykyi/stack-recipes/fastapi-and-react-locally/">FastAPI and React locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Flisk run Python and Node services together?</summary><p>Yes. Give each service its own service.json with a command, for example uvicorn for Python and npm run dev for Node. flisk up starts both as local processes in dependsOn order, with no Docker.</p></details><details><summary>Does Flisk install Python or Node for me?</summary><p>No. The toolchain field only declares the version a command needs, and flisk up stops with TOOLCHAIN_MISMATCH if the program on PATH differs. Use a version manager to switch versions.</p></details><details><summary>Can I mix local processes and Docker containers in one project?</summary><p>Not for services built from a Dockerfile. A project cannot mix command services with Dockerfile-built services. Ready-made image services such as Postgres can run next to command services if Docker is running.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/fastapi-and-react-locally/"><span class="lbl">Guide</span><b>Run a FastAPI backend and React frontend locally</b><span>Two dev servers, two ports and one browser rule called CORS. Here is how to wire a FastAPI backend and a React frontend so one command starts both.</span></a><a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/"><span class="lbl">Guide</span><b>Express API and Vite frontend in one dev command</b><span>An Express API and a Vite app are two processes that must agree on ports and origins. Here is the plain way, and the one-command way.</span></a><a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/"><span class="lbl">Guide</span><b>Run an existing Dockerfile in a local dev stack</b><span>Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

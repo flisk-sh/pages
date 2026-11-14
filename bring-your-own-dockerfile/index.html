@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run an existing Dockerfile in a local dev stack</title>
+<meta name="description" content="Add a service that already has a Dockerfile or image (Rails, Django, PHP, a legacy app) to a local stack: the container contract, routing, env and limits.">
+<meta name="keywords" content="run existing dockerfile locally, add legacy service to local stack, bring your own container local dev, docker image local dev stack traefik, rails django php local docker routing">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/bring-your-own-dockerfile/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run an existing Dockerfile in a local dev stack">
+<meta property="og:description" content="Add a service that already has a Dockerfile or image (Rails, Django, PHP, a legacy app) to a local stack: the container contract, routing, env and limits.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/bring-your-own-dockerfile/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run an existing Dockerfile in a local dev stack","description":"Add a service that already has a Dockerfile or image (Rails, Django, PHP, a legacy app) to a local stack: the container contract, routing, env and limits.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/bring-your-own-dockerfile/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/bring-your-own-dockerfile/","keywords":"run existing dockerfile locally, add legacy service to local stack, bring your own container local dev, docker image local dev stack traefik, rails django php local docker routing","wordCount":806,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Run an existing Dockerfile in a local dev stack","item":"https://pages.flisk.si/@odykyi/stack-recipes/bring-your-own-dockerfile/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use my own Dockerfile with Flisk?","acceptedAnswer":{"@type":"Answer","text":"Yes. Create the resource with --type bring-your-own and --dockerfile ./Dockerfile. Flisk keeps your Dockerfile and adds routing, health checks and start order around it."}},{"@type":"Question","name":"Can I use a published image instead of a Dockerfile?","acceptedAnswer":{"@type":"Answer","text":"Yes. Pass --image with the image name when you create the resource, and Flisk runs that image with the same routing and health check."}},{"@type":"Question","name":"Does a bring-your-own service reload when I edit code?","acceptedAnswer":{"@type":"Answer","text":"No. It is a container image, so rebuild it from the Tilt UI or restart flisk up."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Run an existing Dockerfile in a local dev stack</h1><p class="dek">Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-container-must-do-to-fit-a-stack">What a container must do to fit a stack</a></li><li><a href="#without-flisk">Without Flisk</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#routing-an-api-or-a-web-ui">Routing: an API or a web UI</a></li><li><a href="#other-fields-you-will-need">Other fields you will need</a></li><li><a href="#what-you-give-up-and-pitfalls">What you give up, and pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Any service with a Dockerfile or a published image can join a local stack if it listens on the port you give it, binds <code>0.0.0.0</code>, and answers 200 on a health path. With Flisk this is the <code>bring-your-own</code> resource type: you keep your Dockerfile, Flisk adds routing, health checks, start order and logs.</p>
+
+<h2 id="what-a-container-must-do-to-fit-a-stack">What a container must do to fit a stack</h2>
+<p>A local stack tool does not need to understand your language. It needs a contract: a port to reach, a way to ask if the service is healthy, and a way to configure it. The container contract is small:</p>
+<ul>
+<li>Listen on the port from <code>$PORT</code> (or a fixed port you declare), and bind <code>0.0.0.0</code>, not <code>127.0.0.1</code>.</li>
+<li>Answer a plain HTTP request with status 200 on a health path such as <code>/health</code>.</li>
+<li>Read configuration from environment variables.</li>
+<li>Provide a Dockerfile, or an image name to pull.</li>
+</ul>
+<p>If a service already runs under Docker Compose, it almost certainly meets this. If it does not, a small change (a health route, a bind address) usually fixes it. See <a href="/@odykyi/docker-compose-guide/import-docker-compose-file/">importing a Compose file</a> if you have a whole <code>docker-compose.yml</code> to move.</p>
+
+<h2 id="without-flisk">Without Flisk</h2>
+<p>In Compose, you write a service block with <code>build</code>, <code>ports</code>, <code>environment</code> and a <code>healthcheck</code>. That is a good answer when you only have a handful of containers, and you keep full control. You choose host ports, avoid collisions yourself and write any reverse proxy rules by hand.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource legacy --type bring-your-own --stack app \
+  --dockerfile ./Dockerfile --health-path /health \
+  --path services/app/legacy --yes</code></pre>
+<p>If the folder already has a Dockerfile, Flisk keeps it and does not overwrite it. It writes a <code>service.json</code> like this:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "legacy",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4003,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile"
+}</code></pre>
+<p>Set <code>port</code> to the port your container really listens on. <code>flisk resource</code> suggests the next free port in 4000 to 5999 when you do not pass one, and <code>--port</code> accepts an unused integer in that range. If you have a ready-made image, pass <code>--image &lt;name&gt;</code> instead of a Dockerfile. The build context is the resource directory unless you set <code>buildContext</code> to a path relative to it, which is useful when the Dockerfile lives in a larger source tree. When you do not provide a Dockerfile at all, Flisk writes a small Nginx one with a health endpoint, which is only a placeholder.</p>
+<pre><code>flisk up</code></pre>
+
+<h2 id="routing-an-api-or-a-web-ui">Routing: an API or a web UI</h2>
+<p>A routed resource is reached at <code>http://api.&lt;project&gt;.localhost/api/&lt;name&gt;</code>, and Flisk strips <code>/api/&lt;name&gt;</code> before the request reaches your container. That suits an API. An app that serves its own pages and assets from <code>/</code> cannot work under a prefix, so set <code>"webUi": true</code> and it gets its own host, <code>&lt;name&gt;.&lt;project&gt;.localhost</code>, with nothing stripped. Use <code>flisk networks</code> to print the real addresses. To skip the route entirely, scaffold with <code>--no-proxy</code>.</p>
+
+<h2 id="other-fields-you-will-need">Other fields you will need</h2>
+<ul>
+<li><strong>One-shot jobs.</strong> A container restarts by default, so a job that exits cleanly starts again. Use <code>--restart no</code> for migrations or seeders. A service that depends on such a job starts only after the job exits with code 0.</li>
+<li><strong>Environment and secrets.</strong> Use <code>env</code> and <code>secrets</code> in <code>service.json</code>, and keep <code>.env</code> out of version control.</li>
+<li><strong>Volumes and runtime options.</strong> <code>volumes</code>, a <code>container</code> block (capabilities, read-only, user, shared memory) and <code>extraPorts</code> cover most special cases.</li>
+</ul>
+<p>The repository has runnable examples under <code>examples/byo/</code>.</p>
+
+<h2 id="what-you-give-up-and-pitfalls">What you give up, and pitfalls</h2>
+<ul>
+<li><strong>No live reload.</strong> A bring-your-own service is rebuilt as an image. After a code change, rebuild it from the Tilt UI or restart <code>flisk up</code>. For a fast loop, use a language provider that has a watcher (Go has one) or run the service as a local process.</li>
+<li><strong>Nothing is published on the host.</strong> You reach the service through its URL, not through <code>localhost:&lt;port&gt;</code>. Add <code>extraPorts</code> only if you need one.</li>
+<li><strong>A Postgres <code>DATABASE_URL</code> is set in every container.</strong> If your app reads that variable for something else, override it in <code>env</code>.</li>
+<li><strong>The Host header is <code>api.&lt;project&gt;.localhost</code>.</strong> Frameworks with host allow lists, such as Rails, reject it until you allow it.</li>
+<li><strong>A cold Docker cache is slow.</strong> The first build pulls every layer.</li>
+<li><strong>Names must be unique.</strong> Resource names have to be unique across Flisk projects on one Docker daemon.</li>
+<li><strong>CORS.</strong> A frontend served at <code>http://app.&lt;project&gt;.localhost</code> calling your container needs that origin allowed in your own code.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Check the result with <code>flisk status</code> and <code>flisk config verify</code>. If the service is a frontend in a framework Flisk does not scaffold, such as Nuxt or SvelteKit, this is the route to use, and <a href="/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/">Vue or Svelte with an API</a> explains how it finds the backend.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I use my own Dockerfile with Flisk?</summary><p>Yes. Create the resource with --type bring-your-own and --dockerfile ./Dockerfile. Flisk keeps your Dockerfile and adds routing, health checks and start order around it.</p></details><details><summary>Can I use a published image instead of a Dockerfile?</summary><p>Yes. Pass --image with the image name when you create the resource, and Flisk runs that image with the same routing and health check.</p></details><details><summary>Does a bring-your-own service reload when I edit code?</summary><p>No. It is a container image, so rebuild it from the Tilt UI or restart flisk up.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/go-api-local-dev/"><span class="lbl">Guide</span><b>Local development for a Go API with live reload</b><span>Go has no built-in watch mode, so live reload is a choice you make. Here are the options and what Flisk scaffolds for each runtime.</span></a><a href="/@odykyi/stack-recipes/rust-api-local-dev/"><span class="lbl">Guide</span><b>Rust API local dev: axum, cargo watch and Docker</b><span>Rust compiles slowly the first time and fast after that, if the cache survives. This is how to keep the loop short with and without containers.</span></a><a href="/@odykyi/stack-recipes/python-and-node-in-one-repo/"><span class="lbl">Guide</span><b>Run Python and Node services in one repo</b><span>Two languages mean two toolchains, two dependency managers and two ways to start. Here is how to keep one command anyway.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rust API local dev: axum, cargo watch and Docker</title>
+<meta name="description" content="Set up a Rust axum API for local development: cargo run, cargo watch, cached Docker builds, and how Flisk scaffolds it as a process or a container.">
+<meta name="keywords" content="rust api local development, axum hot reload, cargo watch run, rust docker build cache cargo, rust axum local dev environment">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/rust-api-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Rust API local dev: axum, cargo watch and Docker">
+<meta property="og:description" content="Set up a Rust axum API for local development: cargo run, cargo watch, cached Docker builds, and how Flisk scaffolds it as a process or a container.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/rust-api-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Rust API local dev: axum, cargo watch and Docker","description":"Set up a Rust axum API for local development: cargo run, cargo watch, cached Docker builds, and how Flisk scaffolds it as a process or a container.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/rust-api-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/rust-api-local-dev/","keywords":"rust api local development, axum hot reload, cargo watch run, rust docker build cache cargo, rust axum local dev environment","wordCount":717,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Rust API local dev: axum, cargo watch and Docker","item":"https://pages.flisk.si/@odykyi/stack-recipes/rust-api-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I auto-reload a Rust API on save?","acceptedAnswer":{"@type":"Answer","text":"Use cargo watch -x run or watchexec -r -e rs -- cargo run. Both rebuild and restart the process when a source file changes."}},{"@type":"Question","name":"Why is my Rust Docker build slow every time?","acceptedAnswer":{"@type":"Answer","text":"Usually the dependency layer or the target folder is not cached. Order the Dockerfile so dependencies are fetched before source is copied, and use BuildKit cache mounts for the cargo registry and target."}},{"@type":"Question","name":"Does Flisk live reload Rust inside a container?","acceptedAnswer":{"@type":"Answer","text":"No. In Docker mode Tilt rebuilds the image on a change, helped by cargo cache mounts. For the fastest loop run the service as a local process with a watcher command."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Rust API local dev: axum, cargo watch and Docker</h1><p class="dek">Rust compiles slowly the first time and fast after that, if the cache survives. This is how to keep the loop short with and without containers.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-makes-rust-loops-slow">What makes Rust loops slow</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#the-flisk-way-as-a-local-process">The Flisk way, as a local process</a></li><li><a href="#the-flisk-way-in-docker">The Flisk way, in Docker</a></li><li><a href="#make-the-compile-itself-faster">Make the compile itself faster</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>The shortest Rust dev loop is a plain process with a watcher: <code>cargo watch -x run</code> rebuilds and restarts on every save, and incremental builds keep it quick. Inside Docker, the loop is only fast if the cargo registry and the <code>target</code> folder are cached between builds. Flisk scaffolds an axum API for both: a <code>cargo run</code> process, or a container whose image rebuilds with BuildKit cache mounts.</p>
+
+<h2 id="what-makes-rust-loops-slow">What makes Rust loops slow</h2>
+<p>The first <code>cargo build</code> compiles every dependency, and that is the slow part. Later builds only recompile your crate. Anything that throws the <code>target</code> folder away makes every build a cold build. In a container this happens whenever the Dockerfile copies the source before it fetches dependencies, or when the build runs without a cache for the registry and <code>target</code>.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<pre><code>cargo install cargo-watch
+cargo watch -x run</code></pre>
+<p><code>cargo-watch</code> is not part of Cargo, and it is in maintenance mode, so <code>watchexec -r -e rs -- cargo run</code> is a fair alternative. Run <code>cargo check</code> in a second terminal for faster feedback while you type, since it skips code generation. For Docker, mount caches in the build step:</p>
+<pre><code>RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build</code></pre>
+<p>Cache mounts need BuildKit, which current Docker versions use by default.</p>
+
+<h2 id="the-flisk-way-as-a-local-process">The Flisk way, as a local process</h2>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource billing --language rust --local --stack app --yes
+flisk up --only billing</code></pre>
+<p>The scaffold is axum 0.8 on tokio, with a <code>Cargo.toml</code> whose binary is named <code>app</code> and a <code>src/main.rs</code> with a <code>/health</code> route. In local mode the service <code>command</code> is <code>cargo run</code>, so it needs the Rust toolchain on your machine and no Docker. It does not reload on save. To get a watcher, change <code>command</code> in <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "billing",
+  "appType": "backend",
+  "command": "cargo watch -x run",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Check the port: the scaffold reads <code>PORT</code> from the environment, which Flisk sets from the manifest.</p>
+
+<h2 id="the-flisk-way-in-docker">The Flisk way, in Docker</h2>
+<pre><code>flisk resource billing --language rust --stack app --yes
+flisk up</code></pre>
+<p>In Docker mode there is no live update. When you change a file, Tilt rebuilds the image, and the Dockerfile uses BuildKit cache mounts for the cargo registry and the <code>target</code> folder, so a rebuild recompiles your crate and not every dependency. The <code>dev.command</code> in the manifest is <code>cargo run</code>. The API is available at <code>http://api.&lt;project&gt;.localhost/api/billing</code>, and Flisk strips <code>/api/billing</code> before the request reaches axum, so define routes as <code>/health</code> and <code>/invoices</code>.</p>
+<p>The container must listen on <code>0.0.0.0</code> and on <code>PORT</code>. The local scaffold binds <code>localhost</code>, which is right for a process and wrong for a container, so do not copy the bind address from one mode into the other.</p>
+
+<h2 id="make-the-compile-itself-faster">Make the compile itself faster</h2>
+<p>Whatever runs the build, a few Cargo habits shorten the loop. Use <code>cargo check</code> while you edit, and a full build only when you run the program. Do not use <code>--release</code> in development, because optimised builds take much longer. On Linux, a faster linker such as <code>lld</code> or <code>mold</code> cuts the link step, which dominates small incremental builds. In <code>Cargo.toml</code>, <code>[profile.dev] debug = "line-tables-only"</code> reduces the debug information the compiler writes, and you still get readable backtraces. Finally, keep the dependency list short: every crate you add is compiled on a cold build, and each feature flag you do not need is extra work.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Cold start of the first image.</strong> The first Docker build compiles all dependencies. Expect it to be slow once, and quick after that as long as the cache mounts are kept.</li>
+<li><strong>Pruning the Docker cache.</strong> <code>docker builder prune</code> removes the cache mounts, and the next build is cold again.</li>
+<li><strong>Mixing a Rust service with a local-process service.</strong> A project cannot mix <code>command</code> services with Dockerfile-built services, and Flisk reports <code>MIXED_RUNTIME</code>. Pick one runtime for the project. Ready-made image services such as Postgres are fine next to <code>command</code> services.</li>
+<li><strong>Disk space.</strong> <code>target</code> folders and image layers grow quickly. See <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a> if builds start failing.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Try the Go version in <a href="/@odykyi/stack-recipes/go-api-local-dev/">Go API local dev</a>, where live reload inside the container is a one-line switch. If you already have a Rust Dockerfile you like, <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">bring your own Dockerfile</a> and keep it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I auto-reload a Rust API on save?</summary><p>Use cargo watch -x run or watchexec -r -e rs -- cargo run. Both rebuild and restart the process when a source file changes.</p></details><details><summary>Why is my Rust Docker build slow every time?</summary><p>Usually the dependency layer or the target folder is not cached. Order the Dockerfile so dependencies are fetched before source is copied, and use BuildKit cache mounts for the cargo registry and target.</p></details><details><summary>Does Flisk live reload Rust inside a container?</summary><p>No. In Docker mode Tilt rebuilds the image on a change, helped by cargo cache mounts. For the fastest loop run the service as a local process with a watcher command.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/go-api-local-dev/"><span class="lbl">Guide</span><b>Local development for a Go API with live reload</b><span>Go has no built-in watch mode, so live reload is a choice you make. Here are the options and what Flisk scaffolds for each runtime.</span></a><a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/"><span class="lbl">Guide</span><b>Run an existing Dockerfile in a local dev stack</b><span>Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</span></a><a href="/@odykyi/stack-recipes/bun-and-hono-api/"><span class="lbl">Guide</span><b>Bun and Hono API: local dev setup with live reload</b><span>Bun starts fast and has a built-in watcher, and Hono is a small router that fits it. This is the setup, with and without Flisk.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
