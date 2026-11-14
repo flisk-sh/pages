@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to point an agent framework at a local model with Ollama</title>
+<meta name="description" content="Run agent code against a local Ollama model through its OpenAI-compatible endpoint: the base URL and key settings per framework, and the Flisk inference resource.">
+<meta name="keywords" content="ollama openai compatible agent, local llm agent framework, ollama base url, run agent with local model, flisk inference resource">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to point an agent framework at a local model with Ollama">
+<meta property="og:description" content="Run agent code against a local Ollama model through its OpenAI-compatible endpoint: the base URL and key settings per framework, and the Flisk inference resource.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to point an agent framework at a local model with Ollama","description":"Run agent code against a local Ollama model through its OpenAI-compatible endpoint: the base URL and key settings per framework, and the Flisk inference resource.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/","keywords":"ollama openai compatible agent, local llm agent framework, ollama base url, run agent with local model, flisk inference resource","wordCount":704,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Agent frameworks on your laptop","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/"},{"@type":"ListItem","position":3,"name":"How to point an agent framework at a local model with Ollama","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does the client need an API key for a local model?","acceptedAnswer":{"@type":"Answer","text":"The OpenAI client libraries refuse to build a client without one. Ollama does not check it, so any non-empty string such as ollama works."}},{"@type":"Question","name":"Does the Flisk inference preset keep pulled models?","acceptedAnswer":{"@type":"Answer","text":"No. The preset mounts no volume, so models pulled into the container are removed with it when the stack goes down. Pull again, or build an image that contains the model."}},{"@type":"Question","name":"Can a container use the GPU on a Mac?","acceptedAnswer":{"@type":"Answer","text":"No, Docker on macOS cannot reach the Apple GPU. Run the model server on the host and point the agent at it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-frameworks-local/">Agent frameworks on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Agent frameworks on your laptop</div><h1>How to point an agent framework at a local model with Ollama</h1><p class="dek">Most agent frameworks can talk to any server that speaks the OpenAI API. That means a model on your laptop can replace the paid API while you build.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-three-settings">The three settings</a></li><li><a href="#option-1-the-model-on-your-host-the-agent-as-a-local-process">Option 1: the model on your host, the agent as a local process</a></li><li><a href="#option-2-the-model-as-a-resource-in-the-stack">Option 2: the model as a resource in the stack</a></li><li><a href="#what-changes-when-the-model-is-small">What changes when the model is small</a></li></ol></nav></aside>
+<article><p>Ollama serves an OpenAI-compatible API at <code>http://localhost:11434/v1</code>. Any framework that lets you set a base URL for its OpenAI client can use it: set the base URL, set a dummy API key, and use a model name you have pulled. That is enough to develop an agent with no paid API calls, with one important limit: small local models handle tool calls much worse than hosted ones.</p>
+
+<h2 id="the-three-settings">The three settings</h2>
+<p>Switching an agent to a local model is the same change everywhere:</p>
+<ul>
+<li><strong>Base URL:</strong> <code>http://localhost:11434/v1</code> when the agent runs on your machine, or the model container's address when it runs inside a Docker network.</li>
+<li><strong>API key:</strong> the client library insists on one, and Ollama ignores it. Any non-empty string works.</li>
+<li><strong>Model name:</strong> exactly what <code>ollama list</code> shows, for example one you fetched with <code>ollama pull</code>.</li>
+</ul>
+<p>The OpenAI Python and JavaScript clients read <code>OPENAI_BASE_URL</code> and <code>OPENAI_API_KEY</code> from the environment, so many frameworks need no code change at all:</p>
+<pre><code>export OPENAI_BASE_URL=http://localhost:11434/v1
+export OPENAI_API_KEY=ollama</code></pre>
+<p>Frameworks that wrap provider classes take the same values as arguments. A few shapes, to be checked against the docs of your version:</p>
+<pre><code># CrewAI
+from crewai import LLM
+llm = LLM(model="ollama/YOUR_MODEL", base_url="http://localhost:11434")
+
+# OpenAI Agents SDK
+from openai import AsyncOpenAI
+from agents import OpenAIChatCompletionsModel
+client = AsyncOpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+model = OpenAIChatCompletionsModel(model="YOUR_MODEL", openai_client=client)
+
+// Vercel AI SDK (package @ai-sdk/openai-compatible)
+const ollama = createOpenAICompatible({ name: 'ollama', baseURL: 'http://localhost:11434/v1' });
+const model = ollama('YOUR_MODEL');</code></pre>
+<p>Replace <code>YOUR_MODEL</code> with a name from <code>ollama list</code>. Notice that CrewAI's <code>ollama/</code> form uses the server root, while the OpenAI-style clients use the <code>/v1</code> path.</p>
+
+<h2 id="option-1-the-model-on-your-host-the-agent-as-a-local-process">Option 1: the model on your host, the agent as a local process</h2>
+<p>If you installed Ollama on your machine, it is already listening on port 11434. On a Mac this is also the only way to use the Apple GPU, because a container cannot reach it; Flisk's docs say the same and suggest running the model server on the host there. Run your agent as a Flisk local process and give it the URL in <code>service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "agent",
+  "appType": "backend",
+  "command": "uvicorn main:app --app-dir src --host localhost --port ${PORT:-4000}",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "env": {
+    "OPENAI_BASE_URL": "http://localhost:11434/v1",
+    "OPENAI_API_KEY": "ollama"
+  }
+}</code></pre>
+<p>The dummy key is not a secret, so it can sit in the file. A real key must not; see <a href="/@odykyi/agent-frameworks-local/llm-api-keys-in-local-stack/">keeping LLM API keys out of git</a>.</p>
+
+<h2 id="option-2-the-model-as-a-resource-in-the-stack">Option 2: the model as a resource in the stack</h2>
+<p>When the agent runs in containers, Flisk has a preset for a model server:</p>
+<pre><code>flisk resource brain --type inference --stack kitchen</code></pre>
+<p>It writes a <code>service.json</code> with image <code>ollama/ollama</code>, port 11434 and the health path <code>/v1/models</code>. Ollama is only the default. You can pass <code>--image</code> to use vLLM, a llama.cpp server or another image, as long as it answers <code>GET /v1/models</code>. Other containers in the stack reach it at <code>http://brain:11434/v1</code>. Two cautions from Flisk's own notes:</p>
+<ul>
+<li>The preset mounts no volume, so pulled models are lost when <code>flisk down</code> removes the container. Pull again after each <code>flisk up</code>, or bake the model into your own image.</li>
+<li>A container on a Mac has no GPU access, so it is slow. Use option 1 there.</li>
+</ul>
+<p>Pulling a model into the container is done with Ollama's own command through Docker Compose; Flisk's docs show <code>docker compose exec brain ollama pull &lt;model&gt;</code>.</p>
+
+<h2 id="what-changes-when-the-model-is-small">What changes when the model is small</h2>
+<ul>
+<li><strong>Tool calls.</strong> Not every local model supports tool calling, and small ones often produce bad arguments or skip the tool. If your agent depends on tools, check the model's tool support before blaming the framework.</li>
+<li><strong>Latency.</strong> A turn that takes two seconds on a hosted model can take much longer on a laptop CPU. Raise the timeouts in your client and in any step limits that count seconds.</li>
+<li><strong>Behaviour is not the same.</strong> A prompt that works on a local model may fail on the hosted one and the other way round. Treat the local model as a development stand-in and run the final checks against the model you ship with.</li>
+</ul>
+<p>To test agent code with no model at all, replace the model with a scripted one, as in <a href="/@odykyi/agent-frameworks-local/pydantic-ai-test-without-llm/">testing a Pydantic AI agent without a real model</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does the client need an API key for a local model?</summary><p>The OpenAI client libraries refuse to build a client without one. Ollama does not check it, so any non-empty string such as ollama works.</p></details><details><summary>Does the Flisk inference preset keep pulled models?</summary><p>No. The preset mounts no volume, so models pulled into the container are removed with it when the stack goes down. Pull again, or build an image that contains the model.</p></details><details><summary>Can a container use the GPU on a Mac?</summary><p>No, Docker on macOS cannot reach the Apple GPU. Run the model server on the host and point the agent at it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent frameworks on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-frameworks-local/pydantic-ai-test-without-llm/"><span class="lbl">Guide</span><b>How to test a Pydantic AI agent without calling a real model</b><span>Tests that call a real model are slow, cost money and give a different answer each run. Pydantic AI has test models built for this.</span></a><a href="/@odykyi/agent-frameworks-local/llm-api-keys-in-local-stack/"><span class="lbl">Guide</span><b>How to keep LLM API keys out of service.json and git</b><span>An agent project has at least one secret that really costs money. Commit the name of the variable and never its value.</span></a><a href="/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/"><span class="lbl">Guide</span><b>How to stop an AI agent from looping forever: step limits</b><span>An agent that keeps calling tools never crashes, so no restart policy will save you. The cap has to be in the code, and you should set it yourself.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

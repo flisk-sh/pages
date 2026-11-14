@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep OpenAI Agents SDK conversations across restarts</title>
+<meta name="description" content="Use SQLiteSession with the OpenAI Agents SDK so a chat survives a restart, key sessions by a header, and run the service locally with Flisk and no Docker.">
+<meta name="keywords" content="openai agents sdk session, SQLiteSession, openai agents sdk memory, openai agents sdk fastapi, agent conversation history local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep OpenAI Agents SDK conversations across restarts">
+<meta property="og:description" content="Use SQLiteSession with the OpenAI Agents SDK so a chat survives a restart, key sessions by a header, and run the service locally with Flisk and no Docker.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep OpenAI Agents SDK conversations across restarts","description":"Use SQLiteSession with the OpenAI Agents SDK so a chat survives a restart, key sessions by a header, and run the service locally with Flisk and no Docker.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/","keywords":"openai agents sdk session, SQLiteSession, openai agents sdk memory, openai agents sdk fastapi, agent conversation history local","wordCount":680,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Agent frameworks on your laptop","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/"},{"@type":"ListItem","position":3,"name":"How to keep OpenAI Agents SDK conversations across restarts","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Where does SQLiteSession store data if I give no path?","acceptedAnswer":{"@type":"Answer","text":"In memory. The history is lost when the process exits, so pass a file path as the second argument for anything you want to keep."}},{"@type":"Question","name":"Can two services share one session database?","acceptedAnswer":{"@type":"Answer","text":"SQLite handles occasional sharing but is a poor fit for concurrent writers. Use a server database if several processes write the same sessions."}},{"@type":"Question","name":"Does Flisk resume a run that was interrupted?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk restarts a crashed process. Whether an unfinished run can continue depends on your framework, and the Agents SDK session stores history, not run progress."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-frameworks-local/">Agent frameworks on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Agent frameworks on your laptop</div><h1>How to keep OpenAI Agents SDK conversations across restarts</h1><p class="dek">By default a conversation lives in memory and ends with the process. A session backed by a file keeps it, and one header turns it into a multi-user API.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-session-does-and-does-not-do">What a session does and does not do</a></li><li><a href="#the-service">The service</a></li><li><a href="#run-it-with-flisk">Run it with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>The OpenAI Agents SDK keeps no conversation history between calls unless you hand it a session. Pass a <code>SQLiteSession</code> that points at a file, and the history survives a restart of your service. Add a session id from a request header and the same agent can serve many separate conversations. This article builds that service and runs it locally.</p>
+
+<h2 id="what-a-session-does-and-does-not-do">What a session does and does not do</h2>
+<p>Each call to <code>Runner.run</code> is independent. Without a session you must pass the earlier messages yourself. With a session, the runner loads the stored items before the call and appends the new ones afterwards, so your code only sends the new user message.</p>
+<p>A session stores conversation history. It is not a checkpoint of a run in progress. If the process dies halfway through a tool-calling run, the session holds what was saved, and nothing resumes the interrupted run by itself. If you need that, a graph framework with checkpoints fits better; compare them in <a href="/@odykyi/agent-frameworks-local/where-agent-frameworks-keep-state/">where agent frameworks keep state</a>.</p>
+
+<h2 id="the-service">The service</h2>
+<p>Install the SDK with <code>pip install openai-agents</code>. <code>SQLiteSession</code> takes a session id and, as a second argument, a database file path. If you leave the path out it uses memory, which is the setting that loses everything on restart.</p>
+<pre><code>import os
+
+from agents import Agent, Runner, SQLiteSession
+from fastapi import FastAPI, Header
+from pydantic import BaseModel
+
+DB_PATH = os.environ.get("SESSIONS_DB", ".data/sessions.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
+agent = Agent(name="assistant", instructions="Answer briefly.")
+app = FastAPI()
+
+
+class Turn(BaseModel):
+    input: str
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/turn")
+async def turn(body: Turn, x_session_id: str = Header(...)) -> dict[str, str]:
+    session = SQLiteSession(x_session_id, DB_PATH)
+    result = await Runner.run(agent, body.input, session=session)
+    return {"reply": str(result.final_output)}</code></pre>
+<p>FastAPI turns the <code>x-session-id</code> header into the <code>x_session_id</code> argument. A request without it gets a 422, which is a reasonable answer for a missing session. This is the same convention the Flisk <code>agent</code> resource uses; the idea is covered in <a href="/@odykyi/ai-agents-local/route-requests-by-session-id/">routing requests by session ID</a>.</p>
+
+<h2 id="run-it-with-flisk">Run it with Flisk</h2>
+<p>Scaffold a Python service that runs as a local process, then replace its <code>src/main.py</code> with the code above and add <code>openai-agents</code> to <code>pyproject.toml</code>:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk resource assistant --type backend --language python --local --stack agents --yes</code></pre>
+<p>Edit the generated <code>service.json</code> so the process gets the key and a database path that stays out of git:</p>
+<pre><code>"env": {
+  "OPENAI_API_KEY": "${OPENAI_API_KEY}",
+  "SESSIONS_DB": ".data/sessions.db"
+}</code></pre>
+<p>Add <code>.data/</code> to <code>.gitignore</code>. A local process runs from the service directory, so the relative path lands inside it. Install the dependencies into your active environment, run <code>flisk up</code>, and talk to the service on the port it prints:</p>
+<pre><code>curl -X POST localhost:&lt;port&gt;/turn -H 'x-session-id: demo' -H 'content-type: application/json' -d '{"input":"My name is Sam."}'
+# stop with Ctrl+C, run flisk up again, then:
+curl -X POST localhost:&lt;port&gt;/turn -H 'x-session-id: demo' -H 'content-type: application/json' -d '{"input":"What is my name?"}'</code></pre>
+<p>The second call should use the stored history, so the model can answer from the first message. A different <code>x-session-id</code> starts a separate conversation. Because this is a local process with no gateway, the header is read by your code and nothing routes on it; Flisk's gateway-based session routing belongs to its Docker path and the <code>agent</code> resource.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A session id is a file key.</strong> Here it only picks rows in one database, but never build file paths from raw header values elsewhere. Validate the id if it comes from outside.</li>
+<li><strong>SQLite is one writer.</strong> Two turns on the same session at once can interleave their messages. Serialize turns per session if clients can send overlapping requests.</li>
+<li><strong>Turn limits.</strong> <code>Runner.run</code> stops with an error after a maximum number of turns. Set it deliberately; see <a href="/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/">step limits across frameworks</a>.</li>
+<li><strong>Tracing.</strong> The SDK sends traces to OpenAI by default. Turn that off with <code>set_tracing_disabled(True)</code> if the conversations are private.</li>
+<li><strong>History grows.</strong> Every turn re-sends stored items to the model. Clear a session, or trim it, when conversations get long.</li>
+</ul>
+
+<p>If the service also needs a database of its own, see <a href="/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/">giving an agent a database and a queue</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Where does SQLiteSession store data if I give no path?</summary><p>In memory. The history is lost when the process exits, so pass a file path as the second argument for anything you want to keep.</p></details><details><summary>Can two services share one session database?</summary><p>SQLite handles occasional sharing but is a poor fit for concurrent writers. Use a server database if several processes write the same sessions.</p></details><details><summary>Does Flisk resume a run that was interrupted?</summary><p>No. Flisk restarts a crashed process. Whether an unfinished run can continue depends on your framework, and the Agents SDK session stores history, not run progress.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent frameworks on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-frameworks-local/where-agent-frameworks-keep-state/"><span class="lbl">Guide</span><b>Where agent frameworks keep state: LangGraph, CrewAI and others</b><span>Two different things get called state: the conversation so far, and the progress of a run in flight. Frameworks cover them very differently.</span></a><a href="/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/"><span class="lbl">Guide</span><b>How to put a Python agent behind a FastAPI endpoint</b><span>Agent libraries are blocking Python functions. A web endpoint is not. The mismatch causes most of the first-day problems.</span></a><a href="/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/"><span class="lbl">Guide</span><b>How to stop an AI agent from looping forever: step limits</b><span>An agent that keeps calling tools never crashes, so no restart policy will save you. The cap has to be in the code, and you should set it yourself.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
