@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test subscription renewals with Stripe test clocks</title>
+<meta name="description" content="Use Stripe test clocks to move time forward in test mode, so trials end, invoices are created and renewals fail on schedule without waiting a month.">
+<meta name="keywords" content="stripe test clocks, test stripe subscription renewal, stripe trial end test, advance time stripe test mode, stripe subscription webhook testing">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test subscription renewals with Stripe test clocks">
+<meta property="og:description" content="Use Stripe test clocks to move time forward in test mode, so trials end, invoices are created and renewals fail on schedule without waiting a month.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test subscription renewals with Stripe test clocks","description":"Use Stripe test clocks to move time forward in test mode, so trials end, invoices are created and renewals fail on schedule without waiting a month.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/","keywords":"stripe test clocks, test stripe subscription renewal, stripe trial end test, advance time stripe test mode, stripe subscription webhook testing","wordCount":749,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to test subscription renewals with Stripe test clocks","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I move a Stripe test clock backwards?","acceptedAnswer":{"@type":"Answer","text":"No. A test clock only moves forward. To rerun a scenario, create a new clock and new customers attached to it."}},{"@type":"Question","name":"Do Stripe test clocks work in live mode?","acceptedAnswer":{"@type":"Answer","text":"No. They exist only in test mode, so they are safe to use on a development account."}},{"@type":"Question","name":"Why are my renewal events missing right after I advance the clock?","acceptedAnswer":{"@type":"Answer","text":"Advancing is asynchronous. Wait until the clock status is ready, then check for events. Also make sure stripe listen or a webhook endpoint is receiving events."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to test subscription renewals with Stripe test clocks</h1><p class="dek">Billing code runs on the calendar. A test clock gives it a calendar you control, and Stripe sends the same webhooks it would in a month.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-problem-with-time">The problem with time</a></li><li><a href="#how-a-test-clock-works">How a test clock works</a></li><li><a href="#a-scenario-in-code">A scenario in code</a></li><li><a href="#what-to-assert-after-each-advance">What to assert after each advance</a></li><li><a href="#running-it-next-to-your-stack">Running it next to your stack</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Stripe test clocks let you move a simulated clock forward in test mode, attach customers to it, and watch Stripe run its billing, trial end and renewal logic at the new time. You create a clock, create a customer and a subscription on that clock, advance the clock, and your webhook endpoint receives the real events, so the month-long path runs in a few minutes.</p>
+
+<h2 id="the-problem-with-time">The problem with time</h2>
+<p>Subscription code has branches you rarely reach: the trial ends, the first invoice is paid, the second invoice fails, the account is retried, and after the last retry the subscription is cancelled. Waiting for real days is not an option, and changing your own machine's clock does nothing, because Stripe's clock is on its servers. Faking time inside your code only tests your code against your assumptions about Stripe. A test clock changes Stripe's time, so Stripe itself produces the invoices and events.</p>
+
+<h2 id="how-a-test-clock-works">How a test clock works</h2>
+<ol>
+<li>You create a test clock with a starting <code>frozen_time</code>, a Unix timestamp.</li>
+<li>You create a customer with <code>test_clock</code> set to that clock. Anything the customer owns, subscriptions and invoices included, follows the clock.</li>
+<li>You advance the clock to a later time. Stripe processes everything that would have happened up to then and sends the matching events.</li>
+</ol>
+<p>Test clocks exist in test mode only. A clock moves forward, never back, so to repeat a scenario you create a new clock and new customers. Stripe limits how far one advance can go and how many customers a clock can hold, so advance in stages and check the current limits in its documentation.</p>
+
+<h2 id="a-scenario-in-code">A scenario in code</h2>
+<pre><code>const now = Math.floor(Date.now() / 1000);
+
+const clock = await stripe.testHelpers.testClocks.create({
+  frozen_time: now,
+  name: "trial-then-renewal"
+});
+
+const customer = await stripe.customers.create({
+  email: "test@example.com",
+  test_clock: clock.id,
+  payment_method: "pm_card_visa",
+  invoice_settings: { default_payment_method: "pm_card_visa" }
+});
+
+await stripe.subscriptions.create({
+  customer: customer.id,
+  items: [{ price: process.env.PRICE_ID }],
+  trial_period_days: 7
+});
+
+// Move 8 days ahead: the trial ends and the first invoice is created
+await stripe.testHelpers.testClocks.advance(clock.id, {
+  frozen_time: now + 8 * 24 * 3600
+});</code></pre>
+<p>Advancing is asynchronous. The clock reports a status of <code>advancing</code> and then <code>ready</code>. Poll <code>stripe.testHelpers.testClocks.retrieve(clock.id)</code> until it is ready before you assert anything, or you will check state that Stripe has not finished creating.</p>
+
+<h2 id="what-to-assert-after-each-advance">What to assert after each advance</h2>
+<ul>
+<li><strong>After the trial.</strong> You receive an invoice event and a payment event, and your database shows the subscription as active, not trialing.</li>
+<li><strong>After one renewal period.</strong> A new invoice is paid. Check that you extended access by one period, not two. Duplicate delivery is the usual cause of a double extension.</li>
+<li><strong>After a failing card.</strong> Attach the card 4000 0000 0000 0341, which attaches but fails on charge, advance to the renewal date and confirm your code marks the account past due and does not cut access instantly. <a href="/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/">Stripe test cards for declines</a> lists that number with the others.</li>
+<li><strong>After the last retry.</strong> The subscription is cancelled and your system revokes access.</li>
+</ul>
+
+<h2 id="running-it-next-to-your-stack">Running it next to your stack</h2>
+<p>The events reach your laptop through <code>stripe listen --forward-to localhost:4000/webhooks/stripe</code> as described in <a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/">testing Stripe payments locally</a>. Real time does not move: events from an advance arrive within seconds. With Flisk, run the API as a local process (<code>flisk up</code>), keep the scenario script as a one-shot command, and read what the API did with:</p>
+<pre><code>flisk run api -- node scripts/renewal-scenario.js
+flisk logs --service api --since 5m</code></pre>
+<p><code>flisk run</code> starts the script with the environment the <code>api</code> service has, which includes the test key from <code>.env</code>, and returns the script's exit code, so the same command works in CI. Flisk adds nothing to Stripe's clock. It only keeps the API, its database and the script in one place.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Customers not on the clock.</strong> A customer created without <code>test_clock</code> lives in real time and never advances.</li>
+<li><strong>Cleanup.</strong> Deleting a clock deletes its customers and their data. Do it when a scenario ends so the test account stays readable.</li>
+<li><strong>Your own timers.</strong> If your app also computes "days left" from your machine's clock, the two will disagree. Drive access decisions from Stripe's events and fields, not from local time.</li>
+<li><strong>Skipping the wait for ready.</strong> The most common cause of a flaky renewal test.</li>
+<li><strong>Treating it as the real world.</strong> A test clock does not reproduce issuer behaviour, bank holidays or live retry timing. It tests your handling, not Stripe's schedule.</li>
+</ul>
+
+<p>For the related question of money going back, see <a href="/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/">testing refunds and chargebacks</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I move a Stripe test clock backwards?</summary><p>No. A test clock only moves forward. To rerun a scenario, create a new clock and new customers attached to it.</p></details><details><summary>Do Stripe test clocks work in live mode?</summary><p>No. They exist only in test mode, so they are safe to use on a development account.</p></details><details><summary>Why are my renewal events missing right after I advance the clock?</summary><p>Advancing is asynchronous. Wait until the clock status is ready, then check for events. Also make sure stripe listen or a webhook endpoint is receiving events.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/"><span class="lbl">Guide</span><b>Stripe test cards for declines, 3D Secure and insufficient funds</b><span>A payment flow that only ever sees 4242 4242 4242 4242 is untested. These are the cards that make Stripe fail on purpose, and what your code should do with each.</span></a><a href="/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/"><span class="lbl">Guide</span><b>How to reconcile payments after missed webhooks</b><span>Webhooks are a fast path, not a guarantee. A job that asks the provider what really happened is the safety net, and it is easy to test by turning the receiver off.</span></a><a href="/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/"><span class="lbl">Guide</span><b>How to test refunds and chargebacks in Stripe test mode</b><span>Money going back out is where order, ledger and email logic disagree. Stripe test mode can produce every one of these events on demand.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

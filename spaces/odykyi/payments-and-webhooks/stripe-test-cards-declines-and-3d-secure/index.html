@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stripe test cards for declines, 3D Secure and insufficient funds</title>
+<meta name="description" content="Which Stripe test card numbers produce a decline, an insufficient funds error, a 3D Secure challenge or a dispute, and how to assert each result in a test.">
+<meta name="keywords" content="stripe test cards, stripe test card declined, stripe 3d secure test card, stripe insufficient funds test card, stripe card_declined test">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Stripe test cards for declines, 3D Secure and insufficient funds">
+<meta property="og:description" content="Which Stripe test card numbers produce a decline, an insufficient funds error, a 3D Secure challenge or a dispute, and how to assert each result in a test.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Stripe test cards for declines, 3D Secure and insufficient funds","description":"Which Stripe test card numbers produce a decline, an insufficient funds error, a 3D Secure challenge or a dispute, and how to assert each result in a test.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/","keywords":"stripe test cards, stripe test card declined, stripe 3d secure test card, stripe insufficient funds test card, stripe card_declined test","wordCount":750,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"Stripe test cards for declines, 3D Secure and insufficient funds","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which Stripe test card always declines?","acceptedAnswer":{"@type":"Answer","text":"4000 0000 0000 0002 produces a generic card_declined error. Use 4000 0000 0000 9995 when you want the insufficient_funds decline code."}},{"@type":"Question","name":"How do I test 3D Secure in Stripe test mode?","acceptedAnswer":{"@type":"Answer","text":"Pay with 4000 0025 0000 3155. Stripe shows a test authentication page where you can complete or fail the challenge, and the final result is sent by webhook."}},{"@type":"Question","name":"Do the test card details matter beyond the number?","acceptedAnswer":{"@type":"Answer","text":"No. Any future expiry date, any three-digit CVC and any postal code work with the test numbers."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>Stripe test cards for declines, 3D Secure and insufficient funds</h1><p class="dek">A payment flow that only ever sees 4242 4242 4242 4242 is untested. These are the cards that make Stripe fail on purpose, and what your code should do with each.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-cards-worth-keeping-in-a-test-file">The cards worth keeping in a test file</a></li><li><a href="#why-each-case-matters">Why each case matters</a></li><li><a href="#using-them-from-code">Using them from code</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Stripe test mode accepts special card numbers that force a specific result. Use 4242 4242 4242 4242 for success, 4000 0000 0000 0002 for a generic decline, 4000 0000 0000 9995 for insufficient funds and 4000 0025 0000 3155 for a payment that needs 3D Secure authentication. Any future expiry date, any three-digit CVC and any postal code work with all of them.</p>
+
+<h2 id="the-cards-worth-keeping-in-a-test-file">The cards worth keeping in a test file</h2>
+<table>
+<thead><tr><th>Card number</th><th>What happens</th><th>What your code should do</th></tr></thead>
+<tbody>
+<tr><td>4242 4242 4242 4242</td><td>The payment succeeds</td><td>Mark the order paid after the webhook</td></tr>
+<tr><td>4000 0000 0000 0002</td><td>Declined with <code>card_declined</code></td><td>Show a retry message, keep the order unpaid</td></tr>
+<tr><td>4000 0000 0000 9995</td><td>Declined with <code>insufficient_funds</code></td><td>Ask for another card, do not say "card number invalid"</td></tr>
+<tr><td>4000 0025 0000 3155</td><td>Requires 3D Secure authentication</td><td>Complete the challenge, handle the customer abandoning it</td></tr>
+<tr><td>4000 0000 0000 0341</td><td>Attaching to a customer works, later charges fail</td><td>Handle a failed renewal on a saved card</td></tr>
+<tr><td>4000 0000 0000 0259</td><td>Succeeds, then a dispute is opened</td><td>Handle a chargeback event</td></tr>
+</tbody>
+</table>
+<p>The full list is in Stripe's testing documentation, and it changes over time, so treat the table as a starting set and check the page when a number stops behaving as described.</p>
+
+<h2 id="why-each-case-matters">Why each case matters</h2>
+<p><strong>The decline.</strong> Most checkout bugs live here. The order was created before the payment, so a decline leaves a row in "pending". Your test should assert that the order is still unpaid, that no confirmation email went out and that the customer can try again with the same order.</p>
+<p><strong>Insufficient funds.</strong> It is a decline with a different <code>decline_code</code>. If your error mapper shows one message for every failure, this case shows you whether you read the code or just the type.</p>
+<p><strong>3D Secure.</strong> The payment does not finish in one request. Stripe returns a status that says further action is needed, the browser shows an authentication step, and the final result arrives later by webhook. The common mistakes are treating the first response as success and never handling the case where the customer closes the challenge. In test mode the challenge page has buttons to complete or fail the authentication, so you can walk both paths by hand.</p>
+<p><strong>The failing saved card.</strong> It is the cheap way to reach the "payment failed on renewal" branch without waiting for a billing cycle. See <a href="/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/">testing renewals with test clocks</a> for the time side of that.</p>
+
+<h2 id="using-them-from-code">Using them from code</h2>
+<p>For a server-side test you often do not type a number at all. Stripe provides test payment method IDs, such as <code>pm_card_visa</code>, that you can pass directly:</p>
+<pre><code>const intent = await stripe.paymentIntents.create({
+  amount: 2000,
+  currency: "usd",
+  payment_method: "pm_card_visa",
+  confirm: true,
+  automatic_payment_methods: { enabled: true, allow_redirects: "never" }
+});
+console.log(intent.status);   // "succeeded"</code></pre>
+<p>A declined card throws an error with a <code>code</code> field, which is what you assert on:</p>
+<pre><code>try {
+  await stripe.paymentIntents.create({ /* ... same, with a declining method ... */ });
+} catch (err) {
+  console.log(err.type, err.code);   // StripeCardError card_declined
+}</code></pre>
+<p>Use the card numbers in a browser test (Playwright or Cypress against the hosted Checkout page or Stripe Elements) and the payment method IDs in API-level tests. Mixing them up wastes time: Elements fields live in an iframe that is awkward to automate, so keep the browser tests few and let the API tests cover the many branches.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk does not change which card does what, since that is Stripe's behaviour. What it gives you is a repeatable place to run the checks: your API, the database and the worker as one stack started with <code>flisk up</code>, so a test that pays with a declined card can then read the order row and the worker's log. <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">Running integration tests against the real stack</a> covers that setup.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Real card numbers.</strong> Test mode rejects a real card, and typing one into a test page is a habit you do not want.</li>
+<li><strong>Live mode has different rules.</strong> A test-only number fails in live mode, and live issuers decline for reasons you cannot reproduce here. Treat test cards as coverage of your code paths, not of the card networks.</li>
+<li><strong>Assert on codes, not on message text.</strong> The human message can change. <code>card_declined</code> and <code>insufficient_funds</code> are stable.</li>
+<li><strong>Do not assert on webhook arrival order.</strong> The failed and the later events may arrive in any order.</li>
+</ul>
+
+<p>After the failure paths pass, move on to the follow-up side: <a href="/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/">testing refunds and chargebacks</a> reuses the dispute card from the table.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which Stripe test card always declines?</summary><p>4000 0000 0000 0002 produces a generic card_declined error. Use 4000 0000 0000 9995 when you want the insufficient_funds decline code.</p></details><details><summary>How do I test 3D Secure in Stripe test mode?</summary><p>Pay with 4000 0025 0000 3155. Stripe shows a test authentication page where you can complete or fail the challenge, and the final result is sent by webhook.</p></details><details><summary>Do the test card details matter beyond the number?</summary><p>No. Any future expiry date, any three-digit CVC and any postal code work with the test numbers.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/"><span class="lbl">Guide</span><b>How to test Stripe payments locally in test mode</b><span>You do not need a public URL or a live account to test a payment end to end. You need test keys, one forwarding command and an endpoint that checks signatures.</span></a><a href="/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/"><span class="lbl">Guide</span><b>How to test refunds and chargebacks in Stripe test mode</b><span>Money going back out is where order, ledger and email logic disagree. Stripe test mode can produce every one of these events on demand.</span></a><a href="/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/"><span class="lbl">Guide</span><b>How to test subscription renewals with Stripe test clocks</b><span>Billing code runs on the calendar. A test clock gives it a calendar you control, and Stripe sends the same webhooks it would in a month.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

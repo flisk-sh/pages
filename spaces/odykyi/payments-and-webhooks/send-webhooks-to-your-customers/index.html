@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build webhook delivery with signatures and retries</title>
+<meta name="description" content="Design the sending side of webhooks: an events table, a delivery worker, HMAC signatures, backoff with jitter, and a local receiver that fails on purpose.">
+<meta name="keywords" content="send webhooks, webhook delivery retries, webhook signature hmac, webhook exponential backoff, build webhook system">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build webhook delivery with signatures and retries">
+<meta property="og:description" content="Design the sending side of webhooks: an events table, a delivery worker, HMAC signatures, backoff with jitter, and a local receiver that fails on purpose.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build webhook delivery with signatures and retries","description":"Design the sending side of webhooks: an events table, a delivery worker, HMAC signatures, backoff with jitter, and a local receiver that fails on purpose.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/","keywords":"send webhooks, webhook delivery retries, webhook signature hmac, webhook exponential backoff, build webhook system","wordCount":932,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to build webhook delivery with signatures and retries","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What status codes should a webhook sender treat as success?","acceptedAnswer":{"@type":"Answer","text":"Any 2xx. Treat other codes and timeouts as failures to retry, with exponential backoff and jitter, up to a limit you document."}},{"@type":"Question","name":"How do I sign outgoing webhooks?","acceptedAnswer":{"@type":"Answer","text":"Compute an HMAC-SHA256 with a per-endpoint secret over the event ID, a timestamp and the exact body, and send it in a header. The Standard Webhooks format is a good published choice."}},{"@type":"Question","name":"Should the API call send the webhook directly?","acceptedAnswer":{"@type":"Answer","text":"No. Store the event in the same transaction as the change and let a separate worker deliver it, so a slow receiver cannot slow your API and failed sends can be retried."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to build webhook delivery with signatures and retries</h1><p class="dek">Receiving webhooks gets all the attention. If your product sends them, the hard parts are the retries you control and the signature your customers will verify.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-moving-parts">The moving parts</a></li><li><a href="#signing-the-request">Signing the request</a></li><li><a href="#retries-that-do-not-hurt-anyone">Retries that do not hurt anyone</a></li><li><a href="#testing-it-locally-with-flisk">Testing it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To send webhooks reliably, write each event to a table first, deliver from a separate worker that signs the body with an HMAC and a timestamp, treat any 2xx response as success, and retry everything else with exponential backoff and jitter until a limit. Storing the event before sending is what lets you retry, replay and audit later.</p>
+
+<h2 id="the-moving-parts">The moving parts</h2>
+<p>A webhook sender is smaller than it looks, and it has the same shape in every product:</p>
+<ul>
+<li><strong>An events table.</strong> One row per thing that happened, with a stable ID, a type and the JSON payload, written in the same database transaction as the change itself.</li>
+<li><strong>A deliveries table.</strong> One row per event and endpoint, with an attempt count, the next attempt time and the last response code.</li>
+<li><strong>A worker.</strong> It picks deliveries that are due, sends them and records the result.</li>
+<li><strong>Endpoints with secrets.</strong> Each customer endpoint has its own signing secret.</li>
+</ul>
+<p>Writing the event in the same transaction as the change avoids two bad outcomes: an event for a change that rolled back, and a committed change with no event. A separate worker keeps a slow customer server from slowing your API.</p>
+
+<h2 id="signing-the-request">Signing the request</h2>
+<p>Customers must be able to check that a request came from you and was not altered. Send the event ID, a timestamp and a signature in headers. The Standard Webhooks specification uses <code>webhook-id</code>, <code>webhook-timestamp</code> and <code>webhook-signature</code>, with an HMAC-SHA256 over the ID, the timestamp and the body joined with dots, base64 encoded. Following a published format means customers can use existing libraries. If you design your own, keep these properties:</p>
+<ul>
+<li>The signature covers the timestamp, so a captured request cannot be replayed forever. Tell customers to reject old timestamps.</li>
+<li>The signature covers the exact body bytes, which is why <a href="/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/">receivers need the raw body</a>. Serialize once, sign those bytes and send those bytes.</li>
+<li>The event ID stays the same on every retry, so receivers can ignore duplicates.</li>
+</ul>
+<pre><code>import { createHmac } from "node:crypto";
+
+function sign(secret, id, ts, body) {
+  return "v1," + createHmac("sha256", secret)
+    .update(id + "." + ts + "." + body).digest("base64");
+}
+
+async function deliver(d) {
+  const body = JSON.stringify(d.payload);     // serialize once
+  const ts = Math.floor(Date.now() / 1000);
+  const res = await fetch(d.url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "webhook-id": d.event_id,
+      "webhook-timestamp": String(ts),
+      "webhook-signature": sign(d.secret, d.event_id, ts, body)
+    },
+    body,
+    signal: AbortSignal.timeout(10000)
+  });
+  return res.status;
+}</code></pre>
+
+<h2 id="retries-that-do-not-hurt-anyone">Retries that do not hurt anyone</h2>
+<p>Treat any 2xx as delivered and everything else, including a timeout, as a failure to retry. Space the attempts out with exponential backoff and add random jitter, so a customer server that comes back after an outage is not hit by every queued event in the same second:</p>
+<pre><code>function nextDelaySeconds(attempt) {
+  const base = Math.min(30 * 2 ** attempt, 6 * 3600);   // cap at 6 hours
+  return base / 2 + Math.random() * base / 2;
+}</code></pre>
+<p>Decide the stopping rule up front. Stripe retries live-mode events for up to three days. Whatever you pick, mark the delivery as failed after the last attempt, keep it visible in a dashboard, and let the customer replay it. Consider disabling an endpoint that has failed for days and telling its owner. Set a short timeout. A customer endpoint that takes a minute to answer holds a worker for a minute.</p>
+
+<h2 id="testing-it-locally-with-flisk">Testing it locally with Flisk</h2>
+<p>You need a receiver that misbehaves on purpose. A few lines are enough: a service that returns 500 for the first N requests and then 200, and logs each attempt with its headers.</p>
+<pre><code>// receiver/server.js
+let seen = 0;
+const failFirst = Number(process.env.FAIL_FIRST || 2);
+require("http").createServer((req, res) =&gt; {
+  if (req.url === "/health") return res.end("ok");
+  let raw = "";
+  req.on("data", c =&gt; raw += c);
+  req.on("end", () =&gt; {
+    seen += 1;
+    console.log("attempt", seen, req.headers["webhook-id"]);
+    res.statusCode = seen &lt;= failFirst ? 500 : 200;
+    res.end();
+  });
+}).listen(process.env.PORT);</code></pre>
+<p>Run the receiver and the sender as two local processes. Install with <code>npm install -g @flisk-sh/flisk</code>, then give each a <code>service.json</code>:</p>
+<pre><code>{ "schemaVersion": 1, "appName": "receiver", "appType": "backend",
+  "command": "node server.js", "port": 4100, "healthCheckPath": "/health",
+  "env": { "FAIL_FIRST": "2" } }
+
+{ "schemaVersion": 1, "appName": "sender", "appType": "worker",
+  "command": "node worker.js", "dependsOn": ["receiver"],
+  "env": { "TARGET_URL": "http://localhost:4100/hook" } }</code></pre>
+<p><code>flisk up</code> starts the receiver, waits for it to be healthy and then starts the sender. Watch the attempts across both services in time order with <code>flisk logs --since 5m</code>. You should see two 500 responses, then a success, with the same <code>webhook-id</code> each time and growing gaps between them. For a fast test, use a short backoff base through an environment variable instead of waiting minutes. Flisk does not provide webhook delivery or retries. It runs the pieces so you can see them work.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Sending inside the request.</strong> An API call that waits for a customer's server inherits that server's slowness and failures.</li>
+<li><strong>One secret for everyone.</strong> A leaked shared secret breaks every customer. Use one per endpoint, and support rotation by accepting two secrets for a while.</li>
+<li><strong>Following redirects blindly.</strong> A customer URL that redirects to an internal address is a request forgery risk. Block private address ranges and do not follow redirects without a check.</li>
+<li><strong>No replay.</strong> The first time a customer says "we missed events from Tuesday", you need a button and not a database script.</li>
+<li><strong>Ordering promises.</strong> Retries reorder events. Say so in your docs, and see <a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/">handling out-of-order events</a> for what receivers should do.</li>
+</ul>
+
+<p>The retry loop is a queue consumer at heart. <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">Testing queue consumer retries locally</a> covers the dead-letter side in more depth.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What status codes should a webhook sender treat as success?</summary><p>Any 2xx. Treat other codes and timeouts as failures to retry, with exponential backoff and jitter, up to a limit you document.</p></details><details><summary>How do I sign outgoing webhooks?</summary><p>Compute an HMAC-SHA256 with a per-endpoint secret over the event ID, a timestamp and the exact body, and send it in a header. The Standard Webhooks format is a good published choice.</p></details><details><summary>Should the API call send the webhook directly?</summary><p>No. Store the event in the same transaction as the change and let a separate worker deliver it, so a slow receiver cannot slow your API and failed sends can be retried.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/"><span class="lbl">Guide</span><b>Webhook signature verification fails: use the raw request body</b><span>The signature covers the exact bytes the provider sent. Once a framework has parsed and re-serialized them, no key can make the check pass.</span></a><a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"><span class="lbl">Guide</span><b>How to handle out-of-order payment webhook events</b><span>The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</span></a><a href="/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/"><span class="lbl">Guide</span><b>How to reconcile payments after missed webhooks</b><span>Webhooks are a fast path, not a guarantee. A job that asks the provider what really happened is the safety net, and it is easy to test by turning the receiver off.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
