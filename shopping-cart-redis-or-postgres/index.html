@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Where to store a shopping cart: Redis or Postgres?</title>
+<meta name="description" content="Choose between Redis and Postgres for a cart: guest carts, expiry, merging on login and price changes, plus how to run Redis next to your API with Flisk.">
+<meta name="keywords" content="shopping cart redis or postgres, store shopping cart backend, guest cart merge on login, cart expiry ttl redis, cart database design">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/shopping-cart-redis-or-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Where to store a shopping cart: Redis or Postgres?">
+<meta property="og:description" content="Choose between Redis and Postgres for a cart: guest carts, expiry, merging on login and price changes, plus how to run Redis next to your API with Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/shopping-cart-redis-or-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Where to store a shopping cart: Redis or Postgres?","description":"Choose between Redis and Postgres for a cart: guest carts, expiry, merging on login and price changes, plus how to run Redis next to your API with Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/shopping-cart-redis-or-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/shopping-cart-redis-or-postgres/","keywords":"shopping cart redis or postgres, store shopping cart backend, guest cart merge on login, cart expiry ttl redis, cart database design","wordCount":741,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"Where to store a shopping cart: Redis or Postgres?","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/shopping-cart-redis-or-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should the cart store prices?","acceptedAnswer":{"@type":"Answer","text":"Store the variant ID and quantity, and read the current price when you display the cart. Copy the price into the order line at checkout so later price changes do not alter past orders."}},{"@type":"Question","name":"How long should a guest cart live?","acceptedAnswer":{"@type":"Answer","text":"Common choices are 7 to 30 days. Refresh the expiry on every change so active carts stay alive."}},{"@type":"Question","name":"Can I keep the cart in a cookie or localStorage?","acceptedAnswer":{"@type":"Answer","text":"For a very small shop, yes. You lose server-side merging, stock checks and abandoned-cart analysis, and the client can edit it, so the server must re-validate everything at checkout."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>Where to store a shopping cart: Redis or Postgres?</h1><p class="dek">A cart is temporary data with a short life and a few awkward rules. Both stores work. Here is how to choose and what each one costs you.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-cart-actually-needs">What a cart actually needs</a></li><li><a href="#cart-in-postgres">Cart in Postgres</a></li><li><a href="#cart-in-redis">Cart in Redis</a></li><li><a href="#merging-a-guest-cart-on-login">Merging a guest cart on login</a></li><li><a href="#running-redis-next-to-your-api-with-flisk">Running Redis next to your API with Flisk</a></li><li><a href="#how-to-choose">How to choose</a></li></ol></nav></aside>
+<article><p>Store the cart in Postgres if you already run it and carts are small: it gives you one transaction boundary with orders and nothing extra to operate. Store it in Redis if you want automatic expiry and very fast reads for anonymous visitors. Either choice works; what matters more is deciding the cart rules up front: when it expires, how guest and user carts merge, and whether prices are copied.</p>
+
+<h2 id="what-a-cart-actually-needs">What a cart actually needs</h2>
+<p>A cart is a list of (variant, quantity) pairs owned by a customer or by an anonymous browser. Four rules decide most of the design:</p>
+<ul>
+<li><strong>Lifetime.</strong> Guest carts should disappear after days or weeks. User carts can live longer.</li>
+<li><strong>Identity.</strong> A guest has only a cookie. The cart key is a random ID in that cookie, not a database row number.</li>
+<li><strong>Merge.</strong> When a guest signs in and already has a saved cart, you must combine the two.</li>
+<li><strong>Prices.</strong> A cart should store quantities and variant IDs, and read the current price when you show it. Copy the price into the order line only at checkout.</li>
+</ul>
+
+<h2 id="cart-in-postgres">Cart in Postgres</h2>
+<pre><code>CREATE TABLE carts (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id bigint,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE cart_items (
+  cart_id    uuid   NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+  variant_id bigint NOT NULL,
+  qty        int    NOT NULL CHECK (qty BETWEEN 1 AND 99),
+  PRIMARY KEY (cart_id, variant_id)
+);</code></pre>
+<p>Adding an item is one upsert: <code>INSERT ... ON CONFLICT (cart_id, variant_id) DO UPDATE SET qty = LEAST(cart_items.qty + EXCLUDED.qty, 99)</code>. You can join to products to validate that the variant still exists, and checkout reads the cart in the same transaction that creates the order. The cost is cleanup: nothing expires on its own, so a scheduled job must delete carts whose <code>updated_at</code> is older than your limit.</p>
+
+<h2 id="cart-in-redis">Cart in Redis</h2>
+<p>A hash per cart is the natural shape. The field is the variant ID and the value is the quantity:</p>
+<pre><code>HINCRBY cart:7f3a variant:42 1
+EXPIRE  cart:7f3a 1209600     # 14 days, refreshed on every change
+HGETALL cart:7f3a</code></pre>
+<p>Expiry is free, reads are fast and abandoned guest carts clean themselves up. The costs are real, though. Redis is not where your other data lives, so you cannot join to products or validate stock in the same query. If Redis restarts without persistence you lose every cart. And your analytics on abandoned carts need a second path, because expired keys are gone.</p>
+
+<h2 id="merging-a-guest-cart-on-login">Merging a guest cart on login</h2>
+<p>The rule most shops want is: add quantities, cap at a maximum, and delete the guest cart. Do it in one place, once, right after the login succeeds. In Redis, read both hashes, sum the fields in your code and write the result to the user's key. In Postgres, run it in a transaction: insert the guest items into the user cart with the same upsert, then delete the guest cart. Test the case where both carts contain the same variant, and the case where the user cart is empty.</p>
+
+<h2 id="running-redis-next-to-your-api-with-flisk">Running Redis next to your API with Flisk</h2>
+<p>If you choose Redis, Flisk can start it with the rest of the stack:</p>
+<pre><code>flisk resource cache --type database --framework redis --stack shop --yes</code></pre>
+<p>This writes a <code>service.json</code> for a <code>redis:7.4-alpine</code> container with a <code>redis-cli ping</code> health check, a <code>cache-data</code> volume, and a <code>provides</code> entry of <code>REDIS_URL: redis://cache:6379</code>. A service that lists <code>cache</code> in <code>dependsOn</code> receives that <code>REDIS_URL</code>, so your cart code reads one environment variable:</p>
+<pre><code>"appName": "cart-api",
+"dependsOn": ["cache"]</code></pre>
+<p>Two things to know. Redis is not published on your host, so inspect it with <code>docker exec</code> into the container, not with a <code>redis-cli</code> on your laptop. And <code>flisk down --purge</code> deletes volumes, which empties every cart. Details are in <a href="/@odykyi/local-database-guide/redis-for-local-development/">running Redis for local development</a>.</p>
+
+<h2 id="how-to-choose">How to choose</h2>
+<table>
+<thead><tr><th>Question</th><th>Postgres</th><th>Redis</th></tr></thead>
+<tbody>
+<tr><td>Automatic expiry</td><td>No, needs a job</td><td>Yes, with EXPIRE</td></tr>
+<tr><td>Same transaction as the order</td><td>Yes</td><td>No</td></tr>
+<tr><td>Survives a restart</td><td>Yes</td><td>Only with persistence on</td></tr>
+<tr><td>Extra service to run</td><td>No</td><td>Yes</td></tr>
+<tr><td>Abandoned-cart analysis</td><td>Easy</td><td>Needs an export</td></tr>
+</tbody>
+</table>
+<p>For a first version, Postgres is usually the better default: fewer moving parts, and the cart is in the same place as everything you need to join. Add Redis when read traffic on anonymous carts is a measured problem, not before.</p>
+
+<p>Whichever store you pick, the cart ends when checkout begins. The next step is turning it into an order without selling stock twice; see <a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/">stopping overselling at checkout</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should the cart store prices?</summary><p>Store the variant ID and quantity, and read the current price when you display the cart. Copy the price into the order line at checkout so later price changes do not alter past orders.</p></details><details><summary>How long should a guest cart live?</summary><p>Common choices are 7 to 30 days. Refresh the expiry on every change so active carts stay alive.</p></details><details><summary>Can I keep the cart in a cookie or localStorage?</summary><p>For a very small shop, yes. You lose server-side merging, stock checks and abandoned-cart analysis, and the client can edit it, so the server must re-validate everything at checkout.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"><span class="lbl">Guide</span><b>How to stop overselling stock when two customers check out</b><span>Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</span></a><a href="/@odykyi/ecommerce-backend-local/run-a-small-shop-stack-with-flisk/"><span class="lbl">Guide</span><b>How to run a storefront, orders API and database on one laptop</b><span>A shop backend is a few ordinary parts. Here is the shortest verified path to a running storefront, API and database, with the commands to check each one.</span></a><a href="/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/"><span class="lbl">Guide</span><b>How to build discount codes and coupon rules without double use</b><span>A coupon is a bundle of rules: when it is valid, who can use it, how often, and what it takes off. Put the limits in the database so concurrent checkouts cannot break them.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

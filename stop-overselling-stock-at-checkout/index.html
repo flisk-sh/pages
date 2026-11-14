@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to stop overselling stock when two customers check out</title>
+<meta name="description" content="Prevent two buyers from taking the last item: a guarded UPDATE, a CHECK constraint, reservations with an expiry, and a race test you can run on your laptop.">
+<meta name="keywords" content="prevent overselling inventory, stock reservation postgres, inventory race condition, atomic stock decrement sql, last item in stock two buyers">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to stop overselling stock when two customers check out">
+<meta property="og:description" content="Prevent two buyers from taking the last item: a guarded UPDATE, a CHECK constraint, reservations with an expiry, and a race test you can run on your laptop.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to stop overselling stock when two customers check out","description":"Prevent two buyers from taking the last item: a guarded UPDATE, a CHECK constraint, reservations with an expiry, and a race test you can run on your laptop.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/","keywords":"prevent overselling inventory, stock reservation postgres, inventory race condition, atomic stock decrement sql, last item in stock two buyers","wordCount":935,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to stop overselling stock when two customers check out","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a message queue to avoid overselling?","acceptedAnswer":{"@type":"Answer","text":"No. A guarded UPDATE or a row lock in one Postgres transaction is enough for most shops. A queue helps with throughput at very high volume, but it does not replace the check."}},{"@type":"Question","name":"Is SELECT FOR UPDATE better than the guarded UPDATE?","acceptedAnswer":{"@type":"Answer","text":"The guarded UPDATE is shorter and holds the lock for less time. Use SELECT FOR UPDATE when you must read several rows and decide in code before writing."}},{"@type":"Question","name":"How do I test this locally?","acceptedAnswer":{"@type":"Answer","text":"Seed one item with a stock of one, send twenty purchase requests at the same instant, and assert that exactly one succeeds."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to stop overselling stock when two customers check out</h1><p class="dek">Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-read-then-write-version-fails">Why the read-then-write version fails</a></li><li><a href="#one-guarded-statement">One guarded statement</a></li><li><a href="#reserve-first-commit-later">Reserve first, commit later</a></li><li><a href="#run-it-on-your-laptop-with-flisk">Run it on your laptop with Flisk</a></li><li><a href="#prove-it-with-a-race-test">Prove it with a race test</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Stop overselling by letting the database decide who gets the last unit. Use one atomic statement, <code>UPDATE ... SET on_hand = on_hand - 1 WHERE sku = $1 AND on_hand &gt;= 1</code>, and treat "zero rows updated" as "out of stock". Reading the stock count in your code and writing it back later is the pattern that oversells, because two requests can both read 1.</p>
+
+<h2 id="why-the-read-then-write-version-fails">Why the read-then-write version fails</h2>
+<p>The broken version looks harmless:</p>
+<pre><code>const { on_hand } = await db.one("SELECT on_hand FROM inventory WHERE sku = $1", [sku]);
+if (on_hand &gt;= qty) {
+  await db.none("UPDATE inventory SET on_hand = $2 WHERE sku = $1", [sku, on_hand - qty]);
+}</code></pre>
+<p>Two requests arrive within a few milliseconds. Both read <code>on_hand = 1</code>, both pass the check, both write <code>0</code>. You sold two items and have one. It never fails in a demo with one user, and it fails the first day of a real sale. The fix is to move the check into the write.</p>
+
+<h2 id="one-guarded-statement">One guarded statement</h2>
+<p>Put the condition in the <code>WHERE</code> clause. Postgres locks the row for the duration of the update, so the second request waits, re-checks the condition against the new value and matches no row:</p>
+<pre><code>UPDATE inventory
+SET on_hand = on_hand - $2
+WHERE sku = $1 AND on_hand &gt;= $2;</code></pre>
+<p>Check the affected row count in your driver. One means you got the stock, zero means you did not. Add a second line of defence in the schema, so a bug elsewhere cannot push the count below zero:</p>
+<pre><code>ALTER TABLE inventory ADD CONSTRAINT on_hand_not_negative CHECK (on_hand &gt;= 0);</code></pre>
+<p>An order has several lines, so do all the decrements in one transaction and roll back if any line fails. Update the rows in a fixed order, for example sorted by SKU. Two carts that touch the same SKUs in different orders can otherwise deadlock; Postgres will abort one of them, and your code should be ready to retry once.</p>
+
+<h2 id="reserve-first-commit-later">Reserve first, commit later</h2>
+<p>Decrementing at the moment the customer clicks "Place order" is fine when payment happens in the same request. When the customer has to pay on another page, you need a hold: the stock is taken but the order is not final. A small table does it:</p>
+<pre><code>CREATE TABLE reservations (
+  id          bigserial PRIMARY KEY,
+  order_id    bigint NOT NULL,
+  sku         text   NOT NULL,
+  qty         int    NOT NULL CHECK (qty &gt; 0),
+  expires_at  timestamptz NOT NULL,
+  released_at timestamptz
+);</code></pre>
+<p>Available stock is <code>on_hand</code> minus the sum of active reservations. To keep that race-free, take the reservation inside a transaction that first locks the inventory row with <code>SELECT ... FOR UPDATE</code>, computes availability, and inserts only if enough is free. Alternatively keep a second counter, <code>reserved</code>, on the inventory row and update it with the same guarded pattern: <code>SET reserved = reserved + $2 WHERE sku = $1 AND on_hand - reserved &gt;= $2</code>. The counter is simpler to read, the table is simpler to audit. Pick one and do not mix them. Releasing expired holds is its own job, covered in <a href="/@odykyi/ecommerce-backend-local/expire-unpaid-orders-and-release-stock/">expiring unpaid orders</a>.</p>
+
+<h2 id="run-it-on-your-laptop-with-flisk">Run it on your laptop with Flisk</h2>
+<p>You only need an API and a Postgres database. Install with <code>npm install -g @flisk-sh/flisk</code>, then in a project folder:</p>
+<pre><code>flisk project --yes
+flisk resource shop-db --type database --stack shop --yes
+flisk resource orders-api --type backend --stack shop --feature drizzle --yes</code></pre>
+<p>The database resource names the shared Postgres that Flisk runs for the project. Edit <code>services/shop/orders-api/service.json</code> and add <code>"dependsOn": ["shop-db"]</code>, so the database starts first and the API gets a <code>DATABASE_URL</code>. The Drizzle scaffold already contains a <code>src/db.ts</code> that reads that variable. Start the stack with <code>flisk up shop</code>. If you are not sure the variable arrived, print it from inside the service:</p>
+<pre><code>flisk run orders-api -- printenv DATABASE_URL</code></pre>
+<p>Put the table definitions in your migrations (see <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">migrations in local dev</a>), not in the API's start script.</p>
+
+<h2 id="prove-it-with-a-race-test">Prove it with a race test</h2>
+<p>A fix you have not tested is a guess. Seed one SKU with <code>on_hand = 1</code>, then fire many purchase requests at the same moment and count the winners. Save this as <code>race-test.ts</code>:</p>
+<pre><code>const url = process.env.API_URL ?? "http://localhost:4000";
+const results = await Promise.all(
+  Array.from({ length: 20 }, () =&gt;
+    fetch(`${url}/orders`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sku: "MUG-01", qty: 1 }),
+    }).then((r) =&gt; r.status)
+  )
+);
+const ok = results.filter((s) =&gt; s === 201).length;
+console.log({ ok, rejected: results.length - ok });
+if (ok !== 1) process.exit(1);</code></pre>
+<p>Run it from your machine against the API address that <code>flisk networks --stack shop</code> prints, for example <code>API_URL=http://api.myproject.localhost:8081/api/orders-api bun race-test.ts</code> (use your own project name and port, and adapt the route to your handler). A passing run prints <code>ok: 1</code>. Run it against the broken version once, to see it fail, and you will trust the test.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Connection pool of one.</strong> If your local pool allows a single connection, requests queue up and the race never happens. Use a pool of at least 5 in the test, or you test nothing.</li>
+<li><strong>Cached stock on the product page.</strong> Showing "3 left" is a hint, not a promise. Always enforce on write.</li>
+<li><strong>Stock in two places.</strong> If a search index also holds counts, treat it as display data only.</li>
+<li><strong>Do not lock the whole table.</strong> Row-level locking on the SKU is enough and keeps unrelated orders moving.</li>
+</ul>
+<p>When the stock logic is solid, the next question is how an order moves from "reserved" to "paid" to "shipped without a mistake"; see <a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/">modelling order statuses as a state machine</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a message queue to avoid overselling?</summary><p>No. A guarded UPDATE or a row lock in one Postgres transaction is enough for most shops. A queue helps with throughput at very high volume, but it does not replace the check.</p></details><details><summary>Is SELECT FOR UPDATE better than the guarded UPDATE?</summary><p>The guarded UPDATE is shorter and holds the lock for less time. Use SELECT FOR UPDATE when you must read several rows and decide in code before writing.</p></details><details><summary>How do I test this locally?</summary><p>Seed one item with a stock of one, send twenty purchase requests at the same instant, and assert that exactly one succeeds.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/"><span class="lbl">Guide</span><b>How to model order statuses as a state machine in Postgres</b><span>Most order bugs are a status that moved when it should not. Write the allowed moves down, enforce them in one place and keep a log of every change.</span></a><a href="/@odykyi/ecommerce-backend-local/expire-unpaid-orders-and-release-stock/"><span class="lbl">Guide</span><b>How to expire unpaid orders and release the reserved stock</b><span>An abandoned checkout keeps stock locked. A small sweep job fixes that, as long as the query is safe when two copies run at once.</span></a><a href="/@odykyi/ecommerce-backend-local/run-a-small-shop-stack-with-flisk/"><span class="lbl">Guide</span><b>How to run a storefront, orders API and database on one laptop</b><span>A shop backend is a few ordinary parts. Here is the shortest verified path to a running storefront, API and database, with the commands to check each one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

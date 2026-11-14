@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build discount codes and coupon rules without double use</title>
+<meta name="description" content="Design a coupons table, enforce limits with one atomic UPDATE, cap use per customer, decide how codes stack and test each rule with a small table of cases.">
+<meta name="keywords" content="discount code database design, coupon code usage limit, promo code backend, coupon redemption race condition, ecommerce discount rules">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build discount codes and coupon rules without double use">
+<meta property="og:description" content="Design a coupons table, enforce limits with one atomic UPDATE, cap use per customer, decide how codes stack and test each rule with a small table of cases.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build discount codes and coupon rules without double use","description":"Design a coupons table, enforce limits with one atomic UPDATE, cap use per customer, decide how codes stack and test each rule with a small table of cases.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/","keywords":"discount code database design, coupon code usage limit, promo code backend, coupon redemption race condition, ecommerce discount rules","wordCount":774,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to build discount codes and coupon rules without double use","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should coupon codes be case sensitive?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Store and compare them in upper case so customers do not fail on capitalisation."}},{"@type":"Question","name":"Where do I enforce a usage limit?","acceptedAnswer":{"@type":"Answer","text":"In the database, in one UPDATE that checks and increments the counter. Checking in application code first leaves a race."}},{"@type":"Question","name":"Can a coupon apply to specific products only?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add a coupon_products table, and calculate the discount over the matching order lines only."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to build discount codes and coupon rules without double use</h1><p class="dek">A coupon is a bundle of rules: when it is valid, who can use it, how often, and what it takes off. Put the limits in the database so concurrent checkouts cannot break them.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-data">The data</a></li><li><a href="#validate-then-redeem-atomically">Validate, then redeem atomically</a></li><li><a href="#calculate-the-discount">Calculate the discount</a></li><li><a href="#decide-the-stacking-rules-up-front">Decide the stacking rules up front</a></li><li><a href="#test-the-rules-as-a-table">Test the rules as a table</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Model a discount code as one row of rules (type, amount, dates, limits) plus a redemptions table that records every use. Enforce the usage limit with a single guarded <code>UPDATE</code>, and a unique key for the per-customer limit, so two simultaneous checkouts cannot both use the last redemption. Calculate the discount with integer money and test each rule with a table of cases.</p>
+
+<h2 id="the-data">The data</h2>
+<pre><code>CREATE TABLE coupons (
+  id            bigserial PRIMARY KEY,
+  code          text NOT NULL UNIQUE,         -- store upper-case
+  kind          text NOT NULL CHECK (kind IN ('percent', 'fixed')),
+  amount        bigint NOT NULL CHECK (amount &gt; 0), -- basis points or minor units
+  currency      char(3),                      -- required for fixed
+  min_subtotal  bigint NOT NULL DEFAULT 0,
+  starts_at     timestamptz,
+  ends_at       timestamptz,
+  max_uses      int,                          -- null means unlimited
+  used_count    int NOT NULL DEFAULT 0,
+  active        boolean NOT NULL DEFAULT true
+);
+
+CREATE TABLE coupon_redemptions (
+  coupon_id   bigint NOT NULL REFERENCES coupons(id),
+  customer_id bigint NOT NULL,
+  order_id    bigint NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (coupon_id, order_id)
+);</code></pre>
+<p>Store percentages as basis points (1500 for 15 percent) so everything stays an integer, and fixed amounts in minor units, as described in <a href="/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/">storing prices as integers</a>. Normalise codes to upper case on input and on write, so <code>summer10</code> and <code>SUMMER10</code> are the same code.</p>
+
+<h2 id="validate-then-redeem-atomically">Validate, then redeem atomically</h2>
+<p>Checking rules in code and incrementing later is the same race as the one that oversells stock. Combine the validity checks and the counter in one statement:</p>
+<pre><code>UPDATE coupons
+SET used_count = used_count + 1
+WHERE code = $1
+  AND active
+  AND (starts_at IS NULL OR starts_at &lt;= now())
+  AND (ends_at   IS NULL OR ends_at   &gt;  now())
+  AND (max_uses  IS NULL OR used_count &lt; max_uses)
+RETURNING id, kind, amount, currency, min_subtotal;</code></pre>
+<p>No row back means the code is invalid, expired or used up, and you can run a second query to tell the customer which one. Run this in the same transaction that creates the order, and insert the redemption row there too. If the order later fails or expires, decrement <code>used_count</code> and delete the redemption in the same place where you release stock.</p>
+<p>For a per-customer limit of one use, add a unique index on a view of the data that matters, or check <code>SELECT 1 FROM coupon_redemptions WHERE coupon_id = $1 AND customer_id = $2</code> inside the transaction after taking a lock on the coupon row. The lock matters: without it, two requests from the same customer can both pass the check.</p>
+
+<h2 id="calculate-the-discount">Calculate the discount</h2>
+<pre><code>function discount(subtotal: number, c: { kind: string; amount: number }) {
+  if (c.kind === "percent") return Math.round((subtotal * c.amount) / 10000);
+  return Math.min(c.amount, subtotal); // a fixed discount never goes below zero
+}</code></pre>
+<p>Then check <code>min_subtotal</code> against the subtotal before shipping and tax, not after. State the order of operations (discount, then tax, then shipping) in a comment and keep it the same in the invoice.</p>
+
+<h2 id="decide-the-stacking-rules-up-front">Decide the stacking rules up front</h2>
+<p>The questions that cause arguments later: can two codes combine, does a code apply to items already on sale, does free shipping count as a code? The simplest rule is one code per order, and your schema above supports it. If you need several, add a <code>priority</code> and a <code>combinable</code> flag, apply them in a fixed order, and write tests for each pair. Another trap is a percentage code on a cart with a fixed code: the result depends on order, so the order must be defined.</p>
+
+<h2 id="test-the-rules-as-a-table">Test the rules as a table</h2>
+<p>A list of cases, each with a cart, a code and an expected total, covers more than prose does. Include: just before and just after <code>ends_at</code>, exactly <code>min_subtotal</code>, the last allowed use, a lowercase code, a fixed discount larger than the cart, and the same customer twice. Run the redemption concurrently with 10 parallel requests against <code>max_uses = 3</code> and assert exactly three succeed. If you run the stack with Flisk, a test like that can run inside the API service with <code>flisk run orders-api -- bun test</code>, so it uses the same database as the API.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Guessable codes.</strong> Short, sequential codes get brute-forced. For codes that are worth money, generate long random ones and rate-limit the endpoint.</li>
+<li><strong>Counting at validation time.</strong> A customer who types a code in the cart has not used it. Count at order creation.</li>
+<li><strong>Percent of a rounded value.</strong> Apply the percentage to the exact subtotal in integer minor units, then round once.</li>
+<li><strong>Refunds.</strong> Decide whether a refunded order gives the use back. Most shops say no.</li>
+</ul>
+<p>Next, see how the order that used the code moves through its life: <a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/">order statuses as a state machine</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should coupon codes be case sensitive?</summary><p>Usually not. Store and compare them in upper case so customers do not fail on capitalisation.</p></details><details><summary>Where do I enforce a usage limit?</summary><p>In the database, in one UPDATE that checks and increments the counter. Checking in application code first leaves a race.</p></details><details><summary>Can a coupon apply to specific products only?</summary><p>Yes. Add a coupon_products table, and calculate the discount over the matching order lines only.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/"><span class="lbl">Guide</span><b>How to store prices in a shop database: integers, not floats</b><span>Floating point cannot represent 0.10 exactly, so totals drift. Store the smallest unit as an integer and decide in advance where rounding happens.</span></a><a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/"><span class="lbl">Guide</span><b>How to model order statuses as a state machine in Postgres</b><span>Most order bugs are a status that moved when it should not. Write the allowed moves down, enforce them in one place and keep a log of every change.</span></a><a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"><span class="lbl">Guide</span><b>How to stop overselling stock when two customers check out</b><span>Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

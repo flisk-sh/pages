@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Database schema for product variants: sizes, colours and SKUs</title>
+<meta name="description" content="Design a product catalogue in Postgres with variants, option values, unique SKUs and per-variant stock, and apply the SQL to your local Flisk database.">
+<meta name="keywords" content="product variants database schema, ecommerce catalog schema postgres, sku table design, size and colour variants sql, product options schema">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Database schema for product variants: sizes, colours and SKUs">
+<meta property="og:description" content="Design a product catalogue in Postgres with variants, option values, unique SKUs and per-variant stock, and apply the SQL to your local Flisk database.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Database schema for product variants: sizes, colours and SKUs","description":"Design a product catalogue in Postgres with variants, option values, unique SKUs and per-variant stock, and apply the SQL to your local Flisk database.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/","keywords":"product variants database schema, ecommerce catalog schema postgres, sku table design, size and colour variants sql, product options schema","wordCount":724,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"Database schema for product variants: sizes, colours and SKUs","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should every product have at least one variant?","acceptedAnswer":{"@type":"Answer","text":"Yes. It keeps cart and order code on a single path, because they always reference a variant."}},{"@type":"Question","name":"Can I use JSONB for all product attributes?","acceptedAnswer":{"@type":"Answer","text":"Use JSONB for optional, varying attributes. Keep fields you filter and sort by, such as price and brand, as normal columns."}},{"@type":"Question","name":"Where do I store product images?","acceptedAnswer":{"@type":"Answer","text":"Store the file in object storage and keep its URL or key in a product_images table that references the product, and optionally a variant."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>Database schema for product variants: sizes, colours and SKUs</h1><p class="dek">A t-shirt in three sizes and four colours is twelve things to stock, not one. Model the product, its variants and the stock separately.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#product-variant-stock">Product, variant, stock</a></li><li><a href="#options-jsonb-or-tables">Options: JSONB or tables?</a></li><li><a href="#skus">SKUs</a></li><li><a href="#apply-it-to-your-local-flisk-database">Apply it to your local Flisk database</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use three layers: a <code>products</code> row for the thing customers browse, a <code>variants</code> row for each buyable combination (size, colour) with its own unique SKU, and an <code>inventory</code> row per variant. Cart lines, order lines and stock all point at the variant, never at the product. That one rule prevents most catalogue bugs.</p>
+
+<h2 id="product-variant-stock">Product, variant, stock</h2>
+<p>The product holds what is shared: name, description, brand. The variant holds what you can put in a cart: SKU, price and the option values that make it different:</p>
+<pre><code>CREATE TABLE products (
+  id          bigserial PRIMARY KEY,
+  slug        text NOT NULL UNIQUE,
+  name        text NOT NULL,
+  description text NOT NULL DEFAULT '',
+  active      boolean NOT NULL DEFAULT true
+);
+
+CREATE TABLE variants (
+  id          bigserial PRIMARY KEY,
+  product_id  bigint NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  sku         text   NOT NULL UNIQUE,
+  price_minor bigint NOT NULL CHECK (price_minor &gt;= 0),
+  currency    char(3) NOT NULL DEFAULT 'USD',
+  options     jsonb  NOT NULL DEFAULT '{}'::jsonb,
+  active      boolean NOT NULL DEFAULT true,
+  UNIQUE (product_id, options)
+);
+
+CREATE TABLE inventory (
+  variant_id bigint PRIMARY KEY REFERENCES variants(id) ON DELETE CASCADE,
+  on_hand    int NOT NULL DEFAULT 0 CHECK (on_hand &gt;= 0)
+);</code></pre>
+<p>Prices as minor units are explained in <a href="/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/">storing prices as integers</a>. Stock lives in its own table because it changes far more often than the catalogue, and because the guarded updates in <a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/">stopping overselling</a> lock that row and not your product data.</p>
+
+<h2 id="options-jsonb-or-tables">Options: JSONB or tables?</h2>
+<p>A variant such as <code>{"size": "M", "colour": "blue"}</code> fits well in a <code>jsonb</code> column. The <code>UNIQUE (product_id, options)</code> line stops you creating two "M, blue" variants for the same product. For filtering ("show blue items") add a GIN index:</p>
+<pre><code>CREATE INDEX variants_options_gin ON variants USING gin (options jsonb_path_ops);
+-- find blue variants
+SELECT id, sku FROM variants WHERE options @&gt; '{"colour": "blue"}';</code></pre>
+<p>The alternative is normalised tables: <code>option_types</code>, <code>option_values</code> and a join table. It enforces that "size" can only be S, M or L, and it is the better choice if merchants edit options in an admin UI. For a small shop or a prototype, JSONB is quicker, and you can validate the allowed keys in application code. Do not use JSONB for the fields you always filter or sort by on the product page, such as price or brand: those deserve real columns.</p>
+
+<h2 id="skus">SKUs</h2>
+<p>A SKU is the string your warehouse and your accounting tool use. Make it unique and stable: once an order references it, never reuse it. Generate it from the product and options if you must (<code>TEE-BLU-M</code>), but store it, do not recompute it, because a renamed colour would silently change history. Keep products with no variants out of the model by giving every product at least one variant, even when there is only one size. Then the cart and order code has one path instead of two.</p>
+
+<h2 id="apply-it-to-your-local-flisk-database">Apply it to your local Flisk database</h2>
+<p>Start with a project that has the shared Postgres and an API, as set up in <a href="/@odykyi/ecommerce-backend-local/run-a-small-shop-stack-with-flisk/">running a small shop on one laptop</a>. The shared Postgres container is named after the project, so for a project called <code>my-shop</code> and a stack called <code>shop</code>, the container is <code>my_shop_postgres</code>, the user is <code>my_shop</code> and the database is <code>my_shop_shop</code>. Confirm yours with <code>docker ps</code>, then apply a SQL file for a first try:</p>
+<pre><code>docker exec -i my_shop_postgres psql -U my_shop -d my_shop_shop -v ON_ERROR_STOP=1 &lt; schema.sql</code></pre>
+<p>For anything you keep, move the same SQL into your migration tool so the migrator creates it on every <code>flisk up</code>; <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a> shows the setup. Then load a few rows with the approach in <a href="/@odykyi/local-database-guide/seed-a-local-database/">seeding a local database</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Pointing orders at the product.</strong> The customer bought a size and colour. If the order line points at the product, you cannot say which one to ship.</li>
+<li><strong>Deleting variants.</strong> Old orders reference them. Set <code>active = false</code> instead of deleting.</li>
+<li><strong>Price on the product only.</strong> Larger sizes or special editions often cost more. A price per variant costs nothing extra and saves a migration later.</li>
+<li><strong>Stock as a column on variants.</strong> It works for tiny shops. Once you need reservations or several warehouses, a separate table is much easier to extend.</li>
+</ul>
+<p>For a bigger catalogue you will also want realistic rows to test search and pages. <a href="/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/">Generating realistic shop data</a> shows how.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should every product have at least one variant?</summary><p>Yes. It keeps cart and order code on a single path, because they always reference a variant.</p></details><details><summary>Can I use JSONB for all product attributes?</summary><p>Use JSONB for optional, varying attributes. Keep fields you filter and sort by, such as price and brand, as normal columns.</p></details><details><summary>Where do I store product images?</summary><p>Store the file in object storage and keep its URL or key in a product_images table that references the product, and optionally a variant.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/"><span class="lbl">Guide</span><b>How to store prices in a shop database: integers, not floats</b><span>Floating point cannot represent 0.10 exactly, so totals drift. Store the smallest unit as an integer and decide in advance where rounding happens.</span></a><a href="/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/"><span class="lbl">Guide</span><b>How to generate realistic shop data for local development</b><span>Ten rows will not show you a slow query or a broken pagination. Generate thousands of rows that look like a real store, and make the data the same on every run.</span></a><a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"><span class="lbl">Guide</span><b>How to stop overselling stock when two customers check out</b><span>Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

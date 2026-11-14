@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to store prices in a shop database: integers, not floats</title>
+<meta name="description" content="Store money as integer minor units with a currency code, round once, split discounts without losing a cent and handle currencies with 0 or 3 decimals.">
+<meta name="keywords" content="store prices as integers, money in database cents, float rounding error price, numeric vs integer money postgres, currency minor units">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to store prices in a shop database: integers, not floats">
+<meta property="og:description" content="Store money as integer minor units with a currency code, round once, split discounts without losing a cent and handle currencies with 0 or 3 decimals.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to store prices in a shop database: integers, not floats","description":"Store money as integer minor units with a currency code, round once, split discounts without losing a cent and handle currencies with 0 or 3 decimals.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/","keywords":"store prices as integers, money in database cents, float rounding error price, numeric vs integer money postgres, currency minor units","wordCount":730,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to store prices in a shop database: integers, not floats","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/store-prices-as-integer-cents/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is numeric or bigint better for money in Postgres?","acceptedAnswer":{"@type":"Answer","text":"Both are exact. bigint minor units are simpler in application code and cannot turn into floats by accident. numeric(12,2) reads better in raw SQL."}},{"@type":"Question","name":"How do I store a price with three decimals, like fuel?","acceptedAnswer":{"@type":"Answer","text":"Use a larger exponent for that field, for example thousandths, and keep the exponent in the schema or a currency table so that formatting reads it."}},{"@type":"Question","name":"Where should I round tax?","acceptedAnswer":{"@type":"Answer","text":"Pick one rule, per line or per order, apply it in a single function, and use it everywhere, including the invoice."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to store prices in a shop database: integers, not floats</h1><p class="dek">Floating point cannot represent 0.10 exactly, so totals drift. Store the smallest unit as an integer and decide in advance where rounding happens.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-two-safe-options">The two safe options</a></li><li><a href="#not-every-currency-has-two-decimals">Not every currency has two decimals</a></li><li><a href="#snapshot-the-price-on-the-order">Snapshot the price on the order</a></li><li><a href="#round-once-and-split-the-remainder">Round once, and split the remainder</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Store money as an integer count of the smallest unit (cents for USD and EUR) together with a three-letter currency code. Do arithmetic on the integers, and round exactly once, at a place you chose on purpose. Never store prices in <code>float</code> or <code>double precision</code> columns: <code>0.1 + 0.2</code> is <code>0.30000000000000004</code> in most languages, and the error shows up as a total that is off by a cent.</p>
+
+<h2 id="the-two-safe-options">The two safe options</h2>
+<p>Postgres gives you two reasonable column types for money:</p>
+<ul>
+<li><strong><code>bigint</code> minor units.</strong> <code>1999</code> means 19.99 USD. Fast, no rounding surprises on addition, and it maps to integers in every language. This is the default recommendation.</li>
+<li><strong><code>numeric(12,2)</code>.</strong> Exact decimals in the database. Fine too, but your driver may hand it to you as a string, and a careless cast to a JavaScript number brings the float problem back.</li>
+</ul>
+<p>The <code>money</code> type is tied to a locale setting and a fixed number of decimals, so most teams avoid it. Whatever you pick, put the currency next to the amount:</p>
+<pre><code>CREATE TABLE order_lines (
+  id               bigserial PRIMARY KEY,
+  order_id         bigint NOT NULL,
+  variant_id       bigint NOT NULL,
+  qty              int    NOT NULL CHECK (qty &gt; 0),
+  unit_price_minor bigint NOT NULL CHECK (unit_price_minor &gt;= 0),
+  currency         char(3) NOT NULL
+);</code></pre>
+
+<h2 id="not-every-currency-has-two-decimals">Not every currency has two decimals</h2>
+<p>The exponent comes from ISO 4217. USD, EUR and GBP use 2. JPY has 0, so 500 yen is stored as <code>500</code>. KWD and BHD use 3. If you hard-code "divide by 100" in the formatting code, a yen price shows as 5.00. Keep a small table or map of exponents, and format using it. A browser or Node <code>Intl.NumberFormat</code> with a currency code applies the right number of digits when you pass the amount in major units, so convert with the exponent first.</p>
+<pre><code>const EXP: Record&lt;string, number&gt; = { USD: 2, EUR: 2, JPY: 0, KWD: 3 };
+export const toMajor = (minor: number, cur: string) =&gt; minor / 10 ** (EXP[cur] ?? 2);</code></pre>
+<p>This division is only for display. Do not feed the result back into any calculation.</p>
+
+<h2 id="snapshot-the-price-on-the-order">Snapshot the price on the order</h2>
+<p>The catalogue price changes; an order must not. Copy the unit price, currency and any tax rate onto the order line when the order is created, as in the table above. Joining back to the product table later gives you today's price, not what the customer paid, which breaks refunds and reports.</p>
+
+<h2 id="round-once-and-split-the-remainder">Round once, and split the remainder</h2>
+<p>Percentages and tax produce fractions of a cent. Choose where to round and write it down. Two common rules are rounding each line and summing, or summing first and rounding the total. Either is fine; mixing them gives totals that disagree with the line items on the invoice. Use integer arithmetic: <code>Math.round(subtotal * 15 / 100)</code> for 15 percent, with the rounding rule you picked (half up is the usual one).</p>
+<p>A fixed discount spread over several lines needs a remainder rule, or the pieces will not add up. Allocate by proportion, then give the leftover cents to the largest lines:</p>
+<pre><code>function allocate(total: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) =&gt; a + b, 0);
+  const parts = weights.map((w) =&gt; Math.floor((total * w) / sum));
+  let left = total - parts.reduce((a, b) =&gt; a + b, 0);
+  for (let i = 0; left &gt; 0; i = (i + 1) % parts.length, left--) parts[i]++;
+  return parts;
+}
+// allocate(100, [1, 1, 1]) gives [34, 33, 33], and the parts sum to 100</code></pre>
+<p>A test like that last comment is worth writing: for any total and weights, the parts must sum to the total.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>JSON numbers.</strong> A price of <code>19.99</code> in an API body becomes a float in the client. Send minor units as integers, or amounts as strings.</li>
+<li><strong>Integer overflow.</strong> A JavaScript number is safe up to 2^53 minor units, which is plenty for a shop. Reports that multiply by large factors should use <code>BigInt</code> or do the math in SQL.</li>
+<li><strong>Mixed currencies in one sum.</strong> Adding USD to EUR minor units is a bug the type system will not catch. Group by currency, or refuse mixed carts.</li>
+<li><strong>Percentages stored as floats.</strong> Store a tax rate as basis points (<code>2000</code> for 20 percent) or as <code>numeric</code>.</li>
+</ul>
+<p>With prices settled, the next structure to get right is the catalogue itself: <a href="/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/">a schema for products, variants and SKUs</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is numeric or bigint better for money in Postgres?</summary><p>Both are exact. bigint minor units are simpler in application code and cannot turn into floats by accident. numeric(12,2) reads better in raw SQL.</p></details><details><summary>How do I store a price with three decimals, like fuel?</summary><p>Use a larger exponent for that field, for example thousandths, and keep the exponent in the schema or a currency table so that formatting reads it.</p></details><details><summary>Where should I round tax?</summary><p>Pick one rule, per line or per order, apply it in a single function, and use it everywhere, including the invoice.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/"><span class="lbl">Guide</span><b>Database schema for product variants: sizes, colours and SKUs</b><span>A t-shirt in three sizes and four colours is twelve things to stock, not one. Model the product, its variants and the stock separately.</span></a><a href="/@odykyi/ecommerce-backend-local/discount-codes-and-coupon-rules/"><span class="lbl">Guide</span><b>How to build discount codes and coupon rules without double use</b><span>A coupon is a bundle of rules: when it is valid, who can use it, how often, and what it takes off. Put the limits in the database so concurrent checkouts cannot break them.</span></a><a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/"><span class="lbl">Guide</span><b>How to model order statuses as a state machine in Postgres</b><span>Most order bugs are a status that moved when it should not. Write the allowed moves down, enforce them in one place and keep a log of every change.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

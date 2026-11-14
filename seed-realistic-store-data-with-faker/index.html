@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to generate realistic shop data for local development</title>
+<meta name="description" content="Seed a local store with believable products, customers and orders: a fixed random seed, skewed popularity, spread-out dates, edge cases and fast bulk inserts.">
+<meta name="keywords" content="generate fake ecommerce data, faker seed orders postgres, realistic test data for shop, seed script products orders, load test data local database">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to generate realistic shop data for local development">
+<meta property="og:description" content="Seed a local store with believable products, customers and orders: a fixed random seed, skewed popularity, spread-out dates, edge cases and fast bulk inserts.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to generate realistic shop data for local development","description":"Seed a local store with believable products, customers and orders: a fixed random seed, skewed popularity, spread-out dates, edge cases and fast bulk inserts.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/","keywords":"generate fake ecommerce data, faker seed orders postgres, realistic test data for shop, seed script products orders, load test data local database","wordCount":869,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to generate realistic shop data for local development","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many rows should a local seed have?","acceptedAnswer":{"@type":"Answer","text":"A few hundred products and a few tens of thousands of orders is enough to expose missing indexes on a laptop, without making the seed slow."}},{"@type":"Question","name":"Should the seed be random or fixed?","acceptedAnswer":{"@type":"Answer","text":"Random values from a fixed seed. You get realistic variety and the same data on every run."}},{"@type":"Question","name":"Can I use the same seed script in CI?","acceptedAnswer":{"@type":"Answer","text":"Yes. Seed with a smaller size in CI and a larger one locally, controlled by an environment variable."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to generate realistic shop data for local development</h1><p class="dek">Ten rows will not show you a slow query or a broken pagination. Generate thousands of rows that look like a real store, and make the data the same on every run.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-uniform-random-data-misleads-you">Why uniform random data misleads you</a></li><li><a href="#make-it-repeatable">Make it repeatable</a></li><li><a href="#shape-the-data">Shape the data</a></li><li><a href="#add-the-awkward-rows-on-purpose">Add the awkward rows on purpose</a></li><li><a href="#insert-fast">Insert fast</a></li><li><a href="#run-it-inside-the-flisk-stack">Run it inside the Flisk stack</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Generate store data with a script that uses a fixed random seed, so every run produces the same rows. Make the data realistic in three ways that uniform random data is not: a few products sell far more than the rest, orders spread over months, and the awkward cases are included on purpose (a cancelled order, an empty description, a very long name). Insert in batches, so 50,000 rows take seconds.</p>
+
+<h2 id="why-uniform-random-data-misleads-you">Why uniform random data misleads you</h2>
+<p>If every product has the same chance of being ordered, every query looks equally fast and every page looks equally full. Real shops are lopsided: a handful of products make most of the sales, most customers order once, and a few order often. Queries that group by product or customer behave differently on lopsided data, and so do caches. Seeding to match that shape catches problems that a flat table hides.</p>
+
+<h2 id="make-it-repeatable">Make it repeatable</h2>
+<p><code>@faker-js/faker</code> (JavaScript) and <code>Faker</code> (Python) both accept a seed. With the same seed and the same call order, you get the same names and numbers:</p>
+<pre><code>import { faker } from "@faker-js/faker";
+faker.seed(42);
+faker.setDefaultRefDate("2026-01-01T00:00:00Z"); // fixed reference for relative dates
+
+const email = faker.internet.email({ provider: "example.test" });</code></pre>
+<p>Using a <code>.test</code> address keeps any email your stack sends from reaching a real person. A repeatable seed lets a teammate say "order 1,204 fails" and you see the same order. If you change the script, the data changes, so keep the seed script in version control, and treat it as code.</p>
+
+<h2 id="shape-the-data">Shape the data</h2>
+<p>Three small pieces of logic give most of the realism:</p>
+<ul>
+<li><strong>Skewed popularity.</strong> Pick the product for each order line with a weight such as <code>1 / (rank + 1)</code>, so rank 0 is chosen far more than rank 100.</li>
+<li><strong>Spread dates.</strong> Use <code>faker.date.between</code> over the last 12 months, and sort so ids and dates move together. Add a busier period if you want to test a sale.</li>
+<li><strong>Status mix.</strong> For example 70 percent delivered, 10 percent shipped, 8 percent cancelled, 7 percent pending, 5 percent refunded. This is what makes admin filters and reports worth testing.</li>
+</ul>
+<pre><code>function pickWeighted(n: number) {
+  const weights = Array.from({ length: n }, (_, i) =&gt; 1 / (i + 1));
+  let r = faker.number.float() * weights.reduce((a, b) =&gt; a + b, 0);
+  for (let i = 0; i &lt; n; i++) { r -= weights[i]; if (r &lt;= 0) return i; }
+  return n - 1;
+}</code></pre>
+
+<h2 id="add-the-awkward-rows-on-purpose">Add the awkward rows on purpose</h2>
+<p>Random data rarely produces the cases that break code. Add them by hand at the top of the script, with fixed ids:</p>
+<ul>
+<li>A product with a 200-character name and one with an emoji.</li>
+<li>A customer with no name, and one with an apostrophe in it (<code>O'Brien</code>).</li>
+<li>An order with a single line of quantity 99, and one with 40 lines.</li>
+<li>A variant with zero stock and one that is inactive.</li>
+<li>A refunded order and a cancelled order, to test the history and reports.</li>
+</ul>
+
+<h2 id="insert-fast">Insert fast</h2>
+<p>One <code>INSERT</code> per row is slow because of the round trip each time. Build batches of 500 to 1000 rows and insert each batch with a multi-row statement or, in Postgres, <code>COPY</code> through a library such as <code>pg-copy-streams</code>. Insert parents first (products, customers), then orders, then order lines, inside one transaction so a failure leaves nothing half done. After inserting rows with explicit ids, move the sequence forward so the next normal insert does not collide: <code>SELECT setval(pg_get_serial_sequence('orders','id'), (SELECT max(id) FROM orders));</code>.</p>
+<p>Make the script safe to run twice. Either truncate the tables it owns at the start (<code>TRUNCATE ... RESTART IDENTITY CASCADE</code>) or skip when the data is already there. Never point it at production; read the database name from the environment and refuse to run unless it looks local.</p>
+
+<h2 id="run-it-inside-the-flisk-stack">Run it inside the Flisk stack</h2>
+<p>Add a script to the API's <code>package.json</code>, for example <code>"seed": "bun run src/seed.ts"</code>, and run it with the environment the service has in the stack:</p>
+<pre><code>flisk run orders-api -- bun run seed</code></pre>
+<p>That form is the one shown in <code>flisk run --help</code>. The command runs in the running container with the service's own <code>DATABASE_URL</code>, so the script and the API talk to the same database, and the exit code is the script's, which makes it usable in a shell script or CI. The stack must be up first. If the tables are missing, the script fails on its first insert, so run the migrations before. The same pattern as a one-shot job inside <code>flisk up</code> is in <a href="/@odykyi/local-database-guide/seed-a-local-database/">seeding a local database</a>, and <a href="/@odykyi/local-database-guide/reset-a-local-database/">resetting a local database</a> shows how to wipe and start again.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Copying production data.</strong> Do not. Names, addresses and emails are personal data; fake rows are enough.</li>
+<li><strong>Changing call order.</strong> Adding one <code>faker</code> call early shifts every value after it. That is fine, but regenerate expected values in tests that depend on them.</li>
+<li><strong>Too much data for the unit tests.</strong> Keep a small fixed dataset for tests and a large one for exploring performance.</li>
+<li><strong>Ignoring indexes.</strong> The point of a big seed is to run <code>EXPLAIN ANALYZE</code> on your slow pages. Try it on the order list, as in <a href="/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/">paginating order history</a>.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many rows should a local seed have?</summary><p>A few hundred products and a few tens of thousands of orders is enough to expose missing indexes on a laptop, without making the seed slow.</p></details><details><summary>Should the seed be random or fixed?</summary><p>Random values from a fixed seed. You get realistic variety and the same data on every run.</p></details><details><summary>Can I use the same seed script in CI?</summary><p>Yes. Seed with a smaller size in CI and a larger one locally, controlled by an environment variable.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/"><span class="lbl">Guide</span><b>Database schema for product variants: sizes, colours and SKUs</b><span>A t-shirt in three sizes and four colours is twelve things to stock, not one. Model the product, its variants and the stock separately.</span></a><a href="/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/"><span class="lbl">Guide</span><b>How to paginate order history without OFFSET in Postgres</b><span>OFFSET gets slower on every page and skips rows when new orders arrive. Keyset pagination reads a fixed amount each time and does not lose its place.</span></a><a href="/@odykyi/ecommerce-backend-local/run-a-small-shop-stack-with-flisk/"><span class="lbl">Guide</span><b>How to run a storefront, orders API and database on one laptop</b><span>A shop backend is a few ordinary parts. Here is the shortest verified path to a running storefront, API and database, with the commands to check each one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
