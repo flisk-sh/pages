@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What to put in the README for local development setup</title>
+<meta name="description" content="A README section for local setup that stays true: prerequisites with versions, one start command, URLs, resets and fixes, and what to leave to the tooling.">
+<meta name="keywords" content="readme local development setup, document local dev environment, readme getting started section, dev setup documentation, how to write a setup guide">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/team-dev-environments/document-local-setup-in-the-readme/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What to put in the README for local development setup">
+<meta property="og:description" content="A README section for local setup that stays true: prerequisites with versions, one start command, URLs, resets and fixes, and what to leave to the tooling.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/team-dev-environments/document-local-setup-in-the-readme/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"What to put in the README for local development setup","description":"A README section for local setup that stays true: prerequisites with versions, one start command, URLs, resets and fixes, and what to leave to the tooling.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/team-dev-environments/document-local-setup-in-the-readme/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/team-dev-environments/document-local-setup-in-the-readme/","keywords":"readme local development setup, document local dev environment, readme getting started section, dev setup documentation, how to write a setup guide","wordCount":802,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Team dev environments and onboarding","item":"https://pages.flisk.si/@odykyi/team-dev-environments/"},{"@type":"ListItem","position":3,"name":"What to put in the README for local development setup","item":"https://pages.flisk.si/@odykyi/team-dev-environments/document-local-setup-in-the-readme/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should the README or a docs folder hold the setup steps?","acceptedAnswer":{"@type":"Answer","text":"Put the first-run commands in the README so they are the first thing a new person sees, and link to a docs folder for per-OS details such as WSL2 or Colima."}},{"@type":"Question","name":"Does flisk down delete my database?","acceptedAnswer":{"@type":"Answer","text":"No. In a Docker stack it removes containers and keeps named volumes. flisk down --purge also deletes the project's Docker volumes, including database data."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/team-dev-environments/">Team dev environments and onboarding</a></div>
+<section class="hero"><div><div class="lbl">Team dev environments and onboarding</div><h1>What to put in the README for local development setup</h1><p class="dek">A setup section that lists forty manual steps goes stale in a month. Write the few things a person must know, and let commands print the rest.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-setup-docs-go-stale">Why setup docs go stale</a></li><li><a href="#the-six-parts">The six parts</a></li><li><a href="#a-template-to-copy">A template to copy</a></li><li><a href="#what-to-leave-out">What to leave out</a></li><li><a href="#check-the-readme-like-code">Check the README like code</a></li></ol></nav></aside>
+<article><p>A good local-setup section in the README has six parts: prerequisites with versions, the install and start commands, where to open the app, how to reset it, what to do when it breaks, and who owns it. Keep it short, put the commands in code blocks, and let tools print anything that changes often, such as ports and URLs.</p>
+<h2 id="why-setup-docs-go-stale">Why setup docs go stale</h2>
+<p>Setup pages rot because they repeat facts that live somewhere else. The port of the API is in the service config and also in the README. The Postgres password is in <code>.env</code> and also in a wiki. When one changes, nobody edits the other. A new developer then follows the page, hits an error, and learns the page cannot be trusted.</p>
+<p>The rule that keeps a README honest is simple: do not write down a fact that a command can print. Write the command instead. A README that says <code>run flisk networks to see the URLs</code> never needs an update when a port changes. A README that lists five URLs always will.</p>
+<h2 id="the-six-parts">The six parts</h2>
+<h3>1. Prerequisites with versions</h3>
+<p>List what must be on the machine before the first command, with the minimum version. Be exact, because "Docker" is not a prerequisite, "Docker Engine 25 or newer with Compose 2.20.2 or newer" is. For a Flisk project that runs Docker stacks, the setup pages in the Flisk repository list Node.js 22.12 or newer, Docker Engine 25+ with Compose 2.20.2+, and Tilt 0.25+. For a project whose services all declare a <code>command</code>, you only need Flisk and the runtimes of your own services.</p>
+<h3>2. Install and start</h3>
+<p>Three commands at most, copy-paste ready:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk up</code></pre>
+<p>If you pin a CLI floor with <code>minFliskVersion</code> in <code>.flisk/project.json</code>, say so here. The CLI will print <code>Run: flisk upgrade</code> on an older version, so you do not need to explain the failure.</p>
+<h3>3. Where to open the app</h3>
+<p>Do not list URLs. Write: "<code>flisk up</code> prints the URLs. To see them again run <code>flisk networks</code>." Flisk also shows services and ports with <code>flisk resources</code>, and what is healthy with <code>flisk status</code>. If you routinely open one page first, name it ("the storefront") rather than its address.</p>
+<h3>4. Daily commands</h3>
+<p>A short table beats prose here:</p>
+<table>
+<thead><tr><th>Task</th><th>Command</th></tr></thead>
+<tbody>
+<tr><td>Start everything</td><td><code>flisk up</code></td></tr>
+<tr><td>Start part of it</td><td><code>flisk up --only orders-api</code> or <code>flisk up shop</code></td></tr>
+<tr><td>Read logs</td><td><code>flisk logs</code>, or <code>flisk logs --service orders-api</code></td></tr>
+<tr><td>Restart one service</td><td><code>flisk restart orders-api</code></td></tr>
+<tr><td>Run a one-off command</td><td><code>flisk run orders-api -- npm test</code></td></tr>
+<tr><td>Stop</td><td><code>flisk down</code></td></tr>
+</tbody>
+</table>
+<p>The <code>--only</code> option starts the named services plus what they depend on, so a developer working on one API does not have to run the rest. Replace the example service and stack names with yours.</p>
+<h3>5. Reset and clean up</h3>
+<p>Say what survives a restart. In a Docker Flisk stack, <code>flisk down</code> removes containers but keeps named volumes, so Postgres data stays. <code>flisk down --purge</code> also deletes the project's Docker volumes, so say plainly that it deletes local data. Put this next to the command, because it is the one a tired person types by mistake.</p>
+<h3>6. When it breaks</h3>
+<p>Start with one line: "Run <code>flisk doctor</code> and read the first failed check." Doctor prints a fix under each failure. Then add the three or four problems your team has actually hit, with the exact error text so a search finds them. Delete an item when the tooling stops producing that error. Our troubleshooting articles, such as <a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/">check your machine before starting</a>, can fill the generic part.</p>
+<h2 id="a-template-to-copy">A template to copy</h2>
+<pre><code>## Local development
+
+Prerequisites: Node.js 22.12+, Docker Engine 25+ with Compose 2.20.2+, Tilt 0.25+.
+Windows: use Ubuntu on WSL2 (see docs/windows.md).
+
+    npm install -g @flisk-sh/flisk
+    flisk project --yes
+    flisk doctor
+    flisk up
+
+URLs: `flisk networks`. Services and ports: `flisk resources`.
+Stop: `flisk down`. Wipe local data: `flisk down --purge` (deletes the database).
+Stuck: `flisk doctor`, then ask in #dev-help with its output.
+Owners of the local setup: @your-org/platform-team</code></pre>
+<h2 id="what-to-leave-out">What to leave out</h2>
+<ul>
+<li>Generated passwords or tokens. The project <code>.env</code> is git-ignored and written by <code>flisk project</code>; never paste its values into a README.</li>
+<li>Port numbers, hostnames and container names. They come from <code>service.json</code> and the project name.</li>
+<li>Steps the tool already does. If <code>flisk up</code> runs migrations through a one-shot resource, do not tell people to run them by hand.</li>
+</ul>
+<h2 id="check-the-readme-like-code">Check the README like code</h2>
+<p>Once a quarter, give the section to someone who has never run the project, and watch without helping. Every question they ask is a missing line. You can also test the commands in CI, which is covered in <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">checking config drift in CI</a>. For the full day-one plan around this README, see <a href="/@odykyi/team-dev-environments/onboard-a-developer-on-day-one/">onboarding a developer on day one</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should the README or a docs folder hold the setup steps?</summary><p>Put the first-run commands in the README so they are the first thing a new person sees, and link to a docs folder for per-OS details such as WSL2 or Colima.</p></details><details><summary>Does flisk down delete my database?</summary><p>No. In a Docker stack it removes containers and keeps named volumes. flisk down --purge also deletes the project&#39;s Docker volumes, including database data.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Team dev environments and onboarding</span></div>
+<div class="rgrid"><a href="/@odykyi/team-dev-environments/onboard-a-developer-on-day-one/"><span class="lbl">Guide</span><b>How to onboard a developer to a multi-service app on day one</b><span>A new hire should see the whole app running before lunch, not after a week of wiki pages. Here is a short plan that gets there, with or without Flisk.</span></a><a href="/@odykyi/team-dev-environments/service-json-as-a-team-contract/"><span class="lbl">Guide</span><b>How to use service.json as a team contract for local services</b><span>When every service describes itself in one small file, the file becomes the place where teams agree on ports, health checks and dependencies.</span></a><a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/"><span class="lbl">Guide</span><b>How to check generated config drift in CI</b><span>A drift check takes seconds, needs no running containers, and stops the classic bug where a source file changed and the generated one did not.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
