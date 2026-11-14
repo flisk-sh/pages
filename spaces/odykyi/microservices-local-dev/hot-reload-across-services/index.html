@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to get hot reload across several services locally</title>
+<meta name="description" content="Get every service to reload on save, not just the one you edit. How watch modes work for local processes and containers, and which changes need a restart.">
+<meta name="keywords" content="hot reload microservices, live reload multiple services, docker hot reload, auto restart on file change">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/microservices-local-dev/hot-reload-across-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to get hot reload across several services locally">
+<meta property="og:description" content="Get every service to reload on save, not just the one you edit. How watch modes work for local processes and containers, and which changes need a restart.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/microservices-local-dev/hot-reload-across-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to get hot reload across several services locally","description":"Get every service to reload on save, not just the one you edit. How watch modes work for local processes and containers, and which changes need a restart.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/microservices-local-dev/hot-reload-across-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/microservices-local-dev/hot-reload-across-services/","keywords":"hot reload microservices, live reload multiple services, docker hot reload, auto restart on file change","wordCount":732,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Run microservices on your laptop","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/"},{"@type":"ListItem","position":3,"name":"How to get hot reload across several services locally","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/hot-reload-across-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Flisk reload my code when I save a file?","acceptedAnswer":{"@type":"Answer","text":"For local processes, reload comes from your command: use your runtime's watch mode such as node --watch or uvicorn --reload. For containers, Flisk syncs changed files into the running container, and the app restarts if its start command watches files."}},{"@type":"Question","name":"Why did my change not show up?","acceptedAnswer":{"@type":"Answer","text":"Common reasons are that the file is outside the watched folders, the app was not started in watch mode, or the value is an environment variable, which is read only at start. Restart the service after changing env."}},{"@type":"Question","name":"Does hot reload work for a bring-your-own Dockerfile service?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk does not sync source into a bring-your-own container. Rebuild the image or restart the service after a change."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/microservices-local-dev/">Run microservices on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Run microservices on your laptop</div><h1>How to get hot reload across several services locally</h1><p class="dek">Hot reload for one service is a flag. For five services in two languages it is a decision you make per service.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#three-layers-of-reload">Three layers of reload</a></li><li><a href="#the-general-approach">The general approach</a></li><li><a href="#the-flisk-way-local-processes">The Flisk way: local processes</a></li><li><a href="#the-flisk-way-containers">The Flisk way: containers</a></li><li><a href="#changes-that-need-a-restart">Changes that need a restart</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To get hot reload across several services, choose the reload mechanism per service and let the runner handle only the process. For plain processes, use your runtime's own watch flag in the start command. For containers, sync changed files into the container and run a command that restarts on change. Settings that are read once at start, such as environment variables, always need a restart.</p>
+
+<h2 id="three-layers-of-reload">Three layers of reload</h2>
+<p>People say "hot reload" for three different things:</p>
+<ul>
+<li><strong>Process restart on save.</strong> A watcher restarts the server when a file changes. Examples are <code>node --watch</code>, <code>bun --watch</code>, <code>uvicorn --reload</code> and Go tools such as air.</li>
+<li><strong>Module replacement in the browser.</strong> A dev server like Vite updates the page without a full reload.</li>
+<li><strong>File sync into a container.</strong> Your editor changes a file on the host, and a tool copies it to the running container so the watcher inside sees it.</li>
+</ul>
+<p>You need the right layer for each service. A frontend with Vite already has the second layer. An API in a container needs the third and the first.</p>
+
+<h2 id="the-general-approach">The general approach</h2>
+<p>With Compose, you bind-mount the source folder into the container and run the watcher inside. Newer Compose versions add a <code>develop.watch</code> section that syncs or rebuilds on change. Both work, with a catch on macOS and Windows, where bind mounts can be slow and file events may not arrive. The <a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/">Compose hot reload guide</a> covers this in more depth.</p>
+
+<h2 id="the-flisk-way-local-processes">The Flisk way: local processes</h2>
+<p>No containers means no syncing. The command in each <code>service.json</code> is the watcher:</p>
+<pre><code>{ "appName": "api",    "appType": "backend",  "command": "node --watch server.js",           "port": 4000 }
+{ "appName": "worker", "appType": "worker",   "command": "uvicorn main:app --reload --port 4100", "port": 4100 }
+{ "appName": "web",    "appType": "frontend", "command": "npx vite --port 3000",            "port": 3000, "dependsOn": ["api"] }</code></pre>
+<p>Each service reloads by its own rules, and Flisk keeps them running and ordered. If a watcher restarts the process quickly, that is a normal reload. A crash is different: Flisk restarts a crashed process after 1, 2, 4 and 8 seconds, and gives up after five quick exits.</p>
+
+<h2 id="the-flisk-way-containers">The Flisk way: containers</h2>
+<p>In the container path, Tilt copies changed files into the running container. The folders to watch come from <code>dev.watch</code> in <code>service.json</code>:</p>
+<pre><code>"dev": { "command": "bun run dev", "watch": ["src/**/*"] }</code></pre>
+<p>What happens after the copy depends on the language:</p>
+<ul>
+<li><strong>Bun backends, workers, agents and MCP servers</strong> reload by default when the <code>dev</code> script in <code>package.json</code> runs under <code>bun --watch</code> or <code>--hot</code>. Set <code>"dev": { "liveReload": false }</code> to use the compiled build instead.</li>
+<li><strong>Go services</strong> opt in with <code>"dev": { "liveReload": true }</code>, which recompiles inside the container. A compile error shows in the log and the last good build keeps answering.</li>
+<li><strong>Python and Node</strong> rely on their own process reload.</li>
+<li><strong>Bring-your-own containers</strong> get no source sync. Rebuild the image from the Tilt UI or restart the stack after a change.</li>
+</ul>
+<p>Edits outside the watched folders do not trigger an update, and a dependency file such as <code>go.mod</code> still rebuilds the image.</p>
+
+<h2 id="changes-that-need-a-restart">Changes that need a restart</h2>
+<p>Environment variables are read when a process starts. Change one in <code>service.json</code> or <code>.env</code> and nothing happens until you run:</p>
+<pre><code>flisk restart api</code></pre>
+<p>The same goes for a generated frontend variable such as <code>VITE_API_URL</code>: it ends up in the browser bundle, so restart the frontend after changing the backend it points to.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two watchers fighting.</strong> If the runner and a framework both restart the process, you get double restarts. Use one.</li>
+<li><strong>A dependency reloads while others are talking to it.</strong> Expect a short run of failed requests. Retry in clients.</li>
+<li><strong>Watching too much.</strong> Watching <code>node_modules</code> or build output causes restart loops. Exclude them.</li>
+</ul>
+
+<p>Order matters when several services reload at once. If the API restarts while the web app is polling it, the first requests after the save may fail. That is expected, so make clients retry, and avoid saving files in three services in the same second. For a frontend that calls an API, also check that the browser is not showing a cached response. A hard refresh can look like a reload bug when it is only the cache, and the network tab shows which one it is.</p>
+
+<p>If a save changes nothing, <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a> lists the checks. To make the services reachable under stable names, see <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of ports</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Flisk reload my code when I save a file?</summary><p>For local processes, reload comes from your command: use your runtime&#39;s watch mode such as node --watch or uvicorn --reload. For containers, Flisk syncs changed files into the running container, and the app restarts if its start command watches files.</p></details><details><summary>Why did my change not show up?</summary><p>Common reasons are that the file is outside the watched folders, the app was not started in watch mode, or the value is an environment variable, which is read only at start. Restart the service after changing env.</p></details><details><summary>Does hot reload work for a bring-your-own Dockerfile service?</summary><p>No. Flisk does not sync source into a bring-your-own container. Rebuild the image or restart the service after a change.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Run microservices on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/"><span class="lbl">Guide</span><b>How to run a frontend and an API together locally</b><span>Two processes, two ports, one browser. The usual failures are a wrong API URL and a CORS error. Here is how to avoid both.</span></a><a href="/@odykyi/microservices-local-dev/service-startup-order/"><span class="lbl">Guide</span><b>How to control service startup order in local development</b><span>Starting in the right order is half of it. The other half is waiting until the first service is actually ready, not just launched.</span></a><a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/"><span class="lbl">Guide</span><b>Use *.localhost URLs instead of port numbers in local dev</b><span>Remembering which service is on which port gets old fast. A name per service is easier to read, bookmark and put in config.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

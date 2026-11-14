@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local development without Kubernetes (minikube, kind, k3d)</title>
+<meta name="description" content="Do you need a local Kubernetes cluster to build microservices? Compare minikube, kind, k3d, Compose and plain processes, and when each one is the right call.">
+<meta name="keywords" content="local development without kubernetes, minikube alternative, kind alternative local development, k3d alternative">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/microservices-local-dev/local-dev-without-kubernetes/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Local development without Kubernetes (minikube, kind, k3d)">
+<meta property="og:description" content="Do you need a local Kubernetes cluster to build microservices? Compare minikube, kind, k3d, Compose and plain processes, and when each one is the right call.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/microservices-local-dev/local-dev-without-kubernetes/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Local development without Kubernetes (minikube, kind, k3d)","description":"Do you need a local Kubernetes cluster to build microservices? Compare minikube, kind, k3d, Compose and plain processes, and when each one is the right call.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/microservices-local-dev/local-dev-without-kubernetes/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/microservices-local-dev/local-dev-without-kubernetes/","keywords":"local development without kubernetes, minikube alternative, kind alternative local development, k3d alternative","wordCount":758,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Run microservices on your laptop","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/"},{"@type":"ListItem","position":3,"name":"Local development without Kubernetes (minikube, kind, k3d)","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/local-dev-without-kubernetes/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Kubernetes to develop microservices locally?","acceptedAnswer":{"@type":"Answer","text":"No. Most day-to-day work, such as writing endpoints, calling other services and running a database, works with plain processes or Compose. You need a cluster to test things that only exist in Kubernetes, such as manifests, operators or network policies."}},{"@type":"Question","name":"Does Flisk replace kind or minikube?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk has no Kubernetes API and does not generate Kubernetes manifests. It starts your services locally, as processes or as containers, and leaves cluster deployment to your own workflow."}},{"@type":"Question","name":"When should I use a local cluster?","acceptedAnswer":{"@type":"Answer","text":"When the thing you are changing is Kubernetes itself: Helm charts, Kustomize overlays, ingress rules, RBAC, controllers or resource limits."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/microservices-local-dev/">Run microservices on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Run microservices on your laptop</div><h1>Local development without Kubernetes (minikube, kind, k3d)</h1><p class="dek">A local cluster is a good way to test Kubernetes. It is a heavy way to write an API. Pick the lightest tool that answers your question.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-option-is-for">What each option is for</a></li><li><a href="#the-case-for-a-cluster">The case for a cluster</a></li><li><a href="#the-case-against-for-day-to-day-work">The case against, for day-to-day work</a></li><li><a href="#the-flisk-way-without-kubernetes">The Flisk way without Kubernetes</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>You do not need Kubernetes to develop microservices on your laptop. If your task is writing code, run the services as plain processes or containers and keep a cluster for the days you are changing Kubernetes itself. A local cluster adds memory use, startup time and a layer of YAML between you and your code, so use it when it answers a question nothing lighter can.</p>
+
+<h2 id="what-each-option-is-for">What each option is for</h2>
+<table>
+<thead><tr><th>Tool</th><th>Good for</th><th>Cost</th></tr></thead>
+<tbody>
+<tr><td>minikube, kind, k3d</td><td>Testing manifests, Helm charts, operators, ingress, probes</td><td>A cluster to run, images to load into it, YAML to keep in sync</td></tr>
+<tr><td>Docker Compose</td><td>Several containers with a database, on one machine</td><td>A container build for each change unless you add syncing</td></tr>
+<tr><td>Plain processes</td><td>Fast edit and run loops for code you write</td><td>You manage ports, order and logs yourself, or use a runner</td></tr>
+<tr><td>Flisk</td><td>Processes or Compose-style containers with order, health checks and URLs</td><td>A service.json per service</td></tr>
+</tbody>
+</table>
+<p>The three local cluster tools differ in packaging. kind runs cluster nodes as Docker containers and is popular in CI. k3d runs k3s, a small distribution, in Docker. minikube runs a single-node cluster in a VM or container. For this question they behave alike: you get a real Kubernetes API, and you pay for it.</p>
+
+<h2 id="the-case-for-a-cluster">The case for a cluster</h2>
+<p>Run one when the behavior you care about is only visible there:</p>
+<ul>
+<li>You write or change Helm charts, Kustomize overlays or raw manifests.</li>
+<li>You depend on cluster features: operators, custom resources, network policies, RBAC.</li>
+<li>You need to see how liveness and readiness probes or resource limits behave.</li>
+<li>Your team ships through Kubernetes and a bug only shows up there.</li>
+</ul>
+<p>Even then, you can write the application code outside the cluster and bring it in for the final check.</p>
+
+<h2 id="the-case-against-for-day-to-day-work">The case against, for day-to-day work</h2>
+<p>For everyday changes, a cluster slows the loop. A code change usually means building an image, loading it and rolling a deployment, unless you add a sync tool on top. Memory goes to the control plane. When something fails, you debug the cluster first and your code second. Many teams settle on this split: develop against plain processes or Compose, and run a cluster in CI or on a shared environment for the last mile.</p>
+
+<h2 id="the-flisk-way-without-kubernetes">The Flisk way without Kubernetes</h2>
+<p>Flisk is a local development tool. Its default path runs services as local processes: each service declares a <code>command</code> and a port, and Flisk starts them in order, waits for health and restarts a crashed one with backoff.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Run <code>flisk up</code>. No Docker and no cluster are involved. A service that cannot run as a plain process, such as a database, can run from an image with <code>docker run</code> next to the processes. If you want containers for everything, Flisk's container path uses Docker, Tilt and a Traefik gateway, which gives you URLs like <code>api.&lt;project&gt;.localhost</code>.</p>
+<p>What Flisk does not do matters here. It has no Kubernetes API, does not emit Kubernetes manifests by default and does not replace Helm, Kustomize, Flux or Argo. It is for the inner loop. For the hand-off, <code>flisk export</code> can write a <code>render.yaml</code>, a <code>wrangler.toml</code> or a standalone <code>docker-compose.yml</code> from your <code>service.json</code> files. Those are files only; nothing is deployed.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Dev and production drift.</strong> Running without a cluster means differences in networking, config and limits. Keep a cluster stage in CI so these surface before release.</li>
+<li><strong>Service discovery.</strong> In a cluster, services reach each other by DNS name. Locally they use ports or <code>*.localhost</code> URLs. Read addresses from environment variables, not constants.</li>
+<li><strong>Secrets.</strong> Use development-only values locally, never production ones.</li>
+</ul>
+<blockquote>If you are unsure, start with processes. Add a cluster the first time you hit a question that needs one.</blockquote>
+
+<p>There is a middle path worth naming. Some teams keep one shared development cluster for integration checks and let each developer run their own service locally against it, or against local copies of the dependencies. That keeps laptops light, at the cost of needing network access and a rule for who may change the shared cluster. Whether it fits depends on how many services you own and how stable the shared environment is. Start with the simplest setup that lets you run the code you are changing.</p>
+
+<p>For how to keep the cluster out of the local loop on purpose, see <a href="/@odykyi/testing-and-shipping/keep-kubernetes-out-of-local-dev/">keep Kubernetes out of local dev</a>. To set the processes up, start with <a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/">how to run microservices locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Kubernetes to develop microservices locally?</summary><p>No. Most day-to-day work, such as writing endpoints, calling other services and running a database, works with plain processes or Compose. You need a cluster to test things that only exist in Kubernetes, such as manifests, operators or network policies.</p></details><details><summary>Does Flisk replace kind or minikube?</summary><p>No. Flisk has no Kubernetes API and does not generate Kubernetes manifests. It starts your services locally, as processes or as containers, and leaves cluster deployment to your own workflow.</p></details><details><summary>When should I use a local cluster?</summary><p>When the thing you are changing is Kubernetes itself: Helm charts, Kustomize overlays, ingress rules, RBAC, controllers or resource limits.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Run microservices on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/"><span class="lbl">Guide</span><b>How to run microservices locally on your laptop</b><span>You do not need Kubernetes to work on five services. You need each one running on a known port, started in the right order, with logs you can read.</span></a><a href="/@odykyi/microservices-local-dev/one-command-dev-environment/"><span class="lbl">Guide</span><b>How to set up a one-command dev environment for your team</b><span>The goal is simple: clone, run one command, open a URL. Everything between those steps should be written down in files, not in someone&#39;s head.</span></a><a href="/@odykyi/microservices-local-dev/hot-reload-across-services/"><span class="lbl">Guide</span><b>How to get hot reload across several services locally</b><span>Hot reload for one service is a flag. For five services in two languages it is a decision you make per service.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
