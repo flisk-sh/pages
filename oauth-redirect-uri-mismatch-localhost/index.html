@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fix OAuth redirect_uri_mismatch on localhost</title>
+<meta name="description" content="A redirect_uri_mismatch means the callback URL your app sent is not the one registered at the provider, character for character. How to find the difference.">
+<meta name="keywords" content="redirect_uri_mismatch localhost, oauth redirect uri mismatch, oauth callback url localhost, redirect uri does not match, localhost vs 127.0.0.1 oauth">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fix OAuth redirect_uri_mismatch on localhost">
+<meta property="og:description" content="A redirect_uri_mismatch means the callback URL your app sent is not the one registered at the provider, character for character. How to find the difference.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Fix OAuth redirect_uri_mismatch on localhost","description":"A redirect_uri_mismatch means the callback URL your app sent is not the one registered at the provider, character for character. How to find the difference.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/","keywords":"redirect_uri_mismatch localhost, oauth redirect uri mismatch, oauth callback url localhost, redirect uri does not match, localhost vs 127.0.0.1 oauth","wordCount":770,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"Fix OAuth redirect_uri_mismatch on localhost","item":"https://pages.flisk.si/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is localhost allowed as a redirect URI?","acceptedAnswer":{"@type":"Answer","text":"Yes, for development. GitHub and Google accept http://localhost URIs. Google does not accept other custom names such as myapp.test for web clients."}},{"@type":"Question","name":"Why does it work on 127.0.0.1 but not on localhost?","acceptedAnswer":{"@type":"Answer","text":"The provider compares strings, so the two hosts are different. Register the one you open in the browser."}},{"@type":"Question","name":"Can I use a wildcard redirect URI for local ports?","acceptedAnswer":{"@type":"Answer","text":"Most providers do not allow wildcards. Pin the port in your dev server instead of registering many ports."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>Fix OAuth redirect_uri_mismatch on localhost</h1><p class="dek">The error page rarely shows the two values it compared. You can read the one your app sent straight from the address bar.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#read-the-url-your-app-actually-sent">Read the URL your app actually sent</a></li><li><a href="#the-differences-that-cause-it">The differences that cause it</a></li><li><a href="#make-the-value-deterministic">Make the value deterministic</a></li><li><a href="#where-flisk-helps">Where Flisk helps</a></li><li><a href="#when-the-registered-value-is-already-right">When the registered value is already right</a></li></ol></nav></aside>
+<article><p>A <code>redirect_uri_mismatch</code> error means the callback URL your app sent to the identity provider is not on the list you registered there. The match is exact: scheme, host, port, path and trailing slash all count. Copy the real value out of the browser address bar, compare it with the registered one, and fix whichever side is wrong.</p>
+
+<h2 id="read-the-url-your-app-actually-sent">Read the URL your app actually sent</h2>
+<p>Do not trust the value you think your app uses. Start the login, and when the browser lands on the provider's error page, look at the address bar of the page just before it, or open devtools, Network, and click the first request to the provider's authorize endpoint. The query string has a <code>redirect_uri</code> parameter. Decode it:</p>
+<pre><code>redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback%2Fgoogle
+# decoded:
+http://localhost:3000/api/auth/callback/google</code></pre>
+<p>Now open the provider's console and compare it to the registered redirect URI, one part at a time. Pasting both into a text editor with a monospace font makes a stray slash or a letter case difference obvious.</p>
+
+<h2 id="the-differences-that-cause-it">The differences that cause it</h2>
+<ul>
+<li><strong><code>localhost</code> against <code>127.0.0.1</code>.</strong> They are different hosts to an OAuth provider, even though they reach the same machine. Pick one and use it everywhere, including in the URL you type in the browser.</li>
+<li><strong>The port.</strong> <code>http://localhost:3000/cb</code> and <code>http://localhost:5173/cb</code> are different URIs. A dev server that moves to the next free port because 3000 is taken breaks the login without any code change. Pin the port.</li>
+<li><strong><code>http</code> against <code>https</code>.</strong> A tunnel or proxy can make your app believe it is on <code>http</code> while the browser used <code>https</code>, so the app builds the wrong URI. See <a href="/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/">why redirects go to http or the wrong port behind a proxy</a>.</li>
+<li><strong>The trailing slash.</strong> <code>/callback</code> and <code>/callback/</code> do not match at most providers. Frameworks that redirect one to the other make this worse.</li>
+<li><strong>The path.</strong> Library defaults differ: Auth.js uses <code>/api/auth/callback/&lt;provider&gt;</code>, Passport examples often use <code>/auth/&lt;provider&gt;/callback</code>, and Django allauth uses <code>/accounts/&lt;provider&gt;/login/callback/</code>. Read your library's documentation for the exact path.</li>
+<li><strong>Letter case and invisible characters.</strong> The host is case-insensitive in theory, but some providers compare strings. A pasted space at the end of the field is also common.</li>
+<li><strong>A stale environment value.</strong> The app reads <code>BASE_URL</code> or <code>AUTH_URL</code> once at startup, so editing <code>.env</code> without restarting changes nothing.</li>
+</ul>
+
+<h2 id="make-the-value-deterministic">Make the value deterministic</h2>
+<p>Most of these problems vanish when the redirect URI is never guessed from the incoming request. Put the public base URL in one environment variable, build the callback from it, and register exactly that value for local development:</p>
+<pre><code># .env (local only)
+APP_BASE_URL=http://localhost:3000
+
+// in code
+const redirectUri = new URL("/auth/callback", process.env.APP_BASE_URL).toString();</code></pre>
+<p>Providers differ in how many URIs they allow. Most let you register several, so keep one local entry next to the staging and production ones. A few, such as GitHub OAuth apps, allow one callback per app, which is why a second "dev" app is the usual answer (the GitHub article in this space covers it).</p>
+
+<h2 id="where-flisk-helps">Where Flisk helps</h2>
+<p>Flisk does not talk to your provider, but it decides which URL your app lives at, and that URL is what you must register.</p>
+<ul>
+<li><strong>Local processes.</strong> If every service has a <code>command</code>, <code>flisk up</code> prints <code>http://localhost:&lt;port&gt;</code> for each one. The port is the <code>port</code> field of its <code>service.json</code>, so it does not drift. Fix it there and register that origin.</li>
+<li><strong>Docker and Tilt.</strong> A frontend is served at <code>http://app.&lt;project&gt;.localhost/&lt;name&gt;</code> and a backend at <code>http://api.&lt;project&gt;.localhost/api/&lt;name&gt;</code>, and the ingress port is part of the URL when Traefik is not on port 80. Run <code>flisk networks</code> to print the exact URLs, then register the one your callback lives on.</li>
+</ul>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "env": { "APP_BASE_URL": "http://localhost:3000" }
+}</code></pre>
+<p>Two ports to keep apart: with a Docker stack the callback has to use the address in the browser, which is the Traefik one, not the container's internal port.</p>
+
+<h2 id="when-the-registered-value-is-already-right">When the registered value is already right</h2>
+<p>If the strings match and it still fails, check the client. A provider may hold separate client IDs for development and production, and it is easy to use the production ID with a local secret. Look at the <code>client_id</code> in the same authorize request. Some providers also cache a change for a few minutes, so wait a moment after saving. For cookies that vanish after the callback instead, read <a href="/@odykyi/local-routing-and-https/secure-cookies-on-localhost/">do you need HTTPS to test Secure cookies on localhost</a>.</p>
+<p>Once the callback works, the next hurdle is usually the identity provider's own setup. The next articles here cover GitHub and Google.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is localhost allowed as a redirect URI?</summary><p>Yes, for development. GitHub and Google accept http://localhost URIs. Google does not accept other custom names such as myapp.test for web clients.</p></details><details><summary>Why does it work on 127.0.0.1 but not on localhost?</summary><p>The provider compares strings, so the two hosts are different. Register the one you open in the browser.</p></details><details><summary>Can I use a wildcard redirect URI for local ports?</summary><p>Most providers do not allow wildcards. Pin the port in your dev server instead of registering many ports.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/github-oauth-app-for-local-development/"><span class="lbl">Guide</span><b>How to set up a GitHub OAuth app for local development</b><span>One OAuth app has one callback URL. The clean answer for local work is a second app that only ever points at your machine.</span></a><a href="/@odykyi/auth-local-dev/google-sign-in-on-localhost/"><span class="lbl">Guide</span><b>Google sign-in on localhost: origins, redirect URIs, test users</b><span>Google is stricter than most providers about host names, and its consent screen has a testing mode that surprises people on day eight.</span></a><a href="/@odykyi/auth-local-dev/authjs-local-setup-secret-and-url/"><span class="lbl">Guide</span><b>Auth.js on localhost: AUTH_SECRET, AUTH_URL and the callback</b><span>Most Auth.js problems on localhost come down to three values: a secret, the app&#39;s own URL, and the exact callback path.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
