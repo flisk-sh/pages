@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compose depends_on and healthchecks: wait for the database</title>
+<meta name="description" content="depends_on only waits for a container to start. Add a healthcheck and condition: service_healthy to wait for Postgres, and see how Flisk&#39;s dependsOn maps to it.">
+<meta name="keywords" content="compose depends_on healthcheck, depends_on service_healthy, wait for postgres docker compose, service_completed_successfully">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Compose depends_on and healthchecks: wait for the database">
+<meta property="og:description" content="depends_on only waits for a container to start. Add a healthcheck and condition: service_healthy to wait for Postgres, and see how Flisk&#39;s dependsOn maps to it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Compose depends_on and healthchecks: wait for the database","description":"depends_on only waits for a container to start. Add a healthcheck and condition: service_healthy to wait for Postgres, and see how Flisk's dependsOn maps to it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/","keywords":"compose depends_on healthcheck, depends_on service_healthy, wait for postgres docker compose, service_completed_successfully","wordCount":727,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"Compose depends_on and healthchecks: wait for the database","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does depends_on wait for the database to be ready?","acceptedAnswer":{"@type":"Answer","text":"Not by itself. It waits for the container to start. Add a healthcheck on the database and use condition: service_healthy to wait until it is ready."}},{"@type":"Question","name":"How do I run a migration before the API starts?","acceptedAnswer":{"@type":"Answer","text":"Run it as a one-shot service and make the API depend on it with condition: service_completed_successfully. In Flisk, use a migrator resource and the same condition in dependsOn."}},{"@type":"Question","name":"Will dependsOn restart my service if the database goes down later?","acceptedAnswer":{"@type":"Answer","text":"No. It controls startup order only, so your service still needs its own reconnect logic."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>Compose depends_on and healthchecks: wait for the database</h1><p class="dek">Your API crashes because the database is not ready yet. This is how to order startup properly in Compose and in service.json.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-depends-on-alone-is-not-enough">Why depends_on alone is not enough</a></li><li><a href="#the-same-idea-in-service-json">The same idea in service.json</a></li><li><a href="#define-what-healthy-means">Define what healthy means</a></li><li><a href="#run-migrations-as-their-own-resource">Run migrations as their own resource</a></li><li><a href="#limits-you-should-know">Limits you should know</a></li></ol></nav></aside>
+<article><p>In Compose, <code>depends_on</code> by itself only waits for a container to start, not for the service inside it to be ready. To wait for a database, give it a <code>healthcheck</code> and use <code>depends_on</code> with <code>condition: service_healthy</code>. Flisk has the same three conditions under <code>dependsOn</code> in <code>service.json</code>.</p>
+
+<h2 id="why-depends-on-alone-is-not-enough">Why depends_on alone is not enough</h2>
+<p>A database container is "started" within a moment, but Postgres needs several more seconds before it accepts connections. If your API connects in that gap, it crashes with "connection refused", and Compose does not know it should have waited. The short form of <code>depends_on</code> only orders container creation.</p>
+<p>The fix has two parts. The dependency declares how to tell that it is ready, and the dependent declares which state it needs.</p>
+<pre><code>services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: example
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  migrate:
+    build: ./api
+    command: npm run migrate
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully</code></pre>
+<p>Compose supports three conditions: <code>service_started</code> (the default), <code>service_healthy</code> and <code>service_completed_successfully</code>. The last one is for one-shot jobs such as a migration: the API waits until the job exits with code 0.</p>
+
+<h2 id="the-same-idea-in-service-json">The same idea in service.json</h2>
+<p>In Flisk, <code>dependsOn</code> takes either plain names or objects with a condition:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "dependsOn": [
+    "postgres",
+    { "name": "migrator", "condition": "service_completed_successfully" }
+  ]
+}</code></pre>
+<p>The conditions are <code>service_started</code>, <code>service_healthy</code> and <code>service_completed_successfully</code>, the same names as Compose. The generated Tiltfile turns them into <code>resource_deps</code>. For <code>service_healthy</code> Flisk adds a separate <code>&lt;svc&gt;-healthy</code> resource, and for completion a <code>&lt;job&gt;-done</code> resource. The names <code>postgres</code> and <code>database-management</code> refer to the shared platform Postgres.</p>
+<p>Two combinations are errors in the manifest: <code>service_healthy</code> on a one-shot job, and <code>service_completed_successfully</code> on a service that keeps running. A <code>dependsOn</code> name that matches no service is also an error, which catches typos early.</p>
+
+<h2 id="define-what-healthy-means">Define what healthy means</h2>
+<p>For HTTP APIs, <code>healthCheckPath</code> defaults to <code>/health</code>, so your service should answer there. You can change it, turn the check off with <code>"healthCheck": false</code>, or use an object that sets exactly one of <code>path</code>, <code>port</code> or <code>command</code>, plus timing. Intervals and timeouts are numbers of seconds, and <code>command</code> can be an array:</p>
+<pre><code>"healthCheck": {
+  "command": ["pg_isready", "-U", "postgres"],
+  "interval": 5,
+  "timeout": 3,
+  "retries": 10,
+  "startPeriod": 10
+}</code></pre>
+<p>Use <code>command</code> or <code>port</code> for things without an HTTP route, like a database or a gRPC server. For a bring-your-own container, <code>startPeriod</code> gives a slow-booting app time before failed probes start to count. Keep the check cheap: it runs repeatedly.</p>
+<p>For a container, the check runs inside it. For a service that runs as a local process, a <code>command</code> check runs on the host from the service folder. With <code>"healthCheck": false</code>, a local process counts as ready while it runs, and a container gets no health check at all, so turn the check off only for things that cannot be probed.</p>
+
+<h2 id="run-migrations-as-their-own-resource">Run migrations as their own resource</h2>
+<p>Do not run migrations from an API start script. A separate migrator resource makes the order explicit: database, then migrator, then API. If the migration fails, the API never starts, and you see the failure in the migrator's log instead of a half-started API. Flisk's own rule for new services is an explicit <code>migrator</code> resource with <code>appType: migrator</code>. Creating a backend with Prisma sets up the pair:</p>
+<pre><code>flisk resource orders-api --type backend --stack shop --feature prisma</code></pre>
+<p>Migrations in more detail are in <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>.</p>
+
+<h2 id="limits-you-should-know">Limits you should know</h2>
+<ul>
+<li><strong>Startup ordering only.</strong> <code>dependsOn</code> does not make a service retry later. If the database restarts at minute ten, your API still needs its own reconnect logic. Both Compose and Flisk behave this way.</li>
+<li><strong>Dependencies come along.</strong> <code>flisk up --only api</code> starts the API and what it depends on, not only the API.</li>
+<li><strong>Healthcheck must be real.</strong> A check that always passes gives you the same race you had before. Test against something the service needs, such as an actual query.</li>
+<li><strong>Cycles.</strong> A dependency loop cannot be ordered. Break it by moving shared startup work into a third service.</li>
+</ul>
+
+<p>If a service starts but behaves badly because its dependency was not ready, read <a href="/@odykyi/microservices-local-dev/service-startup-order/">service startup order</a> for the wider picture. To start only part of a stack, <a href="/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/">profiles and stacks</a> are the next topic.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does depends_on wait for the database to be ready?</summary><p>Not by itself. It waits for the container to start. Add a healthcheck on the database and use condition: service_healthy to wait until it is ready.</p></details><details><summary>How do I run a migration before the API starts?</summary><p>Run it as a one-shot service and make the API depend on it with condition: service_completed_successfully. In Flisk, use a migrator resource and the same condition in dependsOn.</p></details><details><summary>Will dependsOn restart my service if the database goes down later?</summary><p>No. It controls startup order only, so your service still needs its own reconnect logic.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/"><span class="lbl">Guide</span><b>Keep Docker Compose volumes between runs, or reset them</b><span>Your database should be there after a restart, and gone when you ask. Here is what decides which one you get.</span></a><a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/"><span class="lbl">Guide</span><b>Docker Compose hot reload: bind mounts, watch and alternatives</b><span>Reloading code in a container is easy to get almost right. Here is what each approach does, what breaks, and where Flisk has no live reload.</span></a><a href="/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/"><span class="lbl">Guide</span><b>Compose profiles vs Flisk stacks: start only part of a project</b><span>Two ways to run only part of a system: profiles for optional services and stacks for groups. Here is how each works and when to use which.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

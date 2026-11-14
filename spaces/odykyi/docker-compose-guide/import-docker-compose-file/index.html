@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to import a docker-compose.yml into Flisk</title>
+<meta name="description" content="Run flisk import --dry-run on your docker-compose.yml to see which service.json files it writes, what maps, what does not, and what to check afterwards.">
+<meta name="keywords" content="import docker-compose.yml, convert docker compose to flisk, flisk import, migrate docker compose">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/import-docker-compose-file/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to import a docker-compose.yml into Flisk">
+<meta property="og:description" content="Run flisk import --dry-run on your docker-compose.yml to see which service.json files it writes, what maps, what does not, and what to check afterwards.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/import-docker-compose-file/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to import a docker-compose.yml into Flisk","description":"Run flisk import --dry-run on your docker-compose.yml to see which service.json files it writes, what maps, what does not, and what to check afterwards.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/import-docker-compose-file/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/import-docker-compose-file/","keywords":"import docker-compose.yml, convert docker compose to flisk, flisk import, migrate docker compose","wordCount":723,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"How to import a docker-compose.yml into Flisk","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/import-docker-compose-file/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk import change my docker-compose.yml?","acceptedAnswer":{"@type":"Answer","text":"No. It only reads docker-compose.yml and writes new service.json files under services/\u003cstack>/\u003cservice>/ plus .flisk/project.json if it does not exist."}},{"@type":"Question","name":"Why was my compose.yaml not found?","acceptedAnswer":{"@type":"Answer","text":"The importer reads only docker-compose.yml. Files named compose.yaml or docker-compose.yaml, and override files, are not read, so rename or copy the file first."}},{"@type":"Question","name":"Do I need Node to run flisk import?","acceptedAnswer":{"@type":"Answer","text":"Yes. The CLI runs the pinned flisk-import package through npx, so Node and npx must be on your PATH."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>How to import a docker-compose.yml into Flisk</h1><p class="dek">flisk import turns a Compose file into service.json files without touching the original. Here is what it reads, what it maps and what you must check by hand.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-import-reads-and-writes">What the import reads and writes</a></li><li><a href="#how-compose-fields-map">How Compose fields map</a></li><li><a href="#what-is-not-imported">What is not imported</a></li><li><a href="#check-these-after-the-import">Check these after the import</a></li><li><a href="#when-not-to-import">When not to import</a></li></ol></nav></aside>
+<article><p>Run <code>flisk import . --dry-run</code> in the folder that holds your <code>docker-compose.yml</code>. It prints what Flisk would write. When the plan looks right, run <code>flisk import . --yes</code>, check the generated <code>.env</code>, and start the stack with <code>flisk up</code>. Your Compose file and your source code are never changed.</p>
+
+<h2 id="what-the-import-reads-and-writes">What the import reads and writes</h2>
+<p>The importer is a separate package, <code>flisk-import</code>, pinned by the CLI to version 0.18.2. Flisk runs it through <code>npx --yes</code>, so you need Node and npx on the machine. It reads one file, <code>&lt;dir&gt;/docker-compose.yml</code>. These are not read: <code>compose.yaml</code>, <code>docker-compose.yaml</code>, override files and Procfiles. If your file is named differently, rename or copy it first. When <code>docker compose</code> is available, <code>include</code> and <code>extends</code> are resolved through <code>docker compose config</code>.</p>
+<p>For each Compose service it writes <code>services/&lt;stack&gt;/&lt;service&gt;/service.json</code>, where the stack is the name of the directory you ran it in. It also creates <code>.flisk/project.json</code> if that file does not exist yet.</p>
+<pre><code>flisk import . --dry-run
+flisk import . --yes
+flisk up</code></pre>
+<p>The flags are <code>--dry-run</code> (print the plan, write nothing), <code>--yes</code> (skip the question), <code>--force</code> (overwrite existing files) and <code>--json</code> (machine-readable output).</p>
+
+<h2 id="how-compose-fields-map">How Compose fields map</h2>
+<p>Every imported service gets <code>appType: "bring-your-own"</code>, which means Flisk runs your image or your Dockerfile as it is and does not generate application code. The importer carries over the parts of a Compose service that have a Flisk equivalent:</p>
+<table>
+<thead><tr><th>Compose</th><th>service.json</th></tr></thead>
+<tbody>
+<tr><td><code>build</code></td><td><code>buildContext</code> and <code>dockerfile</code></td></tr>
+<tr><td><code>image</code></td><td>kept, including <code>${VAR:-default}</code> forms</td></tr>
+<tr><td><code>depends_on</code></td><td><code>dependsOn</code></td></tr>
+<tr><td><code>healthcheck</code></td><td><code>healthCheck.command</code> and its timing fields</td></tr>
+<tr><td><code>environment</code></td><td>literals in <code>env</code>; secret-looking values in <code>secrets.required</code> and the git-ignored <code>.env</code></td></tr>
+<tr><td><code>volumes</code></td><td><code>volumes</code>, with the volume <code>name</code> kept</td></tr>
+<tr><td><code>ports</code></td><td>one published port becomes <code>port</code>; the rest become <code>extraPorts</code></td></tr>
+<tr><td><code>profiles</code></td><td><code>profiles</code>, when the name is lowercase letters, digits and dashes</td></tr>
+<tr><td><code>command</code>, <code>entrypoint</code></td><td><code>container.command</code>, <code>container.entrypoint</code></td></tr>
+</tbody>
+</table>
+<p>Restart policy, <code>stop_grace_period</code>, network aliases, <code>extra_hosts</code> and ulimits are carried over too. Databases and other well-known non-HTTP ports (22, 25, 3306, 5432, 6379 and similar) are marked private, with <code>exposeViaProxy: false</code> and no gateway route. Other single ports get a Traefik route, so a web service becomes reachable under a <code>*.localhost</code> name.</p>
+
+<h2 id="what-is-not-imported">What is not imported</h2>
+<p>The plan tells you about each item it skips. The common ones:</p>
+<ul>
+<li><code>container_name</code> is dropped.</li>
+<li>Anonymous volumes and absolute host paths are not mapped.</li>
+<li><code>network_mode: host</code> and <code>extends</code> are not mapped by the importer itself.</li>
+<li>Build contexts outside the project directory are not mapped.</li>
+<li>Unusual forms of image variables are not mapped.</li>
+</ul>
+<p>Read the dry-run output before you accept it. Whatever it skips, you decide by hand.</p>
+
+<h2 id="check-these-after-the-import">Check these after the import</h2>
+<ul>
+<li><strong>The <code>.env</code> file.</strong> Literal values from Compose are copied. A value written as <code>${VAR}</code> has to be set by you.</li>
+<li><strong>Ports and hostnames.</strong> Flisk injects <code>PORT</code> and <code>DATABASE_URL</code>, and requests reach services with a Host header like <code>api.&lt;project&gt;.localhost</code>. Some apps reject unknown hosts (Rails host checks are one example), so allow the new name.</li>
+<li><strong>Data.</strong> Volume names are kept, so <code>docker compose up</code> and <code>flisk up</code> can use the same data. Read <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">how to keep volumes between runs</a> before you delete anything.</li>
+<li><strong>Hot reload.</strong> Imported services are bring-your-own containers. Flisk watches the manifest but does not live-sync code into them. Rebuild from the Tilt UI or restart <code>flisk up</code>. The article on <a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/">Compose hot reload</a> covers your options.</li>
+</ul>
+<p>The importer needs a recent core: version 1.3.104 is enforced, and 1.4.24 or later is recommended for container commands, extra ports, sidecars and volumes. On Windows, run the whole thing inside WSL2 Ubuntu with the project in the Linux home directory.</p>
+
+<h2 id="when-not-to-import">When not to import</h2>
+<p>If the project is two containers that work and nobody complains, the import adds a layer without removing work. It also does not turn your images into generated services: they stay bring-your-own, so you get the gateway, ordering and one command, not the code-sync features. The Compose file stays valid either way, so you can try the import on a branch and delete the new files if you do not like them.</p>
+
+<p>After <code>flisk up</code> is green, run <code>flisk status</code> to see the routes, then look at <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">depends_on and healthchecks</a> to tidy the ordering. If the stack ever needs to leave Flisk, <a href="/@odykyi/docker-compose-guide/export-a-standalone-compose-file/">exporting a standalone Compose file</a> is the way back.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk import change my docker-compose.yml?</summary><p>No. It only reads docker-compose.yml and writes new service.json files under services/&lt;stack&gt;/&lt;service&gt;/ plus .flisk/project.json if it does not exist.</p></details><details><summary>Why was my compose.yaml not found?</summary><p>The importer reads only docker-compose.yml. Files named compose.yaml or docker-compose.yaml, and override files, are not read, so rename or copy the file first.</p></details><details><summary>Do I need Node to run flisk import?</summary><p>Yes. The CLI runs the pinned flisk-import package through npx, so Node and npx must be on your PATH.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/"><span class="lbl">Guide</span><b>Docker Compose alternative for local development</b><span>Docker Compose is a good default. This article shows where it runs out of road for local development and what a generated setup looks like.</span></a><a href="/@odykyi/docker-compose-guide/export-a-standalone-compose-file/"><span class="lbl">Guide</span><b>Export a standalone docker-compose.yml from service.json</b><span>You can leave Flisk with a Compose file that runs on plain Docker. This article shows what the export includes and what you must verify.</span></a><a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/"><span class="lbl">Guide</span><b>Keep Docker Compose volumes between runs, or reset them</b><span>Your database should be there after a restart, and gone when you ask. Here is what decides which one you get.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
