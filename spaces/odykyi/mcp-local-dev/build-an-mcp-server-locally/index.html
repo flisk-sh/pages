@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build an MCP server locally and run it on your laptop</title>
+<meta name="description" content="Build a Model Context Protocol server that runs on localhost over Streamable HTTP, call it with curl, and let Flisk scaffold, route and reload it for you.">
+<meta name="keywords" content="build an mcp server locally, mcp server localhost, create mcp server typescript, streamable http mcp server, local mcp server">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/mcp-local-dev/build-an-mcp-server-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build an MCP server locally and run it on your laptop">
+<meta property="og:description" content="Build a Model Context Protocol server that runs on localhost over Streamable HTTP, call it with curl, and let Flisk scaffold, route and reload it for you.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/mcp-local-dev/build-an-mcp-server-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build an MCP server locally and run it on your laptop","description":"Build a Model Context Protocol server that runs on localhost over Streamable HTTP, call it with curl, and let Flisk scaffold, route and reload it for you.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/mcp-local-dev/build-an-mcp-server-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/mcp-local-dev/build-an-mcp-server-locally/","keywords":"build an mcp server locally, mcp server localhost, create mcp server typescript, streamable http mcp server, local mcp server","wordCount":890,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"MCP servers and coding assistants","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/"},{"@type":"ListItem","position":3,"name":"How to build an MCP server locally and run it on your laptop","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/build-an-mcp-server-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Docker to build an MCP server locally?","acceptedAnswer":{"@type":"Answer","text":"No. A plain Node or Bun process that listens on a port is enough, and you can test it with curl. Flisk's mcp resource type runs in Docker behind Traefik, which is useful when the server must sit next to other services."}},{"@type":"Question","name":"What is the difference between stdio and Streamable HTTP MCP servers?","acceptedAnswer":{"@type":"Answer","text":"A stdio server is started by the client as a child process and needs no port. A Streamable HTTP server is a web service that clients reach by URL, so several clients and test scripts can share one running instance."}},{"@type":"Question","name":"Why does curl to /mcp need an Accept header with two types?","acceptedAnswer":{"@type":"Answer","text":"The transport can reply as plain JSON or as an event stream, so it expects the client to accept both application/json and text/event-stream. Without both, the SDK refuses the request."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/mcp-local-dev/">MCP servers and coding assistants</a></div>
+<section class="hero"><div><div class="lbl">MCP servers and coding assistants</div><h1>How to build an MCP server locally and run it on your laptop</h1><p class="dek">A local MCP server is a small HTTP service with one endpoint. Here is what it needs, how to write one, and how to keep it running while you edit.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#pick-a-transport-first">Pick a transport first</a></li><li><a href="#write-the-smallest-useful-server">Write the smallest useful server</a></li><li><a href="#call-it-before-you-connect-an-assistant">Call it before you connect an assistant</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To build an MCP server locally, write a small HTTP service that answers JSON-RPC on one path (usually <code>/mcp</code>), register your tools with the official SDK, and run it with a file watcher so edits reload. Then call it with <code>curl</code> before you connect any assistant. With Flisk, <code>flisk resource docs-mcp --type mcp</code> scaffolds all of that.</p>
+<h2 id="pick-a-transport-first">Pick a transport first</h2>
+<p>MCP servers talk to clients over one of two transports. A <strong>stdio</strong> server is a child process: the client starts it and exchanges messages over standard input and output. It needs no port and no network, which makes it the simplest choice for a tool that only your own assistant uses on your own machine.</p>
+<p>A <strong>Streamable HTTP</strong> server is a normal web service. It listens on a port, and clients POST JSON-RPC messages to one URL. Choose this when the server should sit next to your other services, when several clients (Claude Code, Cursor, Codex, a test script) should share one running instance, or when you want to reach it with <code>curl</code>. The rest of this article builds that kind. If you want the protocol details, see <a href="/@odykyi/mcp-local-dev/streamable-http-mcp-endpoint/">the Streamable HTTP endpoint guide</a>.</p>
+<h2 id="write-the-smallest-useful-server">Write the smallest useful server</h2>
+<p>With the TypeScript SDK (<code>@modelcontextprotocol/sdk</code>) and <code>zod</code> for argument schemas, a server with one tool is short. This version keeps the endpoint stateless: it builds a fresh server for every request, so there is no session to lose when the process restarts.</p>
+<pre><code>import { createServer } from 'node:http';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
+
+function buildServer() {
+  const server = new McpServer({ name: 'docs-mcp', version: '1.0.0' });
+  server.registerTool(
+    'echo',
+    { description: 'Echo a message back', inputSchema: { message: z.string() } },
+    async ({ message }) => ({ content: [{ type: 'text', text: message }] })
+  );
+  return server;
+}
+
+createServer(async (req, res) => {
+  if (req.url === '/health') { res.end('ok'); return; }
+  if (req.url === '/mcp' &amp;&amp; req.method === 'POST') {
+    const chunks = [];
+    for await (const c of req) chunks.push(c);
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const server = buildServer();
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    res.on('close', () =&gt; { transport.close(); server.close(); });
+    await server.connect(transport);
+    await transport.handleRequest(req, res, body);
+    return;
+  }
+  res.statusCode = 404; res.end();
+}).listen(Number(process.env.PORT ?? 4000), '0.0.0.0');</code></pre>
+<p>Keep a <code>/health</code> route even in a toy server. Anything that supervises the process, from a Compose healthcheck to a reverse proxy, can use it to know when the server is ready. Binding to <code>0.0.0.0</code> matters only if the server runs in a container and something outside it needs to connect.</p>
+<h2 id="call-it-before-you-connect-an-assistant">Call it before you connect an assistant</h2>
+<p>Do not debug a server through a chat window. Send the three requests yourself and read the answers:</p>
+<pre><code>curl -s -X POST http://localhost:4000/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</code></pre>
+<p>The <code>accept</code> header must list both media types, because the transport can answer as JSON or as a server-sent event stream. The reply comes back in event-stream framing (<code>event: message</code>, then a <code>data:</code> line). A strict client sends <code>initialize</code> first; a quick <code>tools/list</code> like this is usually enough for a stateless server while you develop. When the tool list looks right, the <a href="https://modelcontextprotocol.io">MCP Inspector</a> (<code>npx @modelcontextprotocol/inspector</code>) gives you a UI for calling tools by hand.</p>
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has a resource type for this. In a project (<code>flisk project</code> creates one), run:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource docs-mcp --type mcp --stack main
+flisk up main</code></pre>
+<p>The scaffold writes <code>services/main/docs-mcp/</code> with a <code>service.json</code>, a Bun-based <code>src/index.ts</code> built on the SDK with an <code>echo</code> tool and a prompt, a <code>/health</code> route, a Dockerfile and a test file. The generated <code>service.json</code> looks like this (trimmed):</p>
+<pre><code>{
+  "appName": "docs-mcp",
+  "appType": "mcp",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dev": { "command": "bun run dev", "watch": ["src/**/*"] },
+  "dependsOn": []
+}</code></pre>
+<p>The port is picked from the 4000 to 5999 range. <code>bun run dev</code> is <code>bun run --watch src/index.ts</code>, so saving a file restarts the server. Once the stack is up, Traefik routes the server at <code>http://api.&lt;project&gt;.localhost/api/docs-mcp/mcp</code>; <code>flisk networks</code> prints the real address, and the <code>curl</code> call above works against it. To add a tool, edit <code>buildServer()</code> in <code>src/index.ts</code> and register it with <code>registerTool</code>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Stateless means no memory between calls.</strong> If a tool must remember something, store it in a database, not in a variable inside the process.</li>
+<li><strong><code>GET /mcp</code> returns 405.</strong> That is expected for a stateless server that does not open server-to-client streams. It is not a crash.</li>
+<li><strong>No authentication.</strong> The scaffold is meant for <code>*.localhost</code>. Do not expose it beyond your machine as it is.</li>
+<li><strong>The scaffold is Bun only.</strong> There is no <code>--language</code> option for <code>--type mcp</code>. If you need Python, write the server yourself and register it as a bring-your-own container.</li>
+<li><strong>Write tools for a model, not a person.</strong> Short names, one job each, and a description that says when to use it.</li>
+</ul>
+<p>Next, connect the server to an assistant. <a href="/@odykyi/mcp-local-dev/test-an-mcp-server-with-claude-code/">Testing an MCP server with Claude Code</a> walks through it, and the same URL works in Cursor and Codex.</p>
+<p>When the server runs in a stack, the address changes from a bare port to a project host name. <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">Local URLs instead of ports</a> explains how that routing works.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Docker to build an MCP server locally?</summary><p>No. A plain Node or Bun process that listens on a port is enough, and you can test it with curl. Flisk&#39;s mcp resource type runs in Docker behind Traefik, which is useful when the server must sit next to other services.</p></details><details><summary>What is the difference between stdio and Streamable HTTP MCP servers?</summary><p>A stdio server is started by the client as a child process and needs no port. A Streamable HTTP server is a web service that clients reach by URL, so several clients and test scripts can share one running instance.</p></details><details><summary>Why does curl to /mcp need an Accept header with two types?</summary><p>The transport can reply as plain JSON or as an event stream, so it expects the client to accept both application/json and text/event-stream. Without both, the SDK refuses the request.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">MCP servers and coding assistants</span></div>
+<div class="rgrid"><a href="/@odykyi/mcp-local-dev/streamable-http-mcp-endpoint/"><span class="lbl">Guide</span><b>MCP Streamable HTTP endpoint: how it works and how to test it</b><span>Streamable HTTP replaced the older two-endpoint SSE transport. It is simpler than it sounds, and most failures come from three small details.</span></a><a href="/@odykyi/mcp-local-dev/test-an-mcp-server-with-claude-code/"><span class="lbl">Guide</span><b>How to test an MCP server with Claude Code</b><span>Claude Code is a good test client, but it is a poor debugger. Check the server yourself, then connect Claude Code and ask it to use a tool.</span></a><a href="/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/"><span class="lbl">Guide</span><b>How to run an MCP server next to your local database</b><span>An MCP server that can query your development data is useful and risky. Wire it up so it starts after the database and can only do what you meant.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

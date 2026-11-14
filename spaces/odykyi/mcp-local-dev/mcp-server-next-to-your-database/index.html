@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run an MCP server next to your local database</title>
+<meta name="description" content="Give an MCP server read access to a local Postgres: add a database resource, set dependsOn, read DATABASE_URL, expose read-only tools and keep migrations apart.">
+<meta name="keywords" content="mcp server postgres local, mcp server database tool, mcp dependsOn database, mcp server read only database, local postgres mcp">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run an MCP server next to your local database">
+<meta property="og:description" content="Give an MCP server read access to a local Postgres: add a database resource, set dependsOn, read DATABASE_URL, expose read-only tools and keep migrations apart.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run an MCP server next to your local database","description":"Give an MCP server read access to a local Postgres: add a database resource, set dependsOn, read DATABASE_URL, expose read-only tools and keep migrations apart.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/","keywords":"mcp server postgres local, mcp server database tool, mcp dependsOn database, mcp server read only database, local postgres mcp","wordCount":818,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"MCP servers and coding assistants","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/"},{"@type":"ListItem","position":3,"name":"How to run an MCP server next to your local database","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/mcp-server-next-to-your-database/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should an MCP server be allowed to write to my database?","acceptedAnswer":{"@type":"Answer","text":"Only through narrow tools you wrote on purpose. Start read-only, with a Postgres role that has SELECT only, and mark those tools readOnlyHint true."}},{"@type":"Question","name":"How do I make the MCP server start after Postgres in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Create a database resource and add its name to dependsOn in the MCP resource's service.json. Then check the environment with flisk run \u003cname> -- printenv DATABASE_URL."}},{"@type":"Question","name":"Where should the MCP server get the database connection string?","acceptedAnswer":{"@type":"Answer","text":"From the DATABASE_URL environment variable, never from a value written into the source. Under Flisk the stack generates it for services that depend on the database."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/mcp-local-dev/">MCP servers and coding assistants</a></div>
+<section class="hero"><div><div class="lbl">MCP servers and coding assistants</div><h1>How to run an MCP server next to your local database</h1><p class="dek">An MCP server that can query your development data is useful and risky. Wire it up so it starts after the database and can only do what you meant.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-put-them-side-by-side">Why put them side by side</a></li><li><a href="#decide-what-the-tools-may-do">Decide what the tools may do</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#use-it-in-a-tool">Use it in a tool</a></li><li><a href="#who-creates-the-tables">Who creates the tables</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run an MCP server next to a local database, start the database first, hand the server its connection string through an environment variable such as <code>DATABASE_URL</code>, and expose narrow, read-only tools instead of a free-form SQL runner. In Flisk you add a <code>database</code> resource and list it in the MCP resource's <code>dependsOn</code>.</p>
+<h2 id="why-put-them-side-by-side">Why put them side by side</h2>
+<p>An assistant that can look at real tables answers better questions: which rows are broken, what a migration did, what shape the data has. Running the MCP server in the same local stack as the database keeps the connection on your machine, and makes the setup reproducible for a teammate.</p>
+<p>Plain scripting works. Start Postgres with Docker or a local install, export <code>DATABASE_URL</code>, start your server. The things you then have to own yourself are the start order (the server must not accept calls before Postgres does), the credentials, and who creates the schema.</p>
+<h2 id="decide-what-the-tools-may-do">Decide what the tools may do</h2>
+<p>This is the part that matters most, and it has nothing to do with Flisk. A tool called <code>run_sql</code> that takes any string will, sooner or later, run a <code>DELETE</code> or <code>DROP TABLE</code> that a model wrote with confidence. Prefer:</p>
+<ul>
+<li><strong>Named, narrow tools.</strong> <code>list_tables</code>, <code>describe_table</code>, <code>count_rows</code>, <code>find_order_by_id</code>. Each one has a fixed query and typed arguments.</li>
+<li><strong>A read-only database role.</strong> Create a Postgres role with <code>SELECT</code> only and give the MCP server that role's URL. Even a bug in a tool cannot write.</li>
+<li><strong>Parameters, never string building.</strong> Pass values as query parameters. Never paste a model-written value into SQL text.</li>
+<li><strong>Honest hints.</strong> Mark read-only tools with <code>readOnlyHint: true</code>. Clients can use it to skip a confirmation, and <code>flisk mcp check</code> expects it.</li>
+</ul>
+<p>Keep this to development data. Do not point such a server at production, and do not load real customer data into a development database.</p>
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Create the database and the MCP server as resources in one stack:</p>
+<pre><code>flisk resource db --type database --stack main --yes
+flisk resource docs-mcp --type mcp --stack main --yes</code></pre>
+<p>The database resource's <code>service.json</code> is short (<code>"appType": "database"</code>, <code>"framework": "postgres"</code>, the shared Flisk Postgres by default). Then open <code>services/main/docs-mcp/service.json</code> and list the database in <code>dependsOn</code>, as the CLI's own hint says ("Add db to dependsOn in the services that use the database"):</p>
+<pre><code>{
+  "appName": "docs-mcp",
+  "appType": "mcp",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["db"]
+}</code></pre>
+<p>Flisk runs one Postgres container for the project, and a service's generated <code>DATABASE_URL</code> points at a database named after the project and the stack, so the services of one stack share it. An <code>mcp</code> resource goes through the same path as a backend, and backend services read the database from the <code>DATABASE_URL</code> variable. Do not assume, check: with the stack running, print what the server really receives.</p>
+<pre><code>flisk run docs-mcp -- printenv DATABASE_URL</code></pre>
+<p>The container resource must be running for that command. Use the same output to confirm the host, user and database name before you write any query code.</p>
+<h2 id="use-it-in-a-tool">Use it in a tool</h2>
+<p>With the <code>pg</code> package, a read-only tool is a few lines inside <code>buildServer()</code> in <code>src/index.ts</code>:</p>
+<pre><code>import pg from 'pg';
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+
+server.registerTool(
+  'count_rows',
+  {
+    description: 'Count the rows in one table of the public schema',
+    inputSchema: { table: z.enum(['orders', 'customers']) },
+    annotations: { readOnlyHint: true },
+  },
+  async ({ table }) =&gt; {
+    const r = await pool.query('select count(*)::int as n from ' + table);
+    return { content: [{ type: 'text', text: String(r.rows[0].n) }] };
+  }
+);</code></pre>
+<p>The <code>z.enum</code> is the point: the table name comes from a fixed list, so nothing a model sends can reach the SQL text. Add <code>pg</code> to the service's <code>package.json</code>, and create the pool once, outside the per-request server, so each request does not open a new connection.</p>
+<h2 id="who-creates-the-tables">Who creates the tables</h2>
+<p>Not the MCP server. Schema changes belong in a migration job that runs once and exits, and Flisk's contributor rules require migrations to run in an explicit <code>migrator</code> resource, not from a server's start script. See <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a> for that setup. The MCP server then only needs to start after the schema exists.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Reaching the database from your machine.</strong> Inside the stack a service uses the generated <code>DATABASE_URL</code>. From your laptop the host port is <code>15432</code> unless <code>FLISK_POSTGRES_PORT</code> says otherwise, and the password is <code>DB_PASSWORD</code> in the project <code>.env</code>.</li>
+<li><strong>Stateless server, stateful data.</strong> The MCP process may restart at any time. The data survives <code>flisk down</code>, because it lives in a named volume. <code>flisk down --purge</code> deletes it.</li>
+<li><strong>A shared database per stack.</strong> Every service in the stack sees the same tables. If the assistant should see only some data, use a role with limited grants.</li>
+</ul>
+<p>Once the server works, connect an assistant and ask it a real question about your data. <a href="/@odykyi/mcp-local-dev/test-an-mcp-server-with-claude-code/">Testing with Claude Code</a> shows how.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should an MCP server be allowed to write to my database?</summary><p>Only through narrow tools you wrote on purpose. Start read-only, with a Postgres role that has SELECT only, and mark those tools readOnlyHint true.</p></details><details><summary>How do I make the MCP server start after Postgres in Flisk?</summary><p>Create a database resource and add its name to dependsOn in the MCP resource&#39;s service.json. Then check the environment with flisk run &lt;name&gt; -- printenv DATABASE_URL.</p></details><details><summary>Where should the MCP server get the database connection string?</summary><p>From the DATABASE_URL environment variable, never from a value written into the source. Under Flisk the stack generates it for services that depend on the database.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">MCP servers and coding assistants</span></div>
+<div class="rgrid"><a href="/@odykyi/mcp-local-dev/build-an-mcp-server-locally/"><span class="lbl">Guide</span><b>How to build an MCP server locally and run it on your laptop</b><span>A local MCP server is a small HTTP service with one endpoint. Here is what it needs, how to write one, and how to keep it running while you edit.</span></a><a href="/@odykyi/mcp-local-dev/streamable-http-mcp-endpoint/"><span class="lbl">Guide</span><b>MCP Streamable HTTP endpoint: how it works and how to test it</b><span>Streamable HTTP replaced the older two-endpoint SSE transport. It is simpler than it sounds, and most failures come from three small details.</span></a><a href="/@odykyi/mcp-local-dev/test-an-mcp-server-with-claude-code/"><span class="lbl">Guide</span><b>How to test an MCP server with Claude Code</b><span>Claude Code is a good test client, but it is a poor debugger. Check the server yourself, then connect Claude Code and ask it to use a tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
