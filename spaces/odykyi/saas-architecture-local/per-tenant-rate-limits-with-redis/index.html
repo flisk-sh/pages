@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to rate limit each tenant of your API with Redis</title>
+<meta name="description" content="Count requests per tenant per window with INCR and EXPIRE NX, return 429 with Retry-After, and test limits locally with a real Redis instead of a mock.">
+<meta name="keywords" content="rate limit per tenant, redis rate limiting, fixed window rate limit redis, 429 retry-after, saas api quota">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to rate limit each tenant of your API with Redis">
+<meta property="og:description" content="Count requests per tenant per window with INCR and EXPIRE NX, return 429 with Retry-After, and test limits locally with a real Redis instead of a mock.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to rate limit each tenant of your API with Redis","description":"Count requests per tenant per window with INCR and EXPIRE NX, return 429 with Retry-After, and test limits locally with a real Redis instead of a mock.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/","keywords":"rate limit per tenant, redis rate limiting, fixed window rate limit redis, 429 retry-after, saas api quota","wordCount":748,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to rate limit each tenant of your API with Redis","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between a rate limit and a quota?","acceptedAnswer":{"@type":"Answer","text":"A rate limit protects capacity over short windows, such as 100 requests a minute. A quota is a product rule over a billing period, such as 10,000 calls a month, and needs exact counts."}},{"@type":"Question","name":"Why use EXPIRE with NX?","acceptedAnswer":{"@type":"Answer","text":"NX sets the expiry only if the key has none, so the window is fixed from the first request. It requires Redis 7.0 or newer."}},{"@type":"Question","name":"What should my API return when the limit is hit?","acceptedAnswer":{"@type":"Answer","text":"Status 429 with a Retry-After header giving the seconds until the window resets."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to rate limit each tenant of your API with Redis</h1><p class="dek">One tenant running a runaway script should not slow everyone else. A counter in Redis per tenant and window is the smallest thing that works.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#rate-limit-or-quota">Rate limit or quota</a></li><li><a href="#a-fixed-window-limiter">A fixed-window limiter</a></li><li><a href="#know-the-weakness-of-fixed-windows">Know the weakness of fixed windows</a></li><li><a href="#details-that-matter">Details that matter</a></li><li><a href="#run-a-real-redis-locally">Run a real Redis locally</a></li><li><a href="#choosing-the-numbers">Choosing the numbers</a></li><li><a href="#test-it">Test it</a></li></ol></nav></aside>
+<article><p>Count each tenant's requests in Redis under a key that includes the tenant and the current time window. Use <code>INCR</code>, set an expiry the first time, and answer with 429 and a <code>Retry-After</code> header when the count passes the limit. This fixed-window version is a dozen lines and good enough for most SaaS APIs.</p>
+
+<h2 id="rate-limit-or-quota">Rate limit or quota</h2>
+<p>These are different controls and are often confused. A <strong>rate limit</strong> protects capacity: at most 100 requests a minute, so one tenant cannot starve others. A <strong>quota</strong> is a product rule: 10,000 calls a month on the Team plan. Rate limits reset in seconds or minutes and are cheap to be approximate about. Quotas affect billing and need exact counts, usually in your database. The size of each limit can come from <a href="/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/">the tenant's entitlements</a>.</p>
+
+<h2 id="a-fixed-window-limiter">A fixed-window limiter</h2>
+<pre><code>import { createClient } from "redis";
+const redis = createClient({ url: process.env.REDIS_URL });
+await redis.connect();
+
+export async function hit(tenantId, limit, windowSec = 60) {
+  const window = Math.floor(Date.now() / 1000 / windowSec);
+  const key = `rl:${tenantId}:${window}`;
+  const [count] = await redis
+    .multi()
+    .incr(key)
+    .expire(key, windowSec, "NX")
+    .exec();
+  const retryAfter = windowSec - (Math.floor(Date.now() / 1000) % windowSec);
+  return { allowed: count &lt;= limit, count, retryAfter };
+}</code></pre>
+<p>The <code>NX</code> option on <code>EXPIRE</code> sets the expiry only when none exists yet, and needs Redis 7.0 or newer. Putting <code>INCR</code> and <code>EXPIRE</code> in one transaction avoids the classic bug where the process dies between them and leaves a key that never expires.</p>
+<p>In your handler:</p>
+<pre><code>const r = await hit(tenant.id, tenant.limitPerMinute);
+if (!r.allowed) {
+  res.set("Retry-After", String(r.retryAfter));
+  return res.status(429).json({ error: "rate_limited" });
+}</code></pre>
+
+<h2 id="know-the-weakness-of-fixed-windows">Know the weakness of fixed windows</h2>
+<p>A client can send the full limit at the end of one window and again at the start of the next, so twice the limit passes in a short burst. For most APIs that is acceptable. If it is not, use a sliding window with a sorted set, or a token bucket, which is usually written as a small Lua script so the read and write happen atomically. Choose the simple version first and measure.</p>
+
+<h2 id="details-that-matter">Details that matter</h2>
+<ul>
+<li><strong>Which key?</strong> Limit by tenant for fairness between customers, and optionally by API key or user inside the tenant. Do both if you need to stop one user from using the whole tenant allowance.</li>
+<li><strong>Fail open or closed?</strong> If Redis is down, decide on purpose. Failing open keeps the product up and lets traffic through. Most teams fail open for rate limits and closed for billing quotas.</li>
+<li><strong>Return useful headers.</strong> <code>Retry-After</code> is standard. Many APIs also send the limit and remaining count in custom headers, which clients can use to back off.</li>
+<li><strong>Do not count what you rejected.</strong> Counting rejected calls is fine for a rate limit, and it punishes retry loops, which is often the point.</li>
+</ul>
+
+<h2 id="run-a-real-redis-locally">Run a real Redis locally</h2>
+<p>A mocked Redis will not tell you that <code>EXPIRE ... NX</code> needs a recent version. Run the real thing. For local-process projects, Flisk can start Redis from an image next to your code, with Docker running:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "redis",
+  "appType": "bring-your-own",
+  "image": "redis:7.4-alpine",
+  "port": 6379,
+  "healthCheck": { "command": ["redis-cli", "ping"] }
+}</code></pre>
+<p>Your API lists <code>"dependsOn": ["redis"]</code> and reads <code>REDIS_URL</code> from its <code>env</code>, set to <code>redis://localhost:6379</code>. On the container route, <code>flisk resource cache --type database --framework redis</code> scaffolds a Redis resource from the same image. See <a href="/@odykyi/local-database-guide/redis-for-local-development/">how to run Redis for local development</a> for both. This manifest keeps no volume, so counters vanish with the container, which is what you want for rate limits.</p>
+
+<h2 id="choosing-the-numbers">Choosing the numbers</h2>
+<p>Start from observed traffic, not guesses. Pick a limit comfortably above what a healthy client sends, and send the same value to your docs so customers can plan around it. Bursty clients such as importers deserve a higher limit on that route only, so key the counter by route group as well as tenant, for example <code>rl:tenant:imports:window</code>. Keep per-plan values in data, as described above, and not in constants.</p>
+
+<h2 id="test-it">Test it</h2>
+<p>Test with a tiny limit, say 3 per 60 seconds, and a loop of five requests. Assert that the fourth returns 429 with a <code>Retry-After</code> between 1 and 60. Also test two tenants at once to prove one does not consume the other's allowance. To test the window rollover without sleeping, make the clock injectable.</p>
+<p>Rate limits protect capacity, but customers also need a way to call your API in the first place. The next article covers <a href="/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/">customer API keys</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between a rate limit and a quota?</summary><p>A rate limit protects capacity over short windows, such as 100 requests a minute. A quota is a product rule over a billing period, such as 10,000 calls a month, and needs exact counts.</p></details><details><summary>Why use EXPIRE with NX?</summary><p>NX sets the expiry only if the key has none, so the window is fixed from the first request. It requires Redis 7.0 or newer.</p></details><details><summary>What should my API return when the limit is hit?</summary><p>Status 429 with a Retry-After header giving the seconds until the window resets.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/"><span class="lbl">Guide</span><b>How to model SaaS plans and entitlements in your database</b><span>Plan names change, pricing experiments run, and one customer gets a custom deal. Code that asks about features instead of plans survives all of it.</span></a><a href="/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/"><span class="lbl">Guide</span><b>How to store and rotate customer API keys safely</b><span>If your SaaS has an API, your customers will paste its keys into scripts and chat. Design them so a leaked database does not leak working keys.</span></a><a href="/@odykyi/saas-architecture-local/saas-local-stack-layout/"><span class="lbl">Guide</span><b>What to run locally for a SaaS app: web, API, worker, database</b><span>A SaaS app is rarely one process. Decide which parts you run, in what order they start and which route fits, before the folders multiply.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

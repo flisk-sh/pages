@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to model SaaS plans and entitlements in your database</title>
+<meta name="description" content="Check what a tenant may do from an entitlements table, not plan names in code, with limits, per-customer overrides and a way to switch plans while testing.">
+<meta name="keywords" content="saas plans database schema, entitlements model, feature gating by plan, subscription plan limits, saas feature flags per plan">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to model SaaS plans and entitlements in your database">
+<meta property="og:description" content="Check what a tenant may do from an entitlements table, not plan names in code, with limits, per-customer overrides and a way to switch plans while testing.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to model SaaS plans and entitlements in your database","description":"Check what a tenant may do from an entitlements table, not plan names in code, with limits, per-customer overrides and a way to switch plans while testing.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/","keywords":"saas plans database schema, entitlements model, feature gating by plan, subscription plan limits, saas feature flags per plan","wordCount":721,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to model SaaS plans and entitlements in your database","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I store plan limits in code or in the database?","acceptedAnswer":{"@type":"Answer","text":"In the database, keyed by plan and feature. Code then asks about features and limits, and pricing changes become data changes without a deploy."}},{"@type":"Question","name":"How do I give one customer a custom limit?","acceptedAnswer":{"@type":"Answer","text":"Add an override row for that tenant and key, optionally with an expiry. Resolution checks overrides first and falls back to the plan."}},{"@type":"Question","name":"What should happen when a feature key is missing?","acceptedAnswer":{"@type":"Answer","text":"Deny by default. A missing key should fail closed so a typo never grants access."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to model SaaS plans and entitlements in your database</h1><p class="dek">Plan names change, pricing experiments run, and one customer gets a custom deal. Code that asks about features instead of plans survives all of it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-plan-names-in-code-fail">Why plan names in code fail</a></li><li><a href="#a-schema-that-works">A schema that works</a></li><li><a href="#limits-versus-switches">Limits versus switches</a></li><li><a href="#subscription-status-is-separate-from-the-plan">Subscription status is separate from the plan</a></li><li><a href="#testing-plans-locally">Testing plans locally</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Do not write <code>if (plan === "pro")</code> in your code. Store what each plan includes as data, compute a tenant's entitlements from the plan plus any overrides, and ask a single function, <code>can(tenant, "exports")</code> or <code>limit(tenant, "seats")</code>. Then adding a plan, running a price test or giving one customer a custom limit is a data change.</p>
+
+<h2 id="why-plan-names-in-code-fail">Why plan names in code fail</h2>
+<p>A check on plan names spreads through the code base. When you rename "Pro" to "Team", add an annual variant, or grandfather old customers on a retired plan, you hunt through every file. A custom deal for one large customer has no plan name at all. The fix is one level of indirection: code asks about a feature, the data says which tenants have it.</p>
+
+<h2 id="a-schema-that-works">A schema that works</h2>
+<pre><code>create table plans (
+  id text primary key,            -- 'free', 'team', 'business'
+  name text not null,
+  active boolean not null default true
+);
+
+create table plan_entitlements (
+  plan_id text not null references plans(id),
+  key text not null,              -- 'seats', 'exports', 'api_calls_per_day'
+  int_value integer,              -- a limit, null when not numeric
+  bool_value boolean,             -- a switch, null when not boolean
+  primary key (plan_id, key)
+);
+
+create table subscriptions (
+  tenant_id uuid primary key references tenants(id),
+  plan_id text not null references plans(id),
+  status text not null,           -- 'trialing', 'active', 'past_due', 'canceled'
+  current_period_end timestamptz
+);
+
+create table entitlement_overrides (
+  tenant_id uuid not null references tenants(id),
+  key text not null,
+  int_value integer,
+  bool_value boolean,
+  expires_at timestamptz,
+  primary key (tenant_id, key)
+);</code></pre>
+<p>Resolution is simple: the override wins when it exists and has not expired, otherwise the plan value applies, otherwise the default is "not allowed". Make the missing case deny, so a typo in a key fails closed.</p>
+<pre><code>export async function entitlement(tenantId, key) {
+  const row = await db.one(`
+    select coalesce(o.int_value, e.int_value) as int_value,
+           coalesce(o.bool_value, e.bool_value) as bool_value
+    from subscriptions s
+    left join plan_entitlements e on e.plan_id = s.plan_id and e.key = $2
+    left join entitlement_overrides o
+      on o.tenant_id = s.tenant_id and o.key = $2
+     and (o.expires_at is null or o.expires_at &gt; now())
+    where s.tenant_id = $1`, [tenantId, key]);
+  return row ?? { int_value: null, bool_value: null };
+}</code></pre>
+
+<h2 id="limits-versus-switches">Limits versus switches</h2>
+<p>A switch is a boolean: exports are on or off. A limit needs a count, and enforcing it needs a second query, such as the number of seats in use. Do the check in the same transaction as the write when it matters, or two simultaneous invites can both pass a limit of one remaining seat. For hard limits on a hot path, lock the tenant row or use a counter column with a constraint.</p>
+
+<h2 id="subscription-status-is-separate-from-the-plan">Subscription status is separate from the plan</h2>
+<p>A tenant on the Team plan with status <code>past_due</code> is still on Team. Decide what each status allows, for example read-only after cancellation, and keep that policy in one place. The status usually comes from your payment provider, and the plan sync should be idempotent so a repeated event does nothing.</p>
+
+<h2 id="testing-plans-locally">Testing plans locally</h2>
+<p>Seed every plan, and create one tenant per plan, plus one with an override. A small script that moves a tenant between plans lets you click through the upgrade and downgrade screens without a payment provider. With a service named <code>api</code> in a Flisk stack, run it inside that service's environment:</p>
+<pre><code>flisk run api -- npm run seed:plans
+flisk run api -- npm run set-plan -- acme team</code></pre>
+<p>The second command passes <code>acme team</code> through to your script. Put a <code>--</code> before any command that has flags of its own. Your scripts, not Flisk, define what <code>seed:plans</code> does, and general seeding advice is in <a href="/@odykyi/local-database-guide/seed-a-local-database/">how to seed a local database</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Caching.</strong> A per-request lookup is fine until it is not. If you cache entitlements, invalidate on plan change, and keep the cache time short enough that an upgrade feels instant.</li>
+<li><strong>Frontend checks are for display only.</strong> Hiding a button is a courtesy. Enforce on the server.</li>
+<li><strong>Do not store usage in the entitlements table.</strong> Limits are configuration, counters are state. Keep them apart, for example in Redis, as in <a href="/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/">per-tenant rate limits</a>.</li>
+<li><strong>Too many flags.</strong> Every entitlement key is a code path you must test. Add one only when a plan really differs.</li>
+</ul>
+<p>With entitlements in place, the next piece is protecting shared capacity: limit how fast one tenant can call your API.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I store plan limits in code or in the database?</summary><p>In the database, keyed by plan and feature. Code then asks about features and limits, and pricing changes become data changes without a deploy.</p></details><details><summary>How do I give one customer a custom limit?</summary><p>Add an override row for that tenant and key, optionally with an expiry. Resolution checks overrides first and falls back to the plan.</p></details><details><summary>What should happen when a feature key is missing?</summary><p>Deny by default. A missing key should fail closed so a typo never grants access.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/"><span class="lbl">Guide</span><b>How to rate limit each tenant of your API with Redis</b><span>One tenant running a runaway script should not slow everyone else. A counter in Redis per tenant and window is the smallest thing that works.</span></a><a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"><span class="lbl">Guide</span><b>How to design a multi-tenant database in Postgres</b><span>Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</span></a><a href="/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/"><span class="lbl">Guide</span><b>How to store and rotate customer API keys safely</b><span>If your SaaS has an API, your customers will paste its keys into scripts and chat. Design them so a leaked database does not leak working keys.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

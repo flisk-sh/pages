@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What to run locally for a SaaS app: web, API, worker, database</title>
+<meta name="description" content="The services most SaaS apps need on a laptop, how they depend on each other, and how to scaffold and start them with Flisk on local processes or containers.">
+<meta name="keywords" content="saas local development setup, run saas app locally, web api worker database local, saas architecture components, local dev stack for saas">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/saas-local-stack-layout/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What to run locally for a SaaS app: web, API, worker, database">
+<meta property="og:description" content="The services most SaaS apps need on a laptop, how they depend on each other, and how to scaffold and start them with Flisk on local processes or containers.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/saas-local-stack-layout/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"What to run locally for a SaaS app: web, API, worker, database","description":"The services most SaaS apps need on a laptop, how they depend on each other, and how to scaffold and start them with Flisk on local processes or containers.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/saas-local-stack-layout/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/saas-local-stack-layout/","keywords":"saas local development setup, run saas app locally, web api worker database local, saas architecture components, local dev stack for saas","wordCount":766,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"What to run locally for a SaaS app: web, API, worker, database","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/saas-local-stack-layout/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What services does a SaaS app need locally?","acceptedAnswer":{"@type":"Answer","text":"Usually a database, a migration job, a cache, an API, a background worker and a web front end. Start with what you need and add more only when a feature requires it."}},{"@type":"Question","name":"Can Flisk run some services as local processes and others in containers?","acceptedAnswer":{"@type":"Answer","text":"Not in one project yet. A project runs either as local processes or on Docker and Tilt, although local processes can start a database from an image."}},{"@type":"Question","name":"How do I see what will start before running it?","acceptedAnswer":{"@type":"Answer","text":"Run flisk up --dry-run to list the services, their commands and the start order without starting anything."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>What to run locally for a SaaS app: web, API, worker, database</h1><p class="dek">A SaaS app is rarely one process. Decide which parts you run, in what order they start and which route fits, before the folders multiply.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-parts-and-why-each-exists">The parts and why each exists</a></li><li><a href="#two-routes-with-flisk">Two routes with Flisk</a></li><li><a href="#scaffold-the-container-route">Scaffold the container route</a></li><li><a href="#scaffold-the-local-process-route">Scaffold the local-process route</a></li><li><a href="#settings-that-belong-in-the-manifests">Settings that belong in the manifests</a></li><li><a href="#what-not-to-run-yet">What not to run yet</a></li></ol></nav></aside>
+<article><p>A typical SaaS app runs five things locally: a web front end, an API, a background worker, a database and a cache. A sixth, a one-shot migration job, runs before the API. Start them in dependency order with one command, and keep every service's port, environment and start order in a file that is committed with the code.</p>
+
+<h2 id="the-parts-and-why-each-exists">The parts and why each exists</h2>
+<table>
+<thead><tr><th>Part</th><th>What it does</th><th>Starts after</th></tr></thead>
+<tbody>
+<tr><td>Database (Postgres)</td><td>Tenants, users, plans, audit events</td><td>nothing</td></tr>
+<tr><td>Migrator</td><td>Applies schema changes and exits</td><td>database</td></tr>
+<tr><td>Cache (Redis)</td><td>Rate limit counters, sessions, short-lived data</td><td>nothing</td></tr>
+<tr><td>API</td><td>Business rules, tenant resolution, authentication</td><td>migrator, cache</td></tr>
+<tr><td>Worker</td><td>Emails, exports, purges, webhooks to customers</td><td>migrator, cache</td></tr>
+<tr><td>Web</td><td>The user interface</td><td>API</td></tr>
+</tbody>
+</table>
+<p>You can fold parts together early. A monolith with a worker thread is a fine start. The reason to run the worker as its own process is that slow jobs then cannot slow web requests, and you can restart one without the other. Plan for the split even if you start joined.</p>
+
+<h2 id="two-routes-with-flisk">Two routes with Flisk</h2>
+<p>Flisk has two ways to run a project, and one project uses one of them, not both.</p>
+<ul>
+<li><strong>Local processes, no Docker.</strong> Each service has a <code>command</code> in its <code>service.json</code> and runs on your machine. Postgres or Redis can still run from an image next to them if Docker is available. Start-up order follows <code>dependsOn</code>. This is the quicker route for a web app, an API and a worker.</li>
+<li><strong>Docker and Tilt.</strong> Services are built into containers, routed through a gateway on <code>*.localhost</code> names, and live-updated on code changes. The shared Postgres is on by default, and a Prisma API gets a migrator.</li>
+</ul>
+<p>A project cannot mix both yet: a service built from a Dockerfile next to <code>command</code> services stops <code>flisk up</code> with a mixed-runtime error. The practical rule is: choose local processes for speed, choose containers when you need gateway routing or the same image you deploy.</p>
+
+<h2 id="scaffold-the-container-route">Scaffold the container route</h2>
+<p>Install with <code>npm install -g @flisk-sh/flisk</code>. In an empty folder:</p>
+<pre><code>flisk project --yes
+flisk resource api --stack saas --feature prisma --yes
+flisk resource web --type frontend --stack saas --yes
+flisk resource jobs --type worker --stack saas --yes
+flisk resource cache --type database --framework redis --stack saas --yes
+flisk config verify
+flisk up saas</code></pre>
+<p>The <code>--feature prisma</code> flag creates two folders, <code>api</code> and <code>api-migrator</code>, where the migrator waits for Postgres and the API waits for the migrator. The scaffolded <code>web</code> lists <code>api</code> in its <code>dependsOn</code>. The Redis resource is the <code>redis:7.4-alpine</code> image with a <code>redis-cli ping</code> health check. After <code>flisk up</code>, <code>flisk status</code> shows state and <code>flisk networks</code> prints the URL of each web and API service. Check what your backend sees with <code>flisk run api -- printenv DATABASE_URL</code>.</p>
+<p>Prefer a ready-made start? <code>flisk create myapp --starter next-postgres</code> scaffolds a Next.js site, an Express API and Postgres with a migrator, and needs Docker. For the migration pattern, read <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">migrations in local dev with a migrator</a>.</p>
+
+<h2 id="scaffold-the-local-process-route">Scaffold the local-process route</h2>
+<pre><code>flisk project --yes
+flisk resource api --local --stack saas --yes
+flisk resource web --type frontend --local --stack saas --yes</code></pre>
+<p>Each of these writes a <code>service.json</code> with <code>"command": "npm run dev"</code> and a port. Add a Postgres service as an image, as shown in <a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">multi-tenant database design</a>, list it in the API's <code>dependsOn</code>, and run <code>flisk up</code>. The output prints a <code>http://localhost:&lt;port&gt;</code> link for each service. Background on this route: <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run local services without Docker</a>. Run <code>flisk up --dry-run</code> first to see the services, commands and order without starting anything.</p>
+
+<h2 id="settings-that-belong-in-the-manifests">Settings that belong in the manifests</h2>
+<ul>
+<li><strong>Ports</strong> and <strong>health paths</strong>, so dependents wait for ready services.</li>
+<li><strong>Environment variable names</strong> and local defaults. Real secrets stay in an uncommitted <code>.env</code>, and dev-only keys can be generated, as in <a href="/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/">customer API keys</a>.</li>
+<li><strong>Start order</strong> through <code>dependsOn</code>, not through sleep commands in scripts.</li>
+</ul>
+<p>To work on one part only, <code>flisk up --only web</code> starts <code>web</code> plus what it depends on, and <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">start only the services you need</a> explains more.</p>
+
+<h2 id="what-not-to-run-yet">What not to run yet</h2>
+<p>Do not add a message broker, a search engine or a second database until a feature needs it. Every extra process costs RAM and a place for startup to fail. A Postgres table with a <code>status</code> column can serve as a small job queue long before you need a broker. Likewise, skip an API gateway of your own while the one process does the job.</p>
+<p>Once this stack starts with one command, new teammates can use it on day one: see <a href="/@odykyi/microservices-local-dev/one-command-dev-environment/">a one-command dev environment</a> for the next step.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What services does a SaaS app need locally?</summary><p>Usually a database, a migration job, a cache, an API, a background worker and a web front end. Start with what you need and add more only when a feature requires it.</p></details><details><summary>Can Flisk run some services as local processes and others in containers?</summary><p>Not in one project yet. A project runs either as local processes or on Docker and Tilt, although local processes can start a database from an image.</p></details><details><summary>How do I see what will start before running it?</summary><p>Run flisk up --dry-run to list the services, their commands and the start order without starting anything.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"><span class="lbl">Guide</span><b>How to design a multi-tenant database in Postgres</b><span>Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</span></a><a href="/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/"><span class="lbl">Guide</span><b>How to resolve the tenant from a subdomain in local development</b><span>Many SaaS products put each customer on its own subdomain. You can build and test that routing on your laptop without a domain or a hosts file entry.</span></a><a href="/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/"><span class="lbl">Guide</span><b>How to rate limit each tenant of your API with Redis</b><span>One tenant running a runaway script should not slow everyone else. A counter in Redis per tenant and window is the smallest thing that works.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

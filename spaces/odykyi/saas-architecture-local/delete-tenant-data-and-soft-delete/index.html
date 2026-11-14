@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Soft delete or hard delete: removing a tenant&#39;s data in SaaS</title>
+<meta name="description" content="When a deleted_at column helps and when it hurts, how to keep unique indexes working, and how to purge a whole tenant with a background job and a grace period.">
+<meta name="keywords" content="soft delete vs hard delete, deleted_at column unique index, delete tenant data, saas account deletion, gdpr erasure postgres">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Soft delete or hard delete: removing a tenant&#39;s data in SaaS">
+<meta property="og:description" content="When a deleted_at column helps and when it hurts, how to keep unique indexes working, and how to purge a whole tenant with a background job and a grace period.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Soft delete or hard delete: removing a tenant's data in SaaS","description":"When a deleted_at column helps and when it hurts, how to keep unique indexes working, and how to purge a whole tenant with a background job and a grace period.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/","keywords":"soft delete vs hard delete, deleted_at column unique index, delete tenant data, saas account deletion, gdpr erasure postgres","wordCount":762,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"Soft delete or hard delete: removing a tenant's data in SaaS","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does soft delete break unique constraints?","acceptedAnswer":{"@type":"Answer","text":"A plain unique index still counts the deleted rows, so the value cannot be reused. Use a partial unique index with where deleted_at is null."}},{"@type":"Question","name":"Should I use on delete cascade to remove a tenant?","acceptedAnswer":{"@type":"Answer","text":"For small tables it is fine. For large ones, delete child rows in batches from a worker, because one cascading statement can lock and log millions of rows."}},{"@type":"Question","name":"How long should a deleted account's data be kept?","acceptedAnswer":{"@type":"Answer","text":"Choose a grace period that lets support undo mistakes, state it in your terms, and document how long backups are retained. Check legal requirements for your situation."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>Soft delete or hard delete: removing a tenant&#39;s data in SaaS</h1><p class="dek">Deleting a record is a flag. Deleting a customer means rows, files, search indexes and a billing account. They need different designs.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#soft-delete-what-it-costs">Soft delete: what it costs</a></li><li><a href="#the-unique-index-trap">The unique index trap</a></li><li><a href="#deleting-a-tenant">Deleting a tenant</a></li><li><a href="#backups-and-the-right-to-erasure">Backups and the right to erasure</a></li><li><a href="#practice-it-locally-with-flisk">Practice it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use soft delete (a <code>deleted_at</code> column) for records users may want back, such as a project in a trash view, and hard delete for everything else. Deleting a whole tenant is a different job: mark it, wait out a grace period, then purge its data in batches from a background worker, including files and external services.</p>
+
+<h2 id="soft-delete-what-it-costs">Soft delete: what it costs</h2>
+<p>A flag looks free, but it touches every query. Each read must add <code>deleted_at is null</code>, and one forgotten filter shows deleted data again. Foreign keys, counts and reports all need the same care. Reserve it for cases with a user-facing restore. For audit needs alone, an <a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/">audit log</a> is a better answer than keeping dead rows.</p>
+<p>If you do use it, make filtering hard to forget. A view such as <code>projects_active</code>, or a default scope in your data layer, beats repeating the condition. With row level security you can put the condition in the policy itself, so deleted rows are hidden from the app role and visible only to a maintenance role.</p>
+
+<h2 id="the-unique-index-trap">The unique index trap</h2>
+<p>With soft delete, a plain <code>unique (tenant_id, slug)</code> blocks a user from creating a new project with the slug of one in the trash. Use a partial unique index that ignores deleted rows:</p>
+<pre><code>alter table projects add column deleted_at timestamptz;
+
+create unique index projects_tenant_slug_active
+  on projects (tenant_id, slug)
+  where deleted_at is null;</code></pre>
+<p>Decide separately whether restoring can conflict. If a live project took the slug, restore needs a rename or a refusal.</p>
+
+<h2 id="deleting-a-tenant">Deleting a tenant</h2>
+<p>Cancelling an account or a data deletion request should not be a single <code>delete from tenants</code>. A safe sequence:</p>
+<ol>
+<li><strong>Mark and lock.</strong> Set <code>tenants.deleted_at</code>, revoke sessions and API keys, stop billing. The customer can no longer use the product.</li>
+<li><strong>Offer an export</strong> before the grace period ends, if you promise one.</li>
+<li><strong>Wait.</strong> A grace period of days or weeks lets support undo a mistake. Say the length in your terms.</li>
+<li><strong>Purge in a worker.</strong> Delete child tables first, in batches, then the tenant row. Record each step so a crash resumes instead of starting over.</li>
+<li><strong>Reach beyond Postgres.</strong> Delete uploaded files, search index documents, cache keys and the customer record at your payment provider, or anonymize what the provider must keep.</li>
+<li><strong>Keep a tombstone.</strong> A row stating that tenant X was deleted on date Y, with no personal data, helps with support questions and legal proof.</li>
+</ol>
+<pre><code>-- one purge step, safe to repeat
+delete from tasks
+ where id in (
+   select id from tasks where tenant_id = $1 limit 5000
+ );</code></pre>
+<p>Batches keep locks short and the write-ahead log manageable. Loop until the statement deletes zero rows. <code>on delete cascade</code> is convenient for small tables, and dangerous on huge ones, because one statement cascades into millions of rows in a single transaction.</p>
+
+<h2 id="backups-and-the-right-to-erasure">Backups and the right to erasure</h2>
+<p>Deleted data stays in backups until they expire. Regulations such as the GDPR do not demand instant removal from backups, but they expect you to have a documented retention period, and to not restore deleted personal data into production. Write down your backup retention, and make restore procedures re-apply recent deletions. Ask a lawyer for what applies to you, this is engineering advice, not legal advice.</p>
+
+<h2 id="practice-it-locally-with-flisk">Practice it locally with Flisk</h2>
+<p>The purge job is the part worth rehearsing, because it only matters at scale and fails in unexpected ways. Seed a large tenant and a small one, run the purge and check that the small one is untouched and the large one is gone. If the purge is a script in your API service:</p>
+<pre><code>flisk run api -- npm run purge-tenant -- acme</code></pre>
+<p>The command runs in the service's environment, with the database URL it would have at runtime. After a bad run, reset your data: <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a> covers dropping and recreating it. In a stack where the purge runs as its own worker, scaffold it with <code>flisk resource tenant-purge --type worker</code>, which writes a worker <code>service.json</code> and a <code>bun run worker</code> dev command.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Hidden copies.</strong> Analytics tables, logs and exports can hold tenant data. Inventory them before you promise deletion.</li>
+<li><strong>Per-tenant databases.</strong> If you chose a database per tenant, deletion is <code>drop database</code> after the grace period. That is one benefit of that model, see <a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">multi-tenant database design</a>.</li>
+<li><strong>Restore tests.</strong> If you offer undelete, test it on data with children, not just a single row.</li>
+</ul>
+<p>The last article puts the pieces together: how to lay out all these services on one laptop, in <a href="/@odykyi/saas-architecture-local/saas-local-stack-layout/">a local SaaS stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does soft delete break unique constraints?</summary><p>A plain unique index still counts the deleted rows, so the value cannot be reused. Use a partial unique index with where deleted_at is null.</p></details><details><summary>Should I use on delete cascade to remove a tenant?</summary><p>For small tables it is fine. For large ones, delete child rows in batches from a worker, because one cascading statement can lock and log millions of rows.</p></details><details><summary>How long should a deleted account&#39;s data be kept?</summary><p>Choose a grace period that lets support undo mistakes, state it in your terms, and document how long backups are retained. Check legal requirements for your situation.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/"><span class="lbl">Guide</span><b>How to build an audit log table for a SaaS app</b><span>Customers ask who deleted a project, and your support team asks it twice a week. An audit log answers that, if you design it before you need it.</span></a><a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"><span class="lbl">Guide</span><b>How to design a multi-tenant database in Postgres</b><span>Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</span></a><a href="/@odykyi/saas-architecture-local/saas-local-stack-layout/"><span class="lbl">Guide</span><b>What to run locally for a SaaS app: web, API, worker, database</b><span>A SaaS app is rarely one process. Decide which parts you run, in what order they start and which route fits, before the folders multiply.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
