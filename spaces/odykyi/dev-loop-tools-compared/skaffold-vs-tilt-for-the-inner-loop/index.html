@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skaffold vs Tilt: which inner-loop tool should you use?</title>
+<meta name="description" content="Skaffold and Tilt both rebuild and redeploy on file changes. This is how they differ, which one suits a Kubernetes team, and when you need neither.">
+<meta name="keywords" content="skaffold vs tilt, skaffold or tilt, kubernetes inner loop tools, skaffold dev vs tilt up">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Skaffold vs Tilt: which inner-loop tool should you use?">
+<meta property="og:description" content="Skaffold and Tilt both rebuild and redeploy on file changes. This is how they differ, which one suits a Kubernetes team, and when you need neither.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Skaffold vs Tilt: which inner-loop tool should you use?","description":"Skaffold and Tilt both rebuild and redeploy on file changes. This is how they differ, which one suits a Kubernetes team, and when you need neither.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/","keywords":"skaffold vs tilt, skaffold or tilt, kubernetes inner loop tools, skaffold dev vs tilt up","wordCount":600,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"Skaffold vs Tilt: which inner-loop tool should you use?","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is Skaffold or Tilt better?","acceptedAnswer":{"@type":"Answer","text":"Neither wins everywhere. Skaffold suits teams that want one declarative file reused in CI. Tilt suits teams that want a live UI and scriptable logic."}},{"@type":"Question","name":"Can Tilt deploy to Kubernetes?","acceptedAnswer":{"@type":"Answer","text":"Yes. Tilt uses docker_build, k8s_yaml and k8s_resource for Kubernetes, and it can also drive Docker Compose."}},{"@type":"Question","name":"Do I need Kubernetes locally to develop a microservice?","acceptedAnswer":{"@type":"Answer","text":"Not always. If you do not work on manifests or cluster features, running services as processes or on Docker is lighter. Use a cluster when you need real cluster behavior."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>Skaffold vs Tilt: which inner-loop tool should you use?</h1><p class="dek">Both tools watch your code and update a running app. They differ in how you configure them and what they assume about your deploys.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-they-have-in-common">What they have in common</a></li><li><a href="#how-skaffold-works">How Skaffold works</a></li><li><a href="#how-tilt-works">How Tilt works</a></li><li><a href="#choosing-between-them">Choosing between them</a></li><li><a href="#when-you-need-neither">When you need neither</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Pick Skaffold if you want a declarative <code>skaffold.yaml</code> that the same team can reuse in CI and deploys. Pick Tilt if you want a live dashboard and are happy to script the loop in a Tiltfile. Both build images, deploy to Kubernetes, sync files and stream logs. If your app does not run on Kubernetes at all, neither is required.</p>
+
+<h2 id="what-they-have-in-common">What they have in common</h2>
+<p>The inner loop is the cycle of edit, build, deploy, look. Skaffold and Tilt both watch your source, rebuild only what changed, redeploy to a cluster (a local one such as kind, minikube or Docker Desktop Kubernetes, or a remote one) and forward ports. Both can sync a changed file into a running container so you skip a full image build for interpreted languages.</p>
+
+<h2 id="how-skaffold-works">How Skaffold works</h2>
+<p>Skaffold is configured with <code>skaffold.yaml</code>. You list the images to build and the manifests to deploy, then run <code>skaffold dev</code>. It builds, deploys with kubectl, Helm or Kustomize, watches files and redeploys on changes, and cleans up when you press Ctrl+C. The same file works with <code>skaffold run</code> for a one-shot deploy, which is why teams reuse it in CI. Profiles let you change settings per environment, and <code>skaffold init</code> can propose a first config from your repo.</p>
+<pre><code>apiVersion: skaffold/v4beta11
+kind: Config
+build:
+  artifacts:
+    - image: myorg/api
+      context: api
+manifests:
+  rawYaml:
+    - k8s/*.yaml</code></pre>
+<p>The schema version changes between releases, so take the exact <code>apiVersion</code> from your installed version's docs rather than from a blog post.</p>
+
+<h2 id="how-tilt-works">How Tilt works</h2>
+<p>Tilt is configured with a <code>Tiltfile</code> written in Starlark. You call functions such as <code>docker_build</code>, <code>k8s_yaml</code> and <code>k8s_resource</code>. Running <code>tilt up</code> opens a web UI that shows each resource, its build state and its logs. <code>live_update</code> syncs files and runs commands inside a container. Because the Tiltfile is code, you can use loops, conditions and helper functions, and run host commands with <code>local_resource</code>. The price is that you maintain code, not a declaration.</p>
+
+<h2 id="choosing-between-them">Choosing between them</h2>
+<table>
+<thead><tr><th>You care most about</th><th>Lean toward</th></tr></thead>
+<tbody>
+<tr><td>One declarative file reused for local, CI and deploy</td><td>Skaffold</td></tr>
+<tr><td>A live UI with status for many services</td><td>Tilt</td></tr>
+<tr><td>Custom logic, host commands, scripted setup</td><td>Tilt</td></tr>
+<tr><td>Buildpacks, Jib or Bazel builders without a Dockerfile</td><td>Skaffold (builders are built in)</td></tr>
+<tr><td>Docker Compose as the target</td><td>Tilt (Skaffold targets Kubernetes)</td></tr>
+</tbody>
+</table>
+<p>If you are unsure, try both on one service for an afternoon. The migration cost of a single service is small, and the feel of the loop is personal.</p>
+
+<h2 id="when-you-need-neither">When you need neither</h2>
+<p>A local Kubernetes cluster costs memory and attention. If Kubernetes is only where the app lands in production, and you do not touch manifests, operators or network policies while coding, a plain Docker or process-based loop is faster. See <a href="/@odykyi/microservices-local-dev/local-dev-without-kubernetes/">local development without Kubernetes</a>.</p>
+<p>Flisk is on that side of the line. It runs services as local processes or on Docker and Tilt, and it does not talk to a cluster or generate Kubernetes manifests. Keep Skaffold or Tilt for the days you need real cluster behavior. A reasonable split is Flisk for daily feature work, and Skaffold in CI or a shared cluster to check the manifests.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Both tools will happily deploy to whatever your kubectl context points at. Check <code>kubectl config current-context</code> before you run them. Tilt refuses non-local contexts unless you allow them in the Tiltfile.</li>
+<li>File sync does not rebuild dependencies. If you change a lockfile, expect a full image build.</li>
+<li>Mixing both in one repo creates two loops to maintain. Pick one for the team.</li>
+</ul>
+<p>Next, compare the other Kubernetes-centered tools in <a href="/@odykyi/dev-loop-tools-compared/devspace-vs-garden-for-kubernetes-development/">DevSpace vs Garden</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is Skaffold or Tilt better?</summary><p>Neither wins everywhere. Skaffold suits teams that want one declarative file reused in CI. Tilt suits teams that want a live UI and scriptable logic.</p></details><details><summary>Can Tilt deploy to Kubernetes?</summary><p>Yes. Tilt uses docker_build, k8s_yaml and k8s_resource for Kubernetes, and it can also drive Docker Compose.</p></details><details><summary>Do I need Kubernetes locally to develop a microservice?</summary><p>Not always. If you do not work on manifests or cluster features, running services as processes or on Docker is lighter. Use a cluster when you need real cluster behavior.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/"><span class="lbl">Guide</span><b>Tilt vs Docker Compose for local development: how to choose</b><span>Compose describes what runs. Tilt watches your code and updates what runs. You can use either alone or both together.</span></a><a href="/@odykyi/dev-loop-tools-compared/devspace-vs-garden-for-kubernetes-development/"><span class="lbl">Guide</span><b>DevSpace vs Garden for Kubernetes development</b><span>Two Kubernetes dev tools with different centers of gravity: the developer&#39;s session versus the dependency graph.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

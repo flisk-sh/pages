@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Make vs just vs Task for project dev commands</title>
+<meta name="description" content="Compare Make, just and Task as a project&#39;s command entry point: syntax, dotenv loading, dependencies, Windows support and when a script is enough.">
+<meta name="keywords" content="make vs just, just vs taskfile, makefile alternative, task runner for dev commands">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Make vs just vs Task for project dev commands">
+<meta property="og:description" content="Compare Make, just and Task as a project&#39;s command entry point: syntax, dotenv loading, dependencies, Windows support and when a script is enough.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Make vs just vs Task for project dev commands","description":"Compare Make, just and Task as a project's command entry point: syntax, dotenv loading, dependencies, Windows support and when a script is enough.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/","keywords":"make vs just, just vs taskfile, makefile alternative, task runner for dev commands","wordCount":629,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"Make vs just vs Task for project dev commands","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is just a replacement for Make?","acceptedAnswer":{"@type":"Answer","text":"For running project commands, yes. just does not rebuild based on file timestamps, so it is not a build system like Make."}},{"@type":"Question","name":"Does Task support watching files?","acceptedAnswer":{"@type":"Answer","text":"Yes. The task command has a watch mode that reruns a task when its source files change."}},{"@type":"Question","name":"Do I need a task runner for a small project?","acceptedAnswer":{"@type":"Answer","text":"No. The scripts block in package.json or a scripts folder is enough for a handful of commands."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>Make vs just vs Task for project dev commands</h1><p class="dek">A command runner gives the team one set of names for build, test and start. The three popular choices differ mostly in syntax and portability.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#make">Make</a></li><li><a href="#just">just</a></li><li><a href="#task">Task</a></li><li><a href="#comparison">Comparison</a></li><li><a href="#what-these-tools-do-not-do">What these tools do not do</a></li><li><a href="#using-one-with-flisk">Using one with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use Make if it is already in your repo and your team knows it. Use just if you want Make's idea without Make's tab rules, quirks and file-timestamp logic. Use Task if you prefer YAML and want built-in file watching. For three commands, a <code>scripts/</code> folder or the <code>scripts</code> block in <code>package.json</code> is enough. The goal is the same either way: one obvious way to run <code>dev</code>, <code>test</code> and <code>lint</code>.</p>
+
+<h2 id="make">Make</h2>
+<p>Make is on nearly every Linux and macOS machine. A <code>Makefile</code> is made of targets with commands, and Make's real feature is rebuilding only when file timestamps say so. That is a great fit for compiling C, and less so for "run the dev server", where you mark targets as <code>.PHONY</code> to turn that logic off.</p>
+<pre><code>.PHONY: dev test
+dev:
+	docker compose up -d db
+	npm run dev
+
+test:
+	npm test</code></pre>
+<p>Pitfalls: recipe lines must start with a tab, every line runs in its own shell, and variables use <code>$(VAR)</code> and <code>$$</code> escaping that surprises newcomers. On Windows you need a Make install and a compatible shell, or WSL.</p>
+
+<h2 id="just">just</h2>
+<p>just is a command runner, not a build system. A <code>justfile</code> looks like a Makefile without the timestamp logic. It supports recipe parameters, <code>just --list</code> to print the available recipes with their comments, and <code>set dotenv-load</code> to read a <code>.env</code> file. It runs on Linux, macOS and Windows.</p>
+<pre><code>set dotenv-load
+
+# start the database and the dev server
+dev:
+    docker compose up -d db
+    npm run dev
+
+# run tests for one package
+test pkg="api":
+    npm --prefix {{pkg}} test</code></pre>
+<p>Cost: one more binary to install, and teammates need to learn a small syntax.</p>
+
+<h2 id="task">Task</h2>
+<p>Task (the <code>task</code> command) uses a <code>Taskfile.yml</code>. Tasks can declare dependencies with <code>deps</code>, run commands, set variables and load dotenv files. It can watch files with <code>--watch</code>, and it runs on all major platforms as a single binary. If your team is comfortable with YAML, the learning curve is gentle.</p>
+<pre><code>version: "3"
+tasks:
+  dev:
+    deps: [db]
+    cmds:
+      - npm run dev
+  db:
+    cmds:
+      - docker compose up -d db</code></pre>
+
+<h2 id="comparison">Comparison</h2>
+<table>
+<thead><tr><th></th><th>Make</th><th>just</th><th>Task</th></tr></thead>
+<tbody>
+<tr><td>Preinstalled</td><td>Usually, on Linux and macOS</td><td>No</td><td>No</td></tr>
+<tr><td>Syntax</td><td>Makefile</td><td>justfile</td><td>YAML</td></tr>
+<tr><td>List available commands</td><td>Not built in</td><td><code>just --list</code></td><td><code>task --list</code></td></tr>
+<tr><td>Native Windows</td><td>Needs extra install</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Rebuild only if files changed</td><td>Core feature</td><td>No</td><td>Optional, via sources and generates</td></tr>
+</tbody>
+</table>
+
+<h2 id="what-these-tools-do-not-do">What these tools do not do</h2>
+<p>A command runner starts commands. It does not wait for the database to accept connections, restart a crashed service, route traffic or show you merged logs. A <code>make dev</code> that runs five things in the background is a script with a good name, not an orchestrator. When the recipe starts to contain <code>sleep 5</code> and <code>wait-for-it</code> lines, look at a tool built for processes. See <a href="/@odykyi/dev-loop-tools-compared/concurrently-vs-mprocs-vs-process-compose/">concurrently vs mprocs vs process-compose</a>.</p>
+
+<h2 id="using-one-with-flisk">Using one with Flisk</h2>
+<p>They combine well. The runner gives the names, and Flisk does the running. A recipe can be as small as <code>flisk up</code> for <code>dev</code>, <code>flisk down</code> for <code>stop</code> and <code>flisk logs --service api --tail 100</code> for <code>logs</code>. For one-off tasks inside the stack, <code>flisk run api -- npm run migrate</code> runs a command with that service's environment (put <code>--</code> before a command that has flags of its own). A <code>make</code> or <code>just</code> target that calls these keeps the habit the same for new teammates. Flisk is optional here, and if you only have two npm scripts, you do not need either.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Do not duplicate logic. If <code>npm test</code> already works, the recipe should call it.</li>
+<li>Document the runner in the README. See <a href="/@odykyi/team-dev-environments/document-local-setup-in-the-readme/">what to put in the README</a>.</li>
+<li>Avoid shell-specific features in recipes if teammates use different shells.</li>
+</ul>
+<p>Next, see how to <a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/">choose the layer above the runner</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is just a replacement for Make?</summary><p>For running project commands, yes. just does not rebuild based on file timestamps, so it is not a build system like Make.</p></details><details><summary>Does Task support watching files?</summary><p>Yes. The task command has a watch mode that reruns a task when its source files change.</p></details><details><summary>Do I need a task runner for a small project?</summary><p>No. The scripts block in package.json or a scripts folder is enough for a handful of commands.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/concurrently-vs-mprocs-vs-process-compose/"><span class="lbl">Guide</span><b>concurrently vs mprocs vs process-compose for dev commands</b><span>Each fits a different size of problem, from two npm scripts to a dozen services with startup order.</span></a><a href="/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/"><span class="lbl">Guide</span><b>Foreman vs Overmind vs Honcho: which Procfile runner to use</b><span>All four read the same Procfile. The differences are how they run processes and what you get when something crashes.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

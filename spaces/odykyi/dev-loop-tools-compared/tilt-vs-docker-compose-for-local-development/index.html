@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tilt vs Docker Compose for local development: how to choose</title>
+<meta name="description" content="Tilt and Docker Compose solve different parts of the dev loop. Here is what each one does, where it fits, and how to run them together.">
+<meta name="keywords" content="tilt vs docker compose, tilt docker compose, tilt vs compose local development, docker compose live update">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Tilt vs Docker Compose for local development: how to choose">
+<meta property="og:description" content="Tilt and Docker Compose solve different parts of the dev loop. Here is what each one does, where it fits, and how to run them together.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Tilt vs Docker Compose for local development: how to choose","description":"Tilt and Docker Compose solve different parts of the dev loop. Here is what each one does, where it fits, and how to run them together.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/","keywords":"tilt vs docker compose, tilt docker compose, tilt vs compose local development, docker compose live update","wordCount":703,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"Tilt vs Docker Compose for local development: how to choose","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Tilt run a docker-compose.yml?","acceptedAnswer":{"@type":"Answer","text":"Yes. Call docker_compose('./compose.yaml') in a Tiltfile and run tilt up. Compose keeps defining the services and Tilt adds the dashboard and live update."}},{"@type":"Question","name":"Does Tilt replace Docker Compose?","acceptedAnswer":{"@type":"Answer","text":"Not necessarily. Tilt can use Compose as its backend, or deploy to Kubernetes instead. It is an orchestrator for the dev loop, not a file format for containers."}},{"@type":"Question","name":"Is docker compose watch the same as Tilt live_update?","acceptedAnswer":{"@type":"Answer","text":"They overlap. Both sync files into a running container. Tilt adds a web UI, host commands and Kubernetes support. Compose watch needs no extra tool."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>Tilt vs Docker Compose for local development: how to choose</h1><p class="dek">Compose describes what runs. Tilt watches your code and updates what runs. You can use either alone or both together.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-tool-is">What each tool is</a></li><li><a href="#side-by-side">Side by side</a></li><li><a href="#using-tilt-on-top-of-an-existing-compose-file">Using Tilt on top of an existing Compose file</a></li><li><a href="#when-plain-compose-is-the-better-choice">When plain Compose is the better choice</a></li><li><a href="#when-tilt-is-worth-it">When Tilt is worth it</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use Docker Compose when you want to describe a set of containers and start them. Add Tilt when you want a live dashboard, per-service rebuilds and code sync into running containers as you edit. They are not strict rivals: Tilt can drive an existing Compose file, so you can adopt it without rewriting anything.</p>
+
+<h2 id="what-each-tool-is">What each tool is</h2>
+<p><strong>Docker Compose</strong> reads a <code>compose.yaml</code> and creates containers, networks and volumes from it. It ships with Docker, every developer already knows it, and the file is plain YAML. Recent Compose versions also have <code>docker compose watch</code>, which can sync files into a container or rebuild an image when files change.</p>
+<p><strong>Tilt</strong> is a development orchestrator. You write a <code>Tiltfile</code> in Starlark (a Python dialect). Tilt builds images, starts them, watches your files and shows every service and its logs in a web UI, by default on <code>http://localhost:10350</code>. Its <code>live_update</code> feature copies changed files into a running container and can run a command there, so you often skip a full image rebuild. Tilt can deploy to Docker Compose or to Kubernetes.</p>
+
+<h2 id="side-by-side">Side by side</h2>
+<table>
+<thead><tr><th>Question</th><th>Compose</th><th>Tilt</th></tr></thead>
+<tbody>
+<tr><td>Config you write</td><td>YAML</td><td>Starlark code</td></tr>
+<tr><td>Extra install</td><td>None, ships with Docker</td><td>One more binary</td></tr>
+<tr><td>Live view of every service</td><td>Logs in the terminal</td><td>Web UI with status and logs per service</td></tr>
+<tr><td>Update a running container on file change</td><td><code>compose watch</code> (sync, rebuild, or sync and restart)</td><td><code>live_update</code> (sync, run steps, restart)</td></tr>
+<tr><td>Run a host process next to containers</td><td>Not its job</td><td><code>local_resource</code></td></tr>
+<tr><td>Targets Kubernetes</td><td>No</td><td>Yes</td></tr>
+<tr><td>CI mode</td><td><code>docker compose up --wait</code></td><td><code>tilt ci</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="using-tilt-on-top-of-an-existing-compose-file">Using Tilt on top of an existing Compose file</h2>
+<p>If you already have a <code>compose.yaml</code>, a Tiltfile can be three lines:</p>
+<pre><code>docker_compose('./compose.yaml')
+
+# optional: sync source into the api container instead of rebuilding
+docker_build('myorg/api', './api',
+  live_update=[sync('./api/src', '/app/src')])</code></pre>
+<p>Then run <code>tilt up</code>. Compose still owns the service definitions. Tilt adds the dashboard and the live update. Check the Tilt docs for the exact image name matching rule between <code>docker_build</code> and your Compose <code>image:</code> field, because that is where first attempts usually go wrong.</p>
+
+<h2 id="when-plain-compose-is-the-better-choice">When plain Compose is the better choice</h2>
+<ul>
+<li>You have two to five services and each already has a Dockerfile.</li>
+<li>Nobody on the team wants to learn Starlark or install another binary.</li>
+<li><code>compose watch</code> is enough for your hot reload needs. See <a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/">Docker Compose hot reload</a> for how it behaves.</li>
+<li>The same Compose file also runs on a VPS or in CI, and you want one file for all of them.</li>
+</ul>
+
+<h2 id="when-tilt-is-worth-it">When Tilt is worth it</h2>
+<ul>
+<li>You have enough services that a dashboard with per-service status saves real time.</li>
+<li>You develop against Kubernetes and want the same tool for the local loop. Tilt supports this directly, and it is the main reason many teams pick it.</li>
+<li>You need to mix containers with host commands, for example a database in a container and a frontend dev server on the host.</li>
+<li>Your team already has someone who maintains Starlark happily.</li>
+</ul>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk sits one layer above both. On its Docker path it generates the Compose files and the Tiltfile from a small <code>service.json</code> per service, then runs Tilt for you. That removes the hand-written Tiltfile, but it also means you work in Flisk's conventions, and it needs Docker, Tilt, Node.js 22.12 or newer and Bun 1.2 or newer on the machine. Run <code>flisk doctor</code> to see what is missing.</p>
+<p>If you outgrow it, <code>flisk eject</code> writes an <code>EJECTED.md</code> that explains how to run the generated Tiltfile with plain Tilt. It copies nothing, so the generated files stay where Flisk put them. Treat it as a map, not an exit script. If you already like writing your own Tiltfile, you do not need Flisk. If you do not, see <a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/">the decision guide</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Tilt does not replace Compose features such as <code>depends_on</code> health ordering. With <code>docker_compose()</code>, Compose semantics still apply.</li>
+<li>Live update only helps when your container runs a process that reloads on file changes. Otherwise add a restart step.</li>
+<li>Two sources of truth is the real risk of the combined setup. Keep service definitions in Compose and only build logic in the Tiltfile.</li>
+</ul>
+<p>Next, if your target is Kubernetes rather than Compose, read <a href="/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/">Skaffold vs Tilt</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Tilt run a docker-compose.yml?</summary><p>Yes. Call docker_compose(&#39;./compose.yaml&#39;) in a Tiltfile and run tilt up. Compose keeps defining the services and Tilt adds the dashboard and live update.</p></details><details><summary>Does Tilt replace Docker Compose?</summary><p>Not necessarily. Tilt can use Compose as its backend, or deploy to Kubernetes instead. It is an orchestrator for the dev loop, not a file format for containers.</p></details><details><summary>Is docker compose watch the same as Tilt live_update?</summary><p>They overlap. Both sync files into a running container. Tilt adds a web UI, host commands and Kubernetes support. Compose watch needs no extra tool.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/skaffold-vs-tilt-for-the-inner-loop/"><span class="lbl">Guide</span><b>Skaffold vs Tilt: which inner-loop tool should you use?</b><span>Both tools watch your code and update a running app. They differ in how you configure them and what they assume about your deploys.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a><a href="/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/"><span class="lbl">Guide</span><b>Dev Containers vs Docker Compose: what each one is for</b><span>They are often compared, but one standardizes the developer&#39;s toolbox and the other runs the app&#39;s parts.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

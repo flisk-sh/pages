@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Foreman vs Overmind vs Honcho: which Procfile runner to use</title>
+<meta name="description" content="Compare Foreman, Overmind, Honcho and Hivemind: language, tmux support, restarts and logs, plus when a Procfile runner stops being enough.">
+<meta name="keywords" content="foreman vs overmind, honcho vs foreman, procfile runner, overmind vs hivemind">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Foreman vs Overmind vs Honcho: which Procfile runner to use">
+<meta property="og:description" content="Compare Foreman, Overmind, Honcho and Hivemind: language, tmux support, restarts and logs, plus when a Procfile runner stops being enough.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Foreman vs Overmind vs Honcho: which Procfile runner to use","description":"Compare Foreman, Overmind, Honcho and Hivemind: language, tmux support, restarts and logs, plus when a Procfile runner stops being enough.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/","keywords":"foreman vs overmind, honcho vs foreman, procfile runner, overmind vs hivemind","wordCount":648,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"Foreman vs Overmind vs Honcho: which Procfile runner to use","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/foreman-vs-overmind-vs-honcho/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between Foreman and Overmind?","acceptedAnswer":{"@type":"Answer","text":"Foreman runs a Procfile's processes together with merged logs. Overmind does the same under tmux, so you can attach to one process or restart it alone."}},{"@type":"Question","name":"Is there a Procfile runner for Python?","acceptedAnswer":{"@type":"Answer","text":"Honcho is a Python port of Foreman that reads the same Procfile and .env file."}},{"@type":"Question","name":"Does a Procfile support startup order?","acceptedAnswer":{"@type":"Answer","text":"No. A Procfile only lists commands. You need a runner with dependency and health fields, or a wait script, if one process must be ready first."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>Foreman vs Overmind vs Honcho: which Procfile runner to use</h1><p class="dek">All four read the same Procfile. The differences are how they run processes and what you get when something crashes.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-procfile-format">The Procfile format</a></li><li><a href="#the-runners">The runners</a></li><li><a href="#how-to-choose">How to choose</a></li><li><a href="#where-procfile-runners-stop-being-enough">Where Procfile runners stop being enough</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>If you only need to start a Procfile's processes together with prefixed logs, any of them works. Foreman is the original in Ruby. Honcho is the same idea in Python. Overmind runs each process in a tmux session so you can attach to one and restart it alone. Choose by your stack and by whether you want to attach to a process.</p>
+
+<h2 id="the-procfile-format">The Procfile format</h2>
+<p>A Procfile is a text file with one process per line, in the form <code>name: command</code>. It came from Heroku and is now a de facto convention for local development too.</p>
+<pre><code>web: bin/rails server -p $PORT
+worker: bundle exec sidekiq
+css: yarn build:css --watch</code></pre>
+
+<h2 id="the-runners">The runners</h2>
+<table>
+<thead><tr><th>Tool</th><th>Written in</th><th>What stands out</th></tr></thead>
+<tbody>
+<tr><td>Foreman</td><td>Ruby gem</td><td>The original. <code>foreman start</code>, <code>foreman run</code>, loads <code>.env</code>, can scale a process with <code>-m web=2</code></td></tr>
+<tr><td>Honcho</td><td>Python package</td><td>A Foreman port. <code>honcho start</code>, reads <code>.env</code>, easy to install in a Python repo</td></tr>
+<tr><td>Overmind</td><td>Go binary</td><td>Runs processes under tmux. <code>overmind connect web</code> attaches, <code>overmind restart web</code> restarts one process</td></tr>
+<tr><td>Hivemind</td><td>Go binary</td><td>By the same author as Overmind, without tmux. Smaller and simpler</td></tr>
+</tbody>
+</table>
+<p>The Heroku CLI also has <code>heroku local</code>, which reads a Procfile and runs it the same way.</p>
+
+<h2 id="how-to-choose">How to choose</h2>
+<ul>
+<li><strong>Ruby shop, already uses bundler:</strong> Foreman. Keep it in the Gemfile's development group.</li>
+<li><strong>Python shop:</strong> Honcho, installed with pip or uv, so nobody needs Ruby.</li>
+<li><strong>You often restart one process while the others keep running, or you drop into a debugger in one:</strong> Overmind. Attaching to a process is its main advantage. It needs tmux installed.</li>
+<li><strong>You want one small static binary with no dependency:</strong> Hivemind or Overmind.</li>
+</ul>
+<p>Behavior differs in small ways, such as how crashes propagate. Foreman-style runners generally stop everything when one process exits. Read the docs of the one you pick about its exit policy and its restart flags, because the defaults are not the same across tools.</p>
+
+<h2 id="where-procfile-runners-stop-being-enough">Where Procfile runners stop being enough</h2>
+<p>A Procfile has no field for dependencies, health checks or ports. If the API must be ready before the worker starts, you write that wait yourself. Nothing tells a new teammate that the database must exist. And a Procfile describes processes, not containers, so a Postgres or Redis is something you start elsewhere.</p>
+<p>That is where a manifest per service helps. Flisk's local-process mode keeps the same idea (run commands, prefix logs) and adds the fields a Procfile lacks. Each service gets a <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "worker",
+  "appType": "worker",
+  "command": "bundle exec sidekiq",
+  "dependsOn": ["web"]
+}</code></pre>
+<p>With <code>dependsOn</code>, <code>flisk up</code> starts services in order and waits until each one is ready: a health URL if you set <code>healthCheckPath</code>, a listening port, or a process still running after a second. A process that exits is restarted with backoff, and after five quick exits in a row Flisk stops and says so. Set <code>"restart": "no"</code> for a one-shot job. <code>flisk up</code> also refuses to start when a program is missing or a port is taken, and names the process that holds the port.</p>
+<p>Flisk does not read a Procfile. Moving from one is manual: one folder and one <code>service.json</code> per process. For a short Procfile that takes minutes. For a Procfile you rely on in production on Heroku, keep it. Flisk is a local tool only and does not deploy.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><code>$PORT</code> in a Procfile is set by the runner, and different runners pick different ports. Pin ports in <code>.env</code> if other tools depend on them.</li>
+<li>Output buffering hides logs in Python and Ruby when stdout is not a terminal. Set <code>PYTHONUNBUFFERED=1</code> or <code>$stdout.sync = true</code>.</li>
+<li>Shells differ. A Procfile line is run through a shell, so a command that works in zsh may fail in sh.</li>
+</ul>
+<p>For other ways to run many commands from one terminal, see <a href="/@odykyi/dev-loop-tools-compared/concurrently-vs-mprocs-vs-process-compose/">concurrently vs mprocs vs process-compose</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between Foreman and Overmind?</summary><p>Foreman runs a Procfile&#39;s processes together with merged logs. Overmind does the same under tmux, so you can attach to one process or restart it alone.</p></details><details><summary>Is there a Procfile runner for Python?</summary><p>Honcho is a Python port of Foreman that reads the same Procfile and .env file.</p></details><details><summary>Does a Procfile support startup order?</summary><p>No. A Procfile only lists commands. You need a runner with dependency and health fields, or a wait script, if one process must be ready first.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/concurrently-vs-mprocs-vs-process-compose/"><span class="lbl">Guide</span><b>concurrently vs mprocs vs process-compose for dev commands</b><span>Each fits a different size of problem, from two npm scripts to a dozen services with startup order.</span></a><a href="/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/"><span class="lbl">Guide</span><b>Make vs just vs Task for project dev commands</b><span>A command runner gives the team one set of names for build, test and start. The three popular choices differ mostly in syntax and portability.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
