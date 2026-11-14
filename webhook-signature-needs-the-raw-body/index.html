@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Webhook signature verification fails: use the raw request body</title>
+<meta name="description" content="Why Stripe and other webhook signatures fail with a body parser in front, and how to read the raw bytes in Express, Next.js, FastAPI, Flask and Go.">
+<meta name="keywords" content="webhook signature verification failed, stripe webhook raw body, express raw body webhook, nextjs webhook raw body, fastapi webhook signature">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Webhook signature verification fails: use the raw request body">
+<meta property="og:description" content="Why Stripe and other webhook signatures fail with a body parser in front, and how to read the raw bytes in Express, Next.js, FastAPI, Flask and Go.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Webhook signature verification fails: use the raw request body","description":"Why Stripe and other webhook signatures fail with a body parser in front, and how to read the raw bytes in Express, Next.js, FastAPI, Flask and Go.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/","keywords":"webhook signature verification failed, stripe webhook raw body, express raw body webhook, nextjs webhook raw body, fastapi webhook signature","wordCount":737,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"Webhook signature verification fails: use the raw request body","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does Stripe webhook signature verification fail in Express?","acceptedAnswer":{"@type":"Answer","text":"Usually because express.json() parsed the body before your webhook route. Register the route with express.raw({ type: 'application/json' }) above the global JSON parser and pass the Buffer to constructEvent."}},{"@type":"Question","name":"Can I verify a webhook after parsing the JSON?","acceptedAnswer":{"@type":"Answer","text":"No. The signature covers the exact bytes. Re-serializing the parsed object changes bytes such as key order and spacing, so the check fails. Verify first, then parse."}},{"@type":"Question","name":"Why does a saved webhook payload fail verification a week later?","acceptedAnswer":{"@type":"Answer","text":"Many providers sign a timestamp and reject old ones. Stripe's SDK uses a five minute tolerance by default, so replay a freshly signed fixture instead."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>Webhook signature verification fails: use the raw request body</h1><p class="dek">The signature covers the exact bytes the provider sent. Once a framework has parsed and re-serialized them, no key can make the check pass.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-parsing-breaks-the-check">Why parsing breaks the check</a></li><li><a href="#the-fix-in-each-framework">The fix in each framework</a></li><li><a href="#if-you-verify-the-signature-yourself">If you verify the signature yourself</a></li><li><a href="#a-local-test-that-catches-this-early">A local test that catches this early</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A webhook signature is computed over the exact bytes of the request body, so verification fails when your framework parses the JSON first and you verify the re-serialized object. Read the raw body, verify the signature against it, and only then parse it. The fix is a few lines in every framework, but the line is different in each.</p>
+
+<h2 id="why-parsing-breaks-the-check">Why parsing breaks the check</h2>
+<p>The provider builds a signature from a timestamp, the raw body and a shared secret. Stripe uses an HMAC-SHA256 over the timestamp, a dot and the body. If your server turns the body into an object and back into text, small things change: key order, spacing, number formatting, escaped characters. A single different byte gives a different HMAC, so the check fails with an error such as "No signatures found matching the expected signature for payload".</p>
+<p>The error text points at the signature, so people often chase the secret. Before you change the secret, rule out the body. Log the length of the raw body and compare it with the <code>Content-Length</code> header the provider sent. If they differ, something altered the body before you saw it.</p>
+
+<h2 id="the-fix-in-each-framework">The fix in each framework</h2>
+<h3>Express</h3>
+<p>Register the webhook route with the raw parser before the global JSON parser, or the global one consumes the stream first:</p>
+<pre><code>app.post("/webhooks/stripe",
+  express.raw({ type: "application/json" }),
+  (req, res) =&gt; {
+    // req.body is a Buffer here
+    const event = stripe.webhooks.constructEvent(
+      req.body, req.get("stripe-signature"), secret);
+    res.sendStatus(200);
+  });
+
+app.use(express.json());   // after the webhook route</code></pre>
+
+<h3>Next.js App Router</h3>
+<p>A route handler can read the body as text. Do not call <code>req.json()</code>:</p>
+<pre><code>export async function POST(req) {
+  const raw = await req.text();
+  const sig = req.headers.get("stripe-signature");
+  const event = stripe.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  return new Response(null, { status: 200 });
+}</code></pre>
+<p>In the older Pages Router, the handler needs <code>export const config = { api: { bodyParser: false } }</code> and the raw bytes read from the stream.</p>
+
+<h3>FastAPI</h3>
+<p>Take the <code>Request</code> object instead of a Pydantic model. A model parameter makes FastAPI parse the body for you:</p>
+<pre><code>@app.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    raw = await request.body()
+    sig = request.headers.get("stripe-signature")
+    event = stripe.Webhook.construct_event(raw, sig, WEBHOOK_SECRET)
+    return {"ok": True}</code></pre>
+
+<h3>Flask</h3>
+<pre><code>raw = request.get_data()   # call this before request.get_json()
+event = stripe.Webhook.construct_event(
+    raw, request.headers.get("Stripe-Signature"), WEBHOOK_SECRET)</code></pre>
+
+<h3>Go</h3>
+<pre><code>payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 65536))
+if err != nil { http.Error(w, "read error", 400); return }
+event, err := webhook.ConstructEvent(payload, r.Header.Get("Stripe-Signature"), secret)</code></pre>
+
+<h2 id="if-you-verify-the-signature-yourself">If you verify the signature yourself</h2>
+<p>Some providers have no SDK helper, and a hand-written check is short. Compare in constant time, and compare byte lengths first, because <code>timingSafeEqual</code> throws on buffers of different length:</p>
+<pre><code>import { createHmac, timingSafeEqual } from "node:crypto";
+
+function verify(raw, header, secret) {
+  const want = createHmac("sha256", secret).update(raw).digest();
+  const given = Buffer.from(header ?? "", "hex");
+  return given.length === want.length &amp;&amp; timingSafeEqual(given, want);
+}</code></pre>
+<p>This is the shape for a simple scheme where the header is a hex HMAC of the body. Stripe's header carries a timestamp and several signatures, so use its SDK for Stripe. The raw-bytes rule is the same.</p>
+
+<h2 id="a-local-test-that-catches-this-early">A local test that catches this early</h2>
+<p>Add a test that signs a fixture and posts it as raw bytes to your running service. If a later change puts a parser in front of the route, the test fails the same way production would. With Flisk, the service runs as a local process, and you can run the test inside the service's environment:</p>
+<pre><code>flisk run api -- node test/webhook-signature.test.js</code></pre>
+<p><code>flisk run</code> runs the command with the environment the service has in the stack and returns its exit code. Put the dummy signing key in the service's <code>env</code> block, loaded from <code>.env</code>, and keep real keys out of the fixtures. <a href="/@odykyi/workers-and-queues/test-webhooks-locally/">Testing webhooks locally</a> covers duplicates and retries on top of this.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A global middleware you forgot.</strong> Logging, compression or a "parse everything as JSON" middleware registered above your route can read or change the body.</li>
+<li><strong>Wrong secret that looks like a wrong body.</strong> If the raw body is intact and the check still fails, compare the secret. A secret from <code>stripe listen</code> differs from a Dashboard endpoint secret. See <a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/">testing Stripe payments locally</a>.</li>
+<li><strong>Body size limits.</strong> A limit that truncates a large event gives a signature error, not a size error.</li>
+<li><strong>Stale timestamps.</strong> Stripe's SDK rejects events whose timestamp is older than a tolerance, five minutes by default. A saved fixture that you replay next week fails for that reason, not the body.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does Stripe webhook signature verification fail in Express?</summary><p>Usually because express.json() parsed the body before your webhook route. Register the route with express.raw({ type: &#39;application/json&#39; }) above the global JSON parser and pass the Buffer to constructEvent.</p></details><details><summary>Can I verify a webhook after parsing the JSON?</summary><p>No. The signature covers the exact bytes. Re-serializing the parsed object changes bytes such as key order and spacing, so the check fails. Verify first, then parse.</p></details><details><summary>Why does a saved webhook payload fail verification a week later?</summary><p>Many providers sign a timestamp and reject old ones. Stripe&#39;s SDK uses a five minute tolerance by default, so replay a freshly signed fixture instead.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/"><span class="lbl">Guide</span><b>How to test Stripe payments locally in test mode</b><span>You do not need a public URL or a live account to test a payment end to end. You need test keys, one forwarding command and an endpoint that checks signatures.</span></a><a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"><span class="lbl">Guide</span><b>How to handle out-of-order payment webhook events</b><span>The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</span></a><a href="/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/"><span class="lbl">Guide</span><b>How to build webhook delivery with signatures and retries</b><span>Receiving webhooks gets all the attention. If your product sends them, the hard parts are the retries you control and the signature your customers will verify.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

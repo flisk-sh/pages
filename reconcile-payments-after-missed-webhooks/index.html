@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to reconcile payments after missed webhooks</title>
+<meta name="description" content="Webhooks get lost when your server is down. Add a reconciliation job that lists recent payments from the provider, compares them with your database and fixes gaps.">
+<meta name="keywords" content="reconcile stripe payments, missed webhooks, webhook reconciliation job, stripe list events, payment reconciliation script">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to reconcile payments after missed webhooks">
+<meta property="og:description" content="Webhooks get lost when your server is down. Add a reconciliation job that lists recent payments from the provider, compares them with your database and fixes gaps.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to reconcile payments after missed webhooks","description":"Webhooks get lost when your server is down. Add a reconciliation job that lists recent payments from the provider, compares them with your database and fixes gaps.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/","keywords":"reconcile stripe payments, missed webhooks, webhook reconciliation job, stripe list events, payment reconciliation script","wordCount":783,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to reconcile payments after missed webhooks","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long does Stripe retry a failed webhook?","acceptedAnswer":{"@type":"Answer","text":"In live mode Stripe retries for up to three days with exponential backoff. After that you must fetch the data yourself, which is what a reconciliation job does."}},{"@type":"Question","name":"How far back can I list Stripe events?","acceptedAnswer":{"@type":"Answer","text":"Stripe's events API returns events from the past 30 days. For older data, list the objects themselves, such as payment intents, by creation time."}},{"@type":"Question","name":"Should a reconciliation job use the same code as the webhook handler?","acceptedAnswer":{"@type":"Answer","text":"Yes. Share the function that updates a payment so both paths follow the same rules and cannot move a payment backwards."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to reconcile payments after missed webhooks</h1><p class="dek">Webhooks are a fast path, not a guarantee. A job that asks the provider what really happened is the safety net, and it is easy to test by turning the receiver off.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-webhooks-are-not-enough">Why webhooks are not enough</a></li><li><a href="#the-shape-of-a-job">The shape of a job</a></li><li><a href="#a-stripe-example">A Stripe example</a></li><li><a href="#testing-it-locally-with-flisk">Testing it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To recover from missed webhooks, run a reconciliation job that asks the provider for everything that changed since the last successful run, compares each item with your database, and applies the difference. The webhook is the fast path. The job is the safety net for the hours when your server was down, a deploy dropped events, or a bug returned 200 without saving anything.</p>
+
+<h2 id="why-webhooks-are-not-enough">Why webhooks are not enough</h2>
+<p>A provider retries failed deliveries for a while, but not forever. Stripe retries live-mode events for up to three days, and after that the event is not sent again by itself. Several ordinary failures fall outside any retry window or never look like failures to the provider:</p>
+<ul>
+<li>Your service was down for longer than the retry window.</li>
+<li>A handler returned 200 before saving, then crashed.</li>
+<li>A signing secret was rotated and every event was rejected for a day.</li>
+<li>An endpoint was removed or disabled in the provider's dashboard and nobody noticed.</li>
+</ul>
+<p>The result is the same each time: a customer paid, your database says unpaid. A reconciliation job finds those rows without anyone filing a ticket.</p>
+
+<h2 id="the-shape-of-a-job">The shape of a job</h2>
+<ol>
+<li>Read a cursor, the time of the last successful run. Subtract a safety margin, such as an hour, so the windows overlap.</li>
+<li>List the provider's payments created or updated since the cursor, page by page.</li>
+<li>For each one, apply it through the same guarded update your webhook handler uses, so the job and the handler cannot disagree.</li>
+<li>Store the new cursor only after the whole run succeeds.</li>
+<li>Report the number of corrections. A run that fixes many rows means something upstream is broken.</li>
+</ol>
+<p>Reusing the handler's update is the important design choice. If the job has its own rules, you end up with two sources of truth. The rank-based update from <a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/">handling out-of-order events</a> makes the job safe to run at any time, because it never moves a payment backwards.</p>
+
+<h2 id="a-stripe-example">A Stripe example</h2>
+<pre><code>import Stripe from "stripe";
+import { applyPaymentState } from "./payments.js";   // the same function the webhook uses
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+export async function reconcile(sinceUnix) {
+  let fixed = 0;
+  for await (const pi of stripe.paymentIntents.list({
+    created: { gte: sinceUnix },
+    limit: 100
+  })) {
+    const changed = await applyPaymentState(pi.id, pi.status);
+    if (changed) fixed += 1;
+  }
+  return fixed;
+}</code></pre>
+<p>The SDK's list calls paginate automatically when you iterate them, so you do not handle <code>starting_after</code> yourself. Listing payments by creation time finds payments you never heard of. To catch updates to older payments, such as a refund added later, list events instead with <code>stripe.events.list</code>, which Stripe keeps for 30 days, and apply those. Many teams do both: events for recent changes and a slower full comparison once a day.</p>
+
+<h2 id="testing-it-locally-with-flisk">Testing it locally with Flisk</h2>
+<p>The test that matters is the outage itself. Run your API as a local process, create test-mode payments while the receiver is stopped, and check that the job repairs the gap. With Flisk installed (<code>npm install -g @flisk-sh/flisk</code>), the steps are:</p>
+<pre><code>flisk up                                   # API and database running
+flisk down                                 # stop everything, as in an outage
+stripe trigger payment_intent.succeeded    # event nobody receives
+flisk up
+flisk run api -- node scripts/reconcile.js --since 1h</code></pre>
+<p><code>flisk run</code> runs the script with the environment the <code>api</code> service has, so it reads the same test key and database settings, and its exit code is the script's. Then read the log with <code>flisk logs --service api --since 10m</code> and check that the payment row now exists. Use real test-mode payments for this, because a triggered event carries made-up object IDs that do not match anything in your database.</p>
+<p>To run it on a schedule while you develop, keep the schedule in a tiny worker with a timer, as described in <a href="/@odykyi/workers-and-queues/cron-jobs-in-local-dev/">running cron jobs in local development</a>. Flisk has no built-in scheduler.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Cursor moved too early.</strong> Saving the new cursor before the run finishes hides a failure. Save it last, and keep the overlap.</li>
+<li><strong>Rate limits.</strong> A first run over a large history can hit the provider's limits. Page in small windows and back off on a 429.</li>
+<li><strong>Different rules in the job.</strong> If the job can set a status the handler would refuse, the two will fight.</li>
+<li><strong>Fixing silently.</strong> A correction is a symptom. Log each one with the payment ID, and alert when the count is above zero for several days.</li>
+<li><strong>Test mode and live mode keys mixed.</strong> A job that reads live data with a test database writes nonsense. Check the key prefix at start.</li>
+</ul>
+
+<p>When the gap came from a retried request on your side rather than a lost event, the fix is in <a href="/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/">idempotency keys for payment requests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long does Stripe retry a failed webhook?</summary><p>In live mode Stripe retries for up to three days with exponential backoff. After that you must fetch the data yourself, which is what a reconciliation job does.</p></details><details><summary>How far back can I list Stripe events?</summary><p>Stripe&#39;s events API returns events from the past 30 days. For older data, list the objects themselves, such as payment intents, by creation time.</p></details><details><summary>Should a reconciliation job use the same code as the webhook handler?</summary><p>Yes. Share the function that updates a payment so both paths follow the same rules and cannot move a payment backwards.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"><span class="lbl">Guide</span><b>How to handle out-of-order payment webhook events</b><span>The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</span></a><a href="/@odykyi/payments-and-webhooks/send-webhooks-to-your-customers/"><span class="lbl">Guide</span><b>How to build webhook delivery with signatures and retries</b><span>Receiving webhooks gets all the attention. If your product sends them, the hard parts are the retries you control and the signature your customers will verify.</span></a><a href="/@odykyi/payments-and-webhooks/stripe-test-clocks-for-subscriptions/"><span class="lbl">Guide</span><b>How to test subscription renewals with Stripe test clocks</b><span>Billing code runs on the calendar. A test clock gives it a calendar you control, and Stripe sends the same webhooks it would in a month.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

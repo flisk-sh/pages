@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to handle out-of-order payment webhook events</title>
+<meta name="description" content="Providers do not promise event order. Model the payment as a state machine, never move it backwards, and test by replaying events in reverse order.">
+<meta name="keywords" content="out of order webhooks, webhook event ordering, payment state machine, stripe webhook order not guaranteed, handle duplicate payment events">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to handle out-of-order payment webhook events">
+<meta property="og:description" content="Providers do not promise event order. Model the payment as a state machine, never move it backwards, and test by replaying events in reverse order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to handle out-of-order payment webhook events","description":"Providers do not promise event order. Model the payment as a state machine, never move it backwards, and test by replaying events in reverse order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/","keywords":"out of order webhooks, webhook event ordering, payment state machine, stripe webhook order not guaranteed, handle duplicate payment events","wordCount":819,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to handle out-of-order payment webhook events","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Stripe guarantee webhook event order?","acceptedAnswer":{"@type":"Answer","text":"No. Stripe's documentation says events may arrive in a different order than they were created, so your handler must not depend on arrival order."}},{"@type":"Question","name":"How do I stop an old event overwriting a newer payment status?","acceptedAnswer":{"@type":"Answer","text":"Give each status a rank and update only when the new rank is higher, in a single SQL statement. A stale event then changes nothing."}},{"@type":"Question","name":"Should I call the provider API from a webhook handler?","acceptedAnswer":{"@type":"Answer","text":"It is the safest way to get current state, but do it in a worker with retries. Keep the request itself fast and return success once the event is stored."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to handle out-of-order payment webhook events</h1><p class="dek">The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-order-breaks">Why order breaks</a></li><li><a href="#model-the-states-first">Model the states first</a></li><li><a href="#apply-events-with-a-guarded-update">Apply events with a guarded update</a></li><li><a href="#when-the-event-is-not-enough-fetch-the-object">When the event is not enough: fetch the object</a></li><li><a href="#test-it-by-reversing-the-events">Test it by reversing the events</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Payment providers do not guarantee that webhook events arrive in the order they happened, so a handler that applies each event as it comes can move a payment backwards, for example from "succeeded" to "processing". The reliable fix is to store the payment as a state machine with a rank per state, update it only when the new state ranks higher, and fetch the object from the provider when you need to be sure.</p>
+
+<h2 id="why-order-breaks">Why order breaks</h2>
+<p>Webhook delivery is at least once, from many workers, with retries. Event A can fail on the first attempt and be retried after event B was delivered. Stripe says this plainly in its documentation: it does not guarantee delivery in the order events were created. Your own network adds delay too, so the order you log is not the order that happened.</p>
+<p>The classic damage looks like this. A payment goes <code>processing</code> then <code>succeeded</code>. The two events arrive reversed. A naive handler sets <code>succeeded</code>, then overwrites it with <code>processing</code>, and the order never ships.</p>
+
+<h2 id="model-the-states-first">Model the states first</h2>
+<p>Write down the states and the allowed moves before writing a handler. A small set covers most payment flows:</p>
+<table>
+<thead><tr><th>State</th><th>Rank</th><th>Can move to</th></tr></thead>
+<tbody>
+<tr><td><code>created</code></td><td>10</td><td>processing, failed, succeeded</td></tr>
+<tr><td><code>processing</code></td><td>20</td><td>succeeded, failed</td></tr>
+<tr><td><code>failed</code></td><td>30</td><td>succeeded (a retry with a new card)</td></tr>
+<tr><td><code>succeeded</code></td><td>40</td><td>refunded, disputed</td></tr>
+<tr><td><code>refunded</code></td><td>50</td><td>none</td></tr>
+</tbody>
+</table>
+<p>Ranks make the rule one comparison: apply an event only if it moves the payment to a higher rank. A late <code>processing</code> arriving after <code>succeeded</code> is dropped. The exact states are yours to choose. The point is that each one has a number and the number never goes down.</p>
+
+<h2 id="apply-events-with-a-guarded-update">Apply events with a guarded update</h2>
+<p>Do the comparison in the database, in one statement, so two concurrent handlers cannot interleave a read and a write:</p>
+<pre><code>CREATE TABLE payments (
+  id          text PRIMARY KEY,
+  status      text NOT NULL,
+  status_rank int  NOT NULL,
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+UPDATE payments
+   SET status = $2, status_rank = $3, updated_at = now()
+ WHERE id = $1 AND status_rank &lt; $3;</code></pre>
+<p>If the row count is zero, either the event was stale or the payment row does not exist yet. For the second case, insert the row with the state from the event, using <code>ON CONFLICT DO NOTHING</code> first so an early event creates the record that a late "created" event finds already there.</p>
+
+<h2 id="when-the-event-is-not-enough-fetch-the-object">When the event is not enough: fetch the object</h2>
+<p>An event is a snapshot from when it was created. The simplest correct handler treats it as a hint: take the payment ID from the event, call the provider's API to get the current object, and write that. The current state cannot be stale in the way an old event can. It costs one API call per event, and it needs a retry policy for the case where the API call fails, so keep it in a worker, not in the request. With Stripe, that is <code>stripe.paymentIntents.retrieve(id)</code> followed by the guarded update.</p>
+
+<h2 id="test-it-by-reversing-the-events">Test it by reversing the events</h2>
+<p>This is the check that finds real bugs. Write a test that takes a list of events for one payment and applies them in every order, or at least in forward and reverse, and asserts the same final state. A dozen lines of test code replace a class of production incidents. It needs no provider and no network: the events are saved JSON files.</p>
+<pre><code>const events = [created, processing, succeeded];
+
+for (const order of [events, [...events].reverse(), [events[1], events[2], events[0]]]) {
+  await resetPayments();
+  for (const e of order) await post("/webhooks/demo", sign(e));
+  assert.equal((await getPayment("pay_1")).status, "succeeded");
+}</code></pre>
+<p>With Flisk, <code>flisk up</code> starts the API and its database as one stack, and <code>flisk logs --service api</code> shows which events were applied and which were dropped as stale. Make the handler log the decision, with the event ID, the current rank and the incoming rank. That one log line answers most "why is this payment stuck" questions.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Ordering by event timestamp.</strong> Two events can share a timestamp, and clocks at different workers differ. Prefer state rank, or the provider's own sequence if it gives one.</li>
+<li><strong>Ranks for states that can reopen.</strong> A failed payment can later succeed with a new card, so a failure must not freeze the record. The table above allows that by giving <code>failed</code> a lower rank than <code>succeeded</code>.</li>
+<li><strong>Side effects inside the handler.</strong> Sending a receipt when the status changes is fine once. Make it depend on the row count of the guarded update, so a dropped stale event sends nothing.</li>
+<li><strong>Handling each event type separately with no shared record.</strong> A <code>charge.refunded</code> that arrives before you have stored the charge needs somewhere to land. Create the row on first sight.</li>
+</ul>
+
+<p>Duplicates are a separate problem with a separate fix, covered in <a href="/@odykyi/workers-and-queues/test-webhooks-locally/">testing webhooks locally</a>. When even the guarded handler cannot recover because an event never came, see <a href="/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/">reconciling payments after missed webhooks</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Stripe guarantee webhook event order?</summary><p>No. Stripe&#39;s documentation says events may arrive in a different order than they were created, so your handler must not depend on arrival order.</p></details><details><summary>How do I stop an old event overwriting a newer payment status?</summary><p>Give each status a rank and update only when the new rank is higher, in a single SQL statement. A stale event then changes nothing.</p></details><details><summary>Should I call the provider API from a webhook handler?</summary><p>It is the safest way to get current state, but do it in a worker with retries. Keep the request itself fast and return success once the event is stored.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/"><span class="lbl">Guide</span><b>Webhook signature verification fails: use the raw request body</b><span>The signature covers the exact bytes the provider sent. Once a framework has parsed and re-serialized them, no key can make the check pass.</span></a><a href="/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/"><span class="lbl">Guide</span><b>How to add idempotency keys to a payment API endpoint</b><span>A client that times out will retry, and a customer who is impatient will click twice. An idempotency key turns both into the same single charge.</span></a><a href="/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/"><span class="lbl">Guide</span><b>How to reconcile payments after missed webhooks</b><span>Webhooks are a fast path, not a guarantee. A job that asks the provider what really happened is the safety net, and it is easy to test by turning the receiver off.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

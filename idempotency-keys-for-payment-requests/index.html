@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to add idempotency keys to a payment API endpoint</title>
+<meta name="description" content="Make a charge endpoint safe to retry: store each Idempotency-Key with a request hash and the saved response, and test double clicks and timeouts locally.">
+<meta name="keywords" content="idempotency key payment api, idempotency-key header, prevent duplicate payments, idempotent post endpoint, stripe idempotency key">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to add idempotency keys to a payment API endpoint">
+<meta property="og:description" content="Make a charge endpoint safe to retry: store each Idempotency-Key with a request hash and the saved response, and test double clicks and timeouts locally.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to add idempotency keys to a payment API endpoint","description":"Make a charge endpoint safe to retry: store each Idempotency-Key with a request hash and the saved response, and test double clicks and timeouts locally.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/","keywords":"idempotency key payment api, idempotency-key header, prevent duplicate payments, idempotent post endpoint, stripe idempotency key","wordCount":968,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to add idempotency keys to a payment API endpoint","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is an Idempotency-Key header?","acceptedAnswer":{"@type":"Answer","text":"A unique value the client sends with a POST so the server can recognise a retry. The server runs the operation once for that key and returns the saved response for repeats."}},{"@type":"Question","name":"Who should generate the idempotency key?","acceptedAnswer":{"@type":"Answer","text":"The client. It creates one key per user action, for example a UUID, and reuses it on every retry of that action. A server that makes up its own key cannot tell a retry from a new request."}},{"@type":"Question","name":"How long should I keep idempotency keys?","acceptedAnswer":{"@type":"Answer","text":"Long enough to cover your longest realistic retry. Stripe keeps its keys for at least 24 hours. Delete older rows with a scheduled cleanup."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to add idempotency keys to a payment API endpoint</h1><p class="dek">A client that times out will retry, and a customer who is impatient will click twice. An idempotency key turns both into the same single charge.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-goes-wrong-without-a-key">What goes wrong without a key</a></li><li><a href="#the-rules-your-endpoint-needs">The rules your endpoint needs</a></li><li><a href="#a-table-and-a-handler">A table and a handler</a></li><li><a href="#testing-it-locally-with-flisk">Testing it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To make a payment endpoint safe to retry, require an <code>Idempotency-Key</code> header, store the key with a hash of the request in a table with a unique constraint, run the charge only for the request that inserted the key, and give every later request with that key the saved response. A retry after a timeout then repeats the answer instead of the charge.</p>
+
+<h2 id="what-goes-wrong-without-a-key">What goes wrong without a key</h2>
+<p>A POST that creates a charge is not safe to repeat. Three ordinary events repeat it anyway:</p>
+<ul>
+<li>The client sends the request, the server charges the card, and the response is lost. The client retries.</li>
+<li>The customer double-clicks "Pay".</li>
+<li>A mobile client resends a queued request after reconnecting.</li>
+</ul>
+<p>In each case the server cannot tell a retry from a second purchase, because the two look identical. The client has to say which it is, and the key is how it says so: the same key means "this is the same attempt".</p>
+
+<h2 id="the-rules-your-endpoint-needs">The rules your endpoint needs</h2>
+<ol>
+<li><strong>The client generates the key</strong>, usually a UUID, once per user intent, and reuses it for every retry of that intent.</li>
+<li><strong>The same key with the same request</strong> returns the saved result, including a saved error, without doing the work again.</li>
+<li><strong>The same key with a different request body</strong> is a client bug. Refuse it with a 422 rather than guessing.</li>
+<li><strong>The same key while the first request is still running</strong> returns 409, so two parallel requests cannot both charge.</li>
+<li><strong>Keys expire.</strong> Stripe keeps its keys for at least 24 hours. Pick a window that covers your longest realistic retry.</li>
+</ol>
+
+<h2 id="a-table-and-a-handler">A table and a handler</h2>
+<pre><code>CREATE TABLE idempotency_keys (
+  key           text PRIMARY KEY,
+  request_hash  text NOT NULL,
+  status        text NOT NULL DEFAULT 'started',   -- started | done
+  response_code int,
+  response_body jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+<p>The unique primary key does the real work. Two parallel requests race on the insert, and the database lets exactly one win:</p>
+<pre><code>import { createHash } from "node:crypto";
+
+app.post("/payments", async (req, res) =&gt; {
+  const key = req.get("idempotency-key");
+  if (!key) return res.status(400).json({ error: "Idempotency-Key required" });
+
+  const hash = createHash("sha256").update(JSON.stringify(req.body)).digest("hex");
+
+  const ins = await db.query(
+    `INSERT INTO idempotency_keys (key, request_hash)
+     VALUES ($1, $2) ON CONFLICT (key) DO NOTHING RETURNING key`,
+    [key, hash]);
+
+  if (ins.rowCount === 0) {
+    const { rows: [row] } = await db.query(
+      "SELECT * FROM idempotency_keys WHERE key = $1", [key]);
+    if (row.request_hash !== hash) return res.status(422).json({ error: "key reused with a different request" });
+    if (row.status === "done") return res.status(row.response_code).json(row.response_body);
+    return res.status(409).json({ error: "request in progress" });
+  }
+
+  // First request with this key: do the work, passing a stable key downstream
+  const intent = await stripe.paymentIntents.create(
+    { amount: req.body.amount, currency: "usd", payment_method: req.body.pm, confirm: true },
+    { idempotencyKey: "order-" + req.body.orderId });
+
+  const body = { id: intent.id, status: intent.status };
+  await db.query(
+    "UPDATE idempotency_keys SET status = 'done', response_code = 200, response_body = $2 WHERE key = $1",
+    [key, body]);
+  res.json(body);
+});</code></pre>
+<p>Two details matter here. First, the downstream key is derived from your own order, not copied from the client, so even if your own table were lost the provider would still refuse a second charge for the same order. Second, a request that crashes between the insert and the update leaves a row stuck in <code>started</code>. Decide what that means for you: a sweeper that clears old <code>started</code> rows, or a timestamp check that lets a retry take over after a minute.</p>
+
+<h2 id="testing-it-locally-with-flisk">Testing it locally with Flisk</h2>
+<p>This needs a real Postgres, because the guarantee comes from the unique constraint and a mock would hide a missing one. Flisk can run your API as a local process and Postgres as a ready-made image beside it. Install with <code>npm install -g @flisk-sh/flisk</code>. The Postgres service, in <code>postgres/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "postgres",
+  "appType": "bring-your-own",
+  "image": "postgres:17-alpine",
+  "port": 5432,
+  "env": { "POSTGRES_USER": "${POSTGRES_USER}", "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}", "POSTGRES_DB": "app" },
+  "healthCheck": { "command": ["pg_isready", "-U", "${POSTGRES_USER}"] },
+  "volumes": [{ "source": "postgres", "target": "/var/lib/postgresql/data", "name": "pay_postgres" }]
+}</code></pre>
+<p>And the API, in <code>api/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["postgres"],
+  "env": {
+    "DATABASE_URL": "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/app",
+    "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY}"
+  }
+}</code></pre>
+<p>Put <code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code> and the Stripe test key in the project <code>.env</code>. Docker must be running for the Postgres image, and the API needs only Node. <code>flisk up</code> starts the database first and the API once the database answers <code>pg_isready</code>. The mount path above is right for Postgres 17 and older; from Postgres 18 it must be <code>/var/lib/postgresql</code>.</p>
+<p>Then fire the same request twice at once:</p>
+<pre><code>for i in 1 2; do
+  curl -s -X POST http://localhost:4000/payments \
+    -H "Idempotency-Key: demo-123" -H "Content-Type: application/json" \
+    -d '{"amount":2000,"pm":"pm_card_visa","orderId":"o-1"}' &amp;
+done; wait</code></pre>
+<p>Expect one 200 and one 409, or two identical 200 responses if the first finished before the second arrived. Either way, the Stripe dashboard in test mode shows one payment. Run it again with a different <code>amount</code> and the same key to see the 422.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Hashing the parsed body.</strong> Two equal requests with different key order hash differently. Canonicalize the JSON, or hash only the fields that define the intent.</li>
+<li><strong>Saving only successes.</strong> If you save nothing for a failed charge, a retry charges again after a decline that already happened. Save the outcome, then let the client choose a new key to try again.</li>
+<li><strong>Keys scoped globally.</strong> Scope the key to the authenticated account, or one customer can collide with another's key.</li>
+<li><strong>Applying it to GET.</strong> Reads are already safe to repeat. Stripe ignores the header on them.</li>
+</ul>
+
+<p>The key stops duplicate requests. It does not stop duplicate events coming back the other way, which is a separate problem: <a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/">handling out-of-order payment webhooks</a> covers that side. Database setup details are in <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is an Idempotency-Key header?</summary><p>A unique value the client sends with a POST so the server can recognise a retry. The server runs the operation once for that key and returns the saved response for repeats.</p></details><details><summary>Who should generate the idempotency key?</summary><p>The client. It creates one key per user action, for example a UUID, and reuses it on every retry of that action. A server that makes up its own key cannot tell a retry from a new request.</p></details><details><summary>How long should I keep idempotency keys?</summary><p>Long enough to cover your longest realistic retry. Stripe keeps its keys for at least 24 hours. Delete older rows with a scheduled cleanup.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"><span class="lbl">Guide</span><b>How to handle out-of-order payment webhook events</b><span>The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</span></a><a href="/@odykyi/payments-and-webhooks/reconcile-payments-after-missed-webhooks/"><span class="lbl">Guide</span><b>How to reconcile payments after missed webhooks</b><span>Webhooks are a fast path, not a guarantee. A job that asks the provider what really happened is the safety net, and it is easy to test by turning the receiver off.</span></a><a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/"><span class="lbl">Guide</span><b>How to test Stripe payments locally in test mode</b><span>You do not need a public URL or a live account to test a payment end to end. You need test keys, one forwarding command and an endpoint that checks signatures.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

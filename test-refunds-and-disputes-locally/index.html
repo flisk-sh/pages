@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test refunds and chargebacks in Stripe test mode</title>
+<meta name="description" content="Create full and partial refunds from code, trigger a dispute with a test card, simulate winning or losing it, and make your handlers react to each event.">
+<meta name="keywords" content="test stripe refund, stripe test dispute, charge.dispute.created test, stripe chargeback test card, partial refund stripe test">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test refunds and chargebacks in Stripe test mode">
+<meta property="og:description" content="Create full and partial refunds from code, trigger a dispute with a test card, simulate winning or losing it, and make your handlers react to each event.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test refunds and chargebacks in Stripe test mode","description":"Create full and partial refunds from code, trigger a dispute with a test card, simulate winning or losing it, and make your handlers react to each event.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/","keywords":"test stripe refund, stripe test dispute, charge.dispute.created test, stripe chargeback test card, partial refund stripe test","wordCount":731,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to test refunds and chargebacks in Stripe test mode","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/test-refunds-and-disputes-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I create a dispute in Stripe test mode?","acceptedAnswer":{"@type":"Answer","text":"Pay with the test card 4000 0000 0000 0259. The payment succeeds and then a dispute is created, which sends a charge.dispute.created event to your webhook endpoint."}},{"@type":"Question","name":"How do I make a test dispute win or lose?","acceptedAnswer":{"@type":"Answer","text":"Submit evidence with uncategorized_text set to winning_evidence or losing_evidence, as Stripe's testing documentation describes, and the dispute resolves accordingly."}},{"@type":"Question","name":"Can I refund part of a payment in test mode?","acceptedAnswer":{"@type":"Answer","text":"Yes. Pass an amount smaller than the payment to the refunds API. You can refund again until the total reaches the original amount."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to test refunds and chargebacks in Stripe test mode</h1><p class="dek">Money going back out is where order, ledger and email logic disagree. Stripe test mode can produce every one of these events on demand.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#refunds">Refunds</a></li><li><a href="#disputes">Disputes</a></li><li><a href="#running-it-with-flisk">Running it with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>In Stripe test mode you can create a refund with the API, trigger a dispute by paying with card 4000 0000 0000 0259, and then submit test evidence that makes the dispute win or lose. Each step sends the same kind of event a live account would, so you can check that your order status, stock and emails respond correctly before any real money is involved.</p>
+
+<h2 id="refunds">Refunds</h2>
+<p>A refund is a request to return money for a charge, created from your server. Full and partial refunds use the same call:</p>
+<pre><code>// full refund
+await stripe.refunds.create({ payment_intent: "pi_123" },
+  { idempotencyKey: "refund-order-42" });
+
+// partial refund of 5.00
+await stripe.refunds.create({ payment_intent: "pi_123", amount: 500 },
+  { idempotencyKey: "refund-order-42-part-1" });</code></pre>
+<p>Give every refund an idempotency key derived from your own record, as in <a href="/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/">idempotency keys for payment requests</a>. A double-clicked "Refund" button should return money once. Stripe also refuses to refund more than the remaining amount, so a test for the second partial refund that exceeds the balance should expect an error.</p>
+<p>What to check after a refund:</p>
+<ul>
+<li>You receive <code>charge.refunded</code>. Stripe also has refund-specific events. Check the current event list in its documentation for the ones you want.</li>
+<li>A partial refund leaves the order in a state that still says "paid, partly refunded", not "refunded".</li>
+<li>Stock is returned once, even if the event arrives twice.</li>
+<li>The customer email goes out once.</li>
+</ul>
+
+<h2 id="disputes">Disputes</h2>
+<p>A dispute, also called a chargeback, starts when a cardholder challenges a payment with their bank. Pay with the test card 4000 0000 0000 0259. The payment succeeds, then a dispute is opened and your endpoint receives <code>charge.dispute.created</code>. You can also send the event alone with the CLI:</p>
+<pre><code>stripe trigger charge.dispute.created</code></pre>
+<p>As with every triggered event, the object IDs are made up, so use the card when you need your own records to match.</p>
+<p>To test the outcome, submit evidence through the API with special text. According to Stripe's testing documentation, an <code>uncategorized_text</code> of <code>winning_evidence</code> makes the dispute resolve in your favour and <code>losing_evidence</code> makes it resolve against you:</p>
+<pre><code>await stripe.disputes.update(disputeId, {
+  evidence: { uncategorized_text: "winning_evidence" },
+  submit: true
+});</code></pre>
+<p>Then watch for the closing event, <code>charge.dispute.closed</code>, whose <code>status</code> tells you whether you won or lost. Funds movement events such as <code>charge.dispute.funds_withdrawn</code> and <code>charge.dispute.funds_reinstated</code> follow the same path. Confirm the names against the Stripe event reference, since the list grows.</p>
+<p>Your handler should do three things on a new dispute: mark the order as disputed so it does not ship, put a task in front of a human with the deadline for evidence, and avoid refunding it, since refunding a disputed payment does not always cancel the dispute.</p>
+
+<h2 id="running-it-with-flisk">Running it with Flisk</h2>
+<p>The events reach your laptop through <code>stripe listen --forward-to localhost:4000/webhooks/stripe</code>, as in <a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/">testing Stripe payments locally</a>. Flisk runs the API and its database as a stack with <code>flisk up</code>. Two commands help during this work. <code>flisk logs --service api --since 10m</code> shows how your handler treated each event in time order, and <code>flisk run</code> starts a scenario script with the service's own environment:</p>
+<pre><code>flisk run api -- node scripts/dispute-scenario.js</code></pre>
+<p>The script pays with the dispute card, waits for the event, submits losing evidence and asserts the order's final state. It exits with a non-zero code when an assertion fails, which <code>flisk run</code> passes along. The same command works in a CI job. Install Flisk with <code>npm install -g @flisk-sh/flisk</code>. Flisk does not simulate disputes. Stripe does, and Flisk keeps your side of the test in one place.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Refund and event race.</strong> The refund API call returns before your webhook arrives. If your code updates the order on both, make the update the same guarded, repeatable one so the second does nothing.</li>
+<li><strong>Currency units.</strong> Amounts are in the smallest unit, so 500 means 5.00 in a two-decimal currency. Zero-decimal currencies differ.</li>
+<li><strong>Assuming a dispute means fraud.</strong> Customers also dispute because they do not recognise the descriptor. Your handling should collect evidence, not auto-block the account.</li>
+<li><strong>Test-only outcomes.</strong> The special evidence text works in test mode. Live disputes are decided by the bank, over weeks.</li>
+<li><strong>Not testing the lost case.</strong> A won dispute needs little. A lost one removes money and may need accounting entries, so test it first.</li>
+</ul>
+
+<p>For the broader set of failure cards that come before this stage, see <a href="/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/">Stripe test cards for declines and 3D Secure</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I create a dispute in Stripe test mode?</summary><p>Pay with the test card 4000 0000 0000 0259. The payment succeeds and then a dispute is created, which sends a charge.dispute.created event to your webhook endpoint.</p></details><details><summary>How do I make a test dispute win or lose?</summary><p>Submit evidence with uncategorized_text set to winning_evidence or losing_evidence, as Stripe&#39;s testing documentation describes, and the dispute resolves accordingly.</p></details><details><summary>Can I refund part of a payment in test mode?</summary><p>Yes. Pass an amount smaller than the payment to the refunds API. You can refund again until the total reaches the original amount.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/"><span class="lbl">Guide</span><b>Stripe test cards for declines, 3D Secure and insufficient funds</b><span>A payment flow that only ever sees 4242 4242 4242 4242 is untested. These are the cards that make Stripe fail on purpose, and what your code should do with each.</span></a><a href="/@odykyi/payments-and-webhooks/idempotency-keys-for-payment-requests/"><span class="lbl">Guide</span><b>How to add idempotency keys to a payment API endpoint</b><span>A client that times out will retry, and a customer who is impatient will click twice. An idempotency key turns both into the same single charge.</span></a><a href="/@odykyi/payments-and-webhooks/payment-status-and-out-of-order-webhooks/"><span class="lbl">Guide</span><b>How to handle out-of-order payment webhook events</b><span>The event that says a payment succeeded can arrive before the event that says it was created. Your handler has to give the same result either way.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

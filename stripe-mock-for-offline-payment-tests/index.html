@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run stripe-mock for offline payment tests</title>
+<meta name="description" content="stripe-mock is a local fake of the Stripe API. Run it in Docker, point your SDK at port 12111, and test request shapes in CI with no account and no internet.">
+<meta name="keywords" content="stripe-mock, stripe mock server docker, test stripe without internet, stripe api emulator local, mock stripe api ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-mock-for-offline-payment-tests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run stripe-mock for offline payment tests">
+<meta property="og:description" content="stripe-mock is a local fake of the Stripe API. Run it in Docker, point your SDK at port 12111, and test request shapes in CI with no account and no internet.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-mock-for-offline-payment-tests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run stripe-mock for offline payment tests","description":"stripe-mock is a local fake of the Stripe API. Run it in Docker, point your SDK at port 12111, and test request shapes in CI with no account and no internet.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-mock-for-offline-payment-tests/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-mock-for-offline-payment-tests/","keywords":"stripe-mock, stripe mock server docker, test stripe without internet, stripe api emulator local, mock stripe api ci","wordCount":753,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Payments and webhooks locally","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/"},{"@type":"ListItem","position":3,"name":"How to run stripe-mock for offline payment tests","item":"https://pages.flisk.si/@odykyi/payments-and-webhooks/stripe-mock-for-offline-payment-tests/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is stripe-mock?","acceptedAnswer":{"@type":"Answer","text":"A server from Stripe that validates requests against the Stripe OpenAPI spec and returns example responses. It runs locally, usually through the stripe/stripe-mock Docker image."}},{"@type":"Question","name":"Does stripe-mock send webhooks?","acceptedAnswer":{"@type":"Answer","text":"No. It is stateless and only answers API calls. To test a webhook handler, send signed fixture events yourself or use the Stripe CLI in test mode."}},{"@type":"Question","name":"Which port does stripe-mock use?","acceptedAnswer":{"@type":"Answer","text":"It serves HTTP on port 12111 and HTTPS on port 12112 by default."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/payments-and-webhooks/">Payments and webhooks locally</a></div>
+<section class="hero"><div><div class="lbl">Payments and webhooks locally</div><h1>How to run stripe-mock for offline payment tests</h1><p class="dek">Sometimes you want to know that your code builds a valid Stripe request, not that Stripe charges a card. A local fake answers that in milliseconds.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-it-is-good-for-and-what-it-is-not">What it is good for, and what it is not</a></li><li><a href="#running-it">Running it</a></li><li><a href="#pointing-the-sdk-at-it">Pointing the SDK at it</a></li><li><a href="#running-it-with-flisk">Running it with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>stripe-mock is a small server from Stripe that answers Stripe API calls from Stripe's own OpenAPI spec. Run its Docker image, point your SDK at <code>localhost:12111</code>, and your code gets valid-shaped responses with no account, no network and no rate limits. It checks that your requests are well formed. It does not remember anything between calls and it does not send webhooks.</p>
+
+<h2 id="what-it-is-good-for-and-what-it-is-not">What it is good for, and what it is not</h2>
+<p>The mock validates each request against the spec and returns an example response for that endpoint. That makes it good for three jobs:</p>
+<ul>
+<li><strong>Catching bad requests.</strong> A misspelled parameter or a wrong type returns an error, the same as Stripe would.</li>
+<li><strong>Fast, offline CI.</strong> No secret in the pipeline, no flaky network, no test-account state to clean up.</li>
+<li><strong>Unit-level tests of your wrapper code</strong> that builds line items, handles error shapes or maps statuses.</li>
+</ul>
+<p>It is the wrong tool for behaviour. It is stateless, so creating a customer and then fetching that customer does not return the customer you created. It does not run a card network, so there are no declines and no 3D Secure. And it sends no events, so your webhook handler never gets called by it. For those, use Stripe's test mode with the CLI: <a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/">testing Stripe payments locally</a>.</p>
+
+<h2 id="running-it">Running it</h2>
+<pre><code>docker run --rm -p 12111:12111 stripe/stripe-mock:v0.206.0</code></pre>
+<p>Pin a version tag instead of <code>latest</code>, so a spec update does not change your test results on a day you did not touch the code. The server listens for HTTP on 12111 and HTTPS on 12112. A request needs an <code>Authorization</code> header with a test key. The mock accepts <code>sk_test_</code> followed by letters or digits, and an underscore after that prefix is rejected with a 401, so <code>sk_test_flisklocal</code> works and <code>sk_test_my_key</code> does not. Check it:</p>
+<pre><code>curl -s http://localhost:12111/v1/customers \
+  -H "Authorization: Bearer sk_test_flisklocal" -d email=a@example.com</code></pre>
+
+<h2 id="pointing-the-sdk-at-it">Pointing the SDK at it</h2>
+<p>With the Node SDK, set the host, port and protocol when you build the client:</p>
+<pre><code>import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, process.env.STRIPE_API_BASE
+  ? { host: "localhost", port: 12111, protocol: "http" }
+  : {});</code></pre>
+<p>Reading the base from an environment variable lets the same code talk to the mock in tests and to Stripe elsewhere. Other official SDKs have an equivalent setting for the API base URL. Look for it by name in the SDK's README, because the option differs per language.</p>
+
+<h2 id="running-it-with-flisk">Running it with Flisk</h2>
+<p>Flisk can start the mock next to your API in one command. A ready-made image with no <code>command</code> runs with <code>docker run</code> beside local processes, so Docker must be running, but your own code needs only Node. Install with <code>npm install -g @flisk-sh/flisk</code>. In <code>stripe-mock/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "stripe-mock",
+  "appType": "bring-your-own",
+  "image": "stripe/stripe-mock:v0.206.0",
+  "port": 12111
+}</code></pre>
+<p>And in <code>api/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["stripe-mock"],
+  "env": {
+    "STRIPE_API_BASE": "http://localhost:12111",
+    "STRIPE_SECRET_KEY": "${STRIPE_SECRET_KEY:-sk_test_flisklocal}"
+  }
+}</code></pre>
+<p>The <code>:-</code> form gives a default when the variable is unset, so a fresh checkout works without a real key. Check the plan first:</p>
+<pre><code>flisk up --dry-run</code></pre>
+<p>It prints that it would start two services, with <code>stripe-mock</code> through <code>docker run</code> and <code>api</code> after it. Then <code>flisk up</code> starts both. In this mode the container publishes its port on <code>127.0.0.1</code> at the same number, so a local process reaches it at <code>localhost:12111</code>, not by the service name. <code>flisk logs --service stripe-mock</code> shows the mock's request log, which is handy for seeing exactly what your code sent.</p>
+<p>If you run your API in a container instead, the Docker network gives the mock a hostname equal to its resource name, <code>http://stripe-mock:12111</code>. Do not mix the two: use <code>localhost</code> for local processes and the resource name for containers.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Trusting a green test.</strong> The mock returns example data, so it passes any logic that does not look at the response closely. Assert on what you send, and test business behaviour against test mode.</li>
+<li><strong>Stale spec.</strong> A new Stripe field is unknown to an old mock version. If a new parameter returns an error, bump the pinned tag.</li>
+<li><strong>Silent fallback.</strong> If the base URL variable is empty, the SDK goes to Stripe's real API. Fail the test run when a mock was expected and the variable is missing.</li>
+<li><strong>Expecting webhooks.</strong> There are none. Send your own signed fixtures, as in <a href="/@odykyi/workers-and-queues/test-webhooks-locally/">testing webhooks locally</a>.</li>
+</ul>
+
+<p>The decision of when a fake is enough is covered more generally in <a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/">mock or run the real service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is stripe-mock?</summary><p>A server from Stripe that validates requests against the Stripe OpenAPI spec and returns example responses. It runs locally, usually through the stripe/stripe-mock Docker image.</p></details><details><summary>Does stripe-mock send webhooks?</summary><p>No. It is stateless and only answers API calls. To test a webhook handler, send signed fixture events yourself or use the Stripe CLI in test mode.</p></details><details><summary>Which port does stripe-mock use?</summary><p>It serves HTTP on port 12111 and HTTPS on port 12112 by default.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Payments and webhooks locally</span></div>
+<div class="rgrid"><a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/"><span class="lbl">Guide</span><b>How to test Stripe payments locally in test mode</b><span>You do not need a public URL or a live account to test a payment end to end. You need test keys, one forwarding command and an endpoint that checks signatures.</span></a><a href="/@odykyi/payments-and-webhooks/webhook-signature-needs-the-raw-body/"><span class="lbl">Guide</span><b>Webhook signature verification fails: use the raw request body</b><span>The signature covers the exact bytes the provider sent. Once a framework has parsed and re-serialized them, no key can make the check pass.</span></a><a href="/@odykyi/payments-and-webhooks/stripe-test-cards-declines-and-3d-secure/"><span class="lbl">Guide</span><b>Stripe test cards for declines, 3D Secure and insufficient funds</b><span>A payment flow that only ever sees 4242 4242 4242 4242 is untested. These are the cards that make Stripe fail on purpose, and what your code should do with each.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
