@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Keep secrets out of local logs</title>
+<meta name="description" content="Stop API keys, tokens and passwords reaching logs: redact fields in pino, keep values in the environment and learn what flisk logs masks and what it does not.">
+<meta name="keywords" content="log redaction, secrets, pino redact, env vars, flisk logs">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/observability-local/keep-secrets-out-of-logs/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Keep secrets out of local logs">
+<meta property="og:description" content="Stop API keys, tokens and passwords reaching logs: redact fields in pino, keep values in the environment and learn what flisk logs masks and what it does not.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/observability-local/keep-secrets-out-of-logs/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Keep secrets out of local logs","description":"Stop API keys, tokens and passwords reaching logs: redact fields in pino, keep values in the environment and learn what flisk logs masks and what it does not.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/observability-local/keep-secrets-out-of-logs/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/observability-local/keep-secrets-out-of-logs/","keywords":"log redaction, secrets, pino redact, env vars, flisk logs","wordCount":848,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Logs, traces and metrics locally","item":"https://pages.flisk.si/@odykyi/observability-local/"},{"@type":"ListItem","position":3,"name":"Keep secrets out of local logs","item":"https://pages.flisk.si/@odykyi/observability-local/keep-secrets-out-of-logs/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk logs hide secrets?","acceptedAnswer":{"@type":"Answer","text":"It replaces values from the project .env that are 8 characters or longer with [REDACTED]. It matches exact values only."}},{"@type":"Question","name":"Is redaction enough?","acceptedAnswer":{"@type":"Answer","text":"No. It only catches field names you listed. Avoid logging whole request or config objects."}},{"@type":"Question","name":"What if a secret already leaked into a log?","acceptedAnswer":{"@type":"Answer","text":"Rotate the credential. Removing the log line does not undo exposure."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/observability-local/">Logs, traces and metrics locally</a></div>
+<section class="hero"><div><div class="lbl">Logs, traces and metrics locally</div><h1>Keep secrets out of local logs</h1><p class="dek">Most leaks come from logging whole objects. Allow-list fields and redact the rest.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-secrets-end-up-in-logs">How secrets end up in logs</a></li><li><a href="#redact-in-the-logger">Redact in the logger</a></li><li><a href="#keep-the-secrets-out-of-the-repository-too">Keep the secrets out of the repository, too</a></li><li><a href="#what-flisk-does-with-secrets-in-log-output">What Flisk does with secrets in log output</a></li><li><a href="#check-what-you-already-log">Check what you already log</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Stop secrets at the source: never log whole request objects, headers, config or environment dumps, and add a redaction rule to your logger for the fields that remain risky (authorization headers, cookies, passwords, tokens). Treat any log file as something that will be pasted into a chat, an issue or a bug report, because it will be.</p>
+
+<h2 id="how-secrets-end-up-in-logs">How secrets end up in logs</h2>
+<p>Almost nobody writes <code>log.info(apiKey)</code>. The leaks are indirect:</p>
+<ul>
+<li>Logging a whole request, response or error object. HTTP clients often attach the full request, including the <code>Authorization</code> header, to the error they throw.</li>
+<li>Printing the configuration at startup to "see what the service got". That prints database passwords and API keys together.</li>
+<li>Connection strings in error messages, such as <code>postgres://user:password@host/db</code>.</li>
+<li>Debug logging left on, which logs request bodies, including login forms.</li>
+<li>Stack traces from a library that includes its arguments.</li>
+</ul>
+<p>Local logs feel harmless, since the keys are development keys. But development logs get shared, and a habit formed on your laptop carries to production. Some "development" keys are also real keys to a real third-party account.</p>
+
+<h2 id="redact-in-the-logger">Redact in the logger</h2>
+<p>Most structured loggers can censor named fields before they are written. In pino:</p>
+<pre><code>const pino = require("pino");
+
+module.exports = pino({
+  redact: {
+    paths: [
+      "req.headers.authorization",
+      "req.headers.cookie",
+      "res.headers['set-cookie']",
+      "*.password",
+      "*.token",
+      "config.databaseUrl",
+    ],
+    censor: "[redacted]",
+  },
+});</code></pre>
+<p>A path names a field by where it sits in the logged object; <code>*</code> matches one level of any key. This is a safety net, not a substitute for care. It only catches names you listed, so a new field called <code>apiSecret</code> passes straight through. Allow-list instead where you can: log the fields you chose, not the whole object. <a href="/@odykyi/observability-local/structured-json-logs-node/">Structured JSON logs in Node.js</a> shows the logger setup this builds on.</p>
+<p>In Python, use a <code>logging.Filter</code> that rewrites records, or a structured logger such as structlog with a processor that drops keys. The shape is the same: a list of names, applied in one place.</p>
+
+<h2 id="keep-the-secrets-out-of-the-repository-too">Keep the secrets out of the repository, too</h2>
+<p>Redaction is the second line of defence. The first is that a secret lives in one place, outside git, and reaches the process through the environment. Flisk's service files support that: <code>env</code> values may refer to <code>${VAR}</code>, which it fills from your shell or the git-ignored project <code>.env</code>, and <code>secrets.required</code> names variables that must exist:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "payments",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "env": { "STRIPE_API_KEY": "${STRIPE_API_KEY}" },
+  "secrets": { "required": ["STRIPE_API_KEY"] }
+}</code></pre>
+<p>Only the name is in <code>service.json</code>, so the file is safe to commit. The guide on <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">keeping env var names, not values, in config</a> goes further. A key that is only needed for local development, such as an auth signing secret, can be generated: <code>secrets.generate</code> with a value like <code>"hex:32"</code> makes Flisk append a random value to the project <code>.env</code> the first time you run <code>flisk up</code>, and it prints the names, never the values.</p>
+
+<h2 id="what-flisk-does-with-secrets-in-log-output">What Flisk does with secrets in log output</h2>
+<p>Flisk's changelog and assurance notes say <code>flisk logs</code> replaces any value from the project <code>.env</code> that is 8 characters or longer with <code>[REDACTED]</code> before it prints, and that <code>flisk doctor --json</code> and error messages do the same. This is useful when you copy a snapshot into an issue:</p>
+<pre><code>flisk logs --service payments --since 10m</code></pre>
+<p>Know the limits. The check is an exact match of the value as it appears in <code>.env</code>. A value that your code transforms (base64, URL-encoded, split in two) will not match. Values shorter than 8 characters are not touched. A secret that is in your shell but not in the <code>.env</code> file is not known to it. And it applies to what <code>flisk logs</code> prints: the log files themselves, such as <code>.flisk/native/logs/&lt;service&gt;.log</code> for local processes, and the Docker or Tilt logs are written as your service produced them. Think of it as a safety net for sharing, not for storage.</p>
+
+<h2 id="check-what-you-already-log">Check what you already log</h2>
+<p>Run the service, exercise the login and payment paths, and search the output for the secrets you use:</p>
+<pre><code>flisk logs --since 10m | grep -i -E "authorization|bearer|password|token"</code></pre>
+<p>Because <code>flisk logs</code> already masks values from <code>.env</code>, a match here means the secret is leaking in a form it did not recognise, or the word appears in a header name only. Read the lines. If you do not use Flisk, run the same <code>grep</code> over your service output. For credentials that were already pasted somewhere, rotate them; deleting the log line does not undo a leak.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Debug logs in shared environments.</strong> Keep <code>LOG_LEVEL=debug</code> out of anything that other people can read.</li>
+<li><strong>Redacting after the fact.</strong> Scrubbing a log file later is unreliable. Prevent the write.</li>
+<li><strong>Trace attributes.</strong> If you add OpenTelemetry attributes from request data, the same rules apply: they are stored in the tracing backend.</li>
+<li><strong>Errors from libraries.</strong> Wrap them and log the code and message, not the whole error object, when the library is known to attach its inputs.</li>
+</ul>
+
+<p>For ways to share logs safely with teammates and tools, see <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">reading logs from every service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk logs hide secrets?</summary><p>It replaces values from the project .env that are 8 characters or longer with [REDACTED]. It matches exact values only.</p></details><details><summary>Is redaction enough?</summary><p>No. It only catches field names you listed. Avoid logging whole request or config objects.</p></details><details><summary>What if a secret already leaked into a log?</summary><p>Rotate the credential. Removing the log line does not undo exposure.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Logs, traces and metrics locally</span></div>
+<div class="rgrid"><a href="/@odykyi/observability-local/structured-json-logs-node/"><span class="lbl">Guide</span><b>Structured JSON logs in Node.js with pino</b><span>One JSON object per line turns logs from text you scroll into data you can search.</span></a><a href="/@odykyi/observability-local/limit-container-log-size/"><span class="lbl">Guide</span><b>Limit Docker container log size with log rotation</b><span>Docker keeps every log line by default. Two options put a ceiling on it.</span></a><a href="/@odykyi/observability-local/opentelemetry-traces-node-jaeger/"><span class="lbl">Guide</span><b>OpenTelemetry traces for Node.js with Jaeger</b><span>Add tracing to a Node.js service in one file and read the spans in Jaeger.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

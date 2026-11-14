@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Structured JSON logs in Node.js with pino</title>
+<meta name="description" content="Switch a Node.js service to structured JSON logs with pino: levels, child loggers, pretty output for development and how to filter lines with jq.">
+<meta name="keywords" content="structured logging, pino, node.js logs, json logs, jq">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/observability-local/structured-json-logs-node/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Structured JSON logs in Node.js with pino">
+<meta property="og:description" content="Switch a Node.js service to structured JSON logs with pino: levels, child loggers, pretty output for development and how to filter lines with jq.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/observability-local/structured-json-logs-node/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Structured JSON logs in Node.js with pino","description":"Switch a Node.js service to structured JSON logs with pino: levels, child loggers, pretty output for development and how to filter lines with jq.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/observability-local/structured-json-logs-node/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/observability-local/structured-json-logs-node/","keywords":"structured logging, pino, node.js logs, json logs, jq","wordCount":792,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Logs, traces and metrics locally","item":"https://pages.flisk.si/@odykyi/observability-local/"},{"@type":"ListItem","position":3,"name":"Structured JSON logs in Node.js with pino","item":"https://pages.flisk.si/@odykyi/observability-local/structured-json-logs-node/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why use JSON logs instead of plain text?","acceptedAnswer":{"@type":"Answer","text":"Each line becomes a record with named fields such as level, time and a request ID, so you can filter with jq or a log tool instead of guessing with grep."}},{"@type":"Question","name":"Should I use pino-pretty in production?","acceptedAnswer":{"@type":"Answer","text":"No. Use it only as a development viewer by piping the output through it. Production should keep raw JSON lines."}},{"@type":"Question","name":"Does Flisk parse the JSON?","acceptedAnswer":{"@type":"Answer","text":"No. flisk logs shows the lines your services write to stdout. You parse them yourself, for example with jq."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/observability-local/">Logs, traces and metrics locally</a></div>
+<section class="hero"><div><div class="lbl">Logs, traces and metrics locally</div><h1>Structured JSON logs in Node.js with pino</h1><p class="dek">One JSON object per line turns logs from text you scroll into data you can search.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-one-json-object-per-line">Why one JSON object per line</a></li><li><a href="#set-up-pino">Set up pino</a></li><li><a href="#choose-levels-you-will-actually-use">Choose levels you will actually use</a></li><li><a href="#readable-output-in-your-terminal">Readable output in your terminal</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Replace <code>console.log</code> with a logger that writes one JSON object per line. In Node.js that is usually <a href="https://github.com/pinojs/pino">pino</a>. Every line then carries named fields (level, time, message, and your own such as <code>orderId</code>), so you can filter with <code>jq</code> today and send the same lines to a log store later without writing a single regular expression.</p>
+
+<h2 id="why-one-json-object-per-line">Why one JSON object per line</h2>
+<p>A line like <code>created order 42 for user 7 in 183ms</code> is easy to read and hard to query. To find slow orders you must parse the sentence, and the parser breaks the day someone rewords the message. A JSON line keeps the message and the data apart:</p>
+<pre><code>{"level":"info","time":"2026-11-14T10:00:00.000Z","service":"orders-api","msg":"order created","orderId":42,"userId":7,"ms":183}</code></pre>
+<p>Now "all orders slower than 500 ms" is a field comparison. The format is also what almost every log tool expects, from <code>jq</code> to Loki, Elasticsearch and cloud log services. The cost is that raw JSON is harder to read by eye, which the section on terminal output below deals with.</p>
+
+<h2 id="set-up-pino">Set up pino</h2>
+<pre><code>npm install pino</code></pre>
+<p>Create one logger module and import it everywhere:</p>
+<pre><code>// logger.js
+const pino = require("pino");
+
+module.exports = pino({
+  level: process.env.LOG_LEVEL || "info",
+  base: { service: process.env.OTEL_SERVICE_NAME || "orders-api" },
+  formatters: {
+    // pino logs the level as a number by default; a label is easier to filter
+    level: (label) =&gt; ({ level: label }),
+  },
+  timestamp: pino.stdTimeFunctions.isoTime,
+});</code></pre>
+<p>Then log an event with an object first and a short message second:</p>
+<pre><code>const log = require("./logger");
+
+log.info({ orderId: 42, userId: 7, ms: 183 }, "order created");
+log.error({ err, orderId: 42 }, "payment failed");</code></pre>
+<p>Put the changing data in the object, not in the message string. The message stays a constant phrase you can count and group by. Pass errors under the <code>err</code> key: pino serialises the message and stack for you.</p>
+
+<h2 id="choose-levels-you-will-actually-use">Choose levels you will actually use</h2>
+<p>Pino has <code>trace</code>, <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code> and <code>fatal</code>. A workable rule for a service you run locally:</p>
+<ul>
+<li><code>error</code>: a request or job failed and someone should look.</li>
+<li><code>warn</code>: something odd that was handled, such as a retry.</li>
+<li><code>info</code>: one line per request or job outcome, and startup and shutdown.</li>
+<li><code>debug</code>: details you want while building a feature. Off by default, on with <code>LOG_LEVEL=debug</code>.</li>
+</ul>
+<p>Reading the level from an environment variable lets you turn on <code>debug</code> for one service without a code change.</p>
+
+<h2 id="readable-output-in-your-terminal">Readable output in your terminal</h2>
+<p>For a human, pipe the stream through <a href="https://github.com/pinojs/pino-pretty">pino-pretty</a> only when you run the service by hand:</p>
+<pre><code>node server.js | npx pino-pretty</code></pre>
+<p>Keep the service itself writing JSON, so the output you debug locally has the same shape as the output you would collect elsewhere. To filter lines, <code>jq</code> is enough:</p>
+<pre><code>node server.js | jq -c 'select(.level == "error")'</code></pre>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk does not add a logger, and it does not parse or index your logs. What it does is collect each service's stdout, so structured lines from several services end up in one place. For a stack started with <code>flisk up</code>, <code>flisk logs</code> prints a bounded snapshot of recent lines, merged across services and prefixed with the service name:</p>
+<pre><code>flisk logs --service orders-api --since 5m</code></pre>
+<p>With <code>--json</code> the output is one object, and each line has <code>time</code>, <code>resource</code>, <code>level</code>, <code>source</code> and <code>text</code> fields. Your own JSON line arrives as the <code>text</code> string, so to filter on your fields, unwrap it with <code>jq</code>:</p>
+<pre><code>flisk logs --json --since 5m | jq -r '.data.lines[].text' | jq -R -c 'fromjson? | select(.level == "error")'</code></pre>
+<p>The <code>-R</code> and <code>fromjson?</code> parts skip any line that is not JSON, such as a framework banner printed at startup. <code>flisk logs</code> is a snapshot, not a live stream: for a live view of a Docker stack use the log pane of the Tilt dashboard, and for local processes the prefixed output of <code>flisk up</code> itself. The guide on <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">reading logs from every service</a> covers the plain options.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not log secrets or whole request bodies.</strong> Structured logging makes it easy to dump an object, and easy to leak a token. Log ids and sizes, and see <a href="/@odykyi/observability-local/keep-secrets-out-of-logs/">keeping secrets out of logs</a>.</li>
+<li><strong>Do not use dynamic keys.</strong> <code>{ ["user_" + id]: true }</code> creates a new field per user and makes the logs unsearchable. Use <code>{ userId: id }</code>.</li>
+<li><strong>Log to stdout.</strong> Writing to a file inside a container disappears with the container. Stdout is what Docker, Tilt and Flisk collect.</li>
+<li><strong>Synchronous logging in hot paths.</strong> Pino is fast, but formatting a huge object per request still costs. Keep the object small.</li>
+</ul>
+
+<p>Once each service logs JSON, the next problem is following one request across several of them. <a href="/@odykyi/observability-local/correlation-id-across-services/">A correlation ID</a> solves that with a few lines of middleware.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why use JSON logs instead of plain text?</summary><p>Each line becomes a record with named fields such as level, time and a request ID, so you can filter with jq or a log tool instead of guessing with grep.</p></details><details><summary>Should I use pino-pretty in production?</summary><p>No. Use it only as a development viewer by piping the output through it. Production should keep raw JSON lines.</p></details><details><summary>Does Flisk parse the JSON?</summary><p>No. flisk logs shows the lines your services write to stdout. You parse them yourself, for example with jq.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Logs, traces and metrics locally</span></div>
+<div class="rgrid"><a href="/@odykyi/observability-local/correlation-id-across-services/"><span class="lbl">Guide</span><b>Correlation IDs across services in Node.js</b><span>A shared request ID lets you follow one request through every service that touched it.</span></a><a href="/@odykyi/observability-local/keep-secrets-out-of-logs/"><span class="lbl">Guide</span><b>Keep secrets out of local logs</b><span>Most leaks come from logging whole objects. Allow-list fields and redact the rest.</span></a><a href="/@odykyi/observability-local/limit-container-log-size/"><span class="lbl">Guide</span><b>Limit Docker container log size with log rotation</b><span>Docker keeps every log line by default. Two options put a ceiling on it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

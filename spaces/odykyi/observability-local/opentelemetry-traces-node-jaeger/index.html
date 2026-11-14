@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenTelemetry traces for Node.js with Jaeger</title>
+<meta name="description" content="Send OpenTelemetry traces from a Node.js service to a local Jaeger container, set the OTLP endpoint correctly and run both together with Flisk.">
+<meta name="keywords" content="opentelemetry, jaeger, tracing, otlp, node.js">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/observability-local/opentelemetry-traces-node-jaeger/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="OpenTelemetry traces for Node.js with Jaeger">
+<meta property="og:description" content="Send OpenTelemetry traces from a Node.js service to a local Jaeger container, set the OTLP endpoint correctly and run both together with Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/observability-local/opentelemetry-traces-node-jaeger/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"OpenTelemetry traces for Node.js with Jaeger","description":"Send OpenTelemetry traces from a Node.js service to a local Jaeger container, set the OTLP endpoint correctly and run both together with Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/observability-local/opentelemetry-traces-node-jaeger/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/observability-local/opentelemetry-traces-node-jaeger/","keywords":"opentelemetry, jaeger, tracing, otlp, node.js","wordCount":795,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Logs, traces and metrics locally","item":"https://pages.flisk.si/@odykyi/observability-local/"},{"@type":"ListItem","position":3,"name":"OpenTelemetry traces for Node.js with Jaeger","item":"https://pages.flisk.si/@odykyi/observability-local/opentelemetry-traces-node-jaeger/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which port does a Node.js service send OTLP traces to?","acceptedAnswer":{"@type":"Answer","text":"OTLP over HTTP uses port 4318 and OTLP over gRPC uses 4317. The Node HTTP exporter normally targets 4318."}},{"@type":"Question","name":"Why do I see no traces in Jaeger?","acceptedAnswer":{"@type":"Answer","text":"Common causes are a wrong endpoint, tracing.js loaded after the app instead of with --require, or the service exiting before the exporter flushes."}},{"@type":"Question","name":"Does Flisk provide tracing?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk runs Jaeger as a bring-your-own image resource and starts your service next to it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/observability-local/">Logs, traces and metrics locally</a></div>
+<section class="hero"><div><div class="lbl">Logs, traces and metrics locally</div><h1>OpenTelemetry traces for Node.js with Jaeger</h1><p class="dek">Add tracing to a Node.js service in one file and read the spans in Jaeger.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-you-are-setting-up">What you are setting up</a></li><li><a href="#add-tracing-to-the-service">Add tracing to the service</a></li><li><a href="#run-jaeger-with-flisk">Run Jaeger with Flisk</a></li><li><a href="#read-the-trace">Read the trace</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Install the OpenTelemetry Node SDK, load a small <code>tracing.js</code> before your app code, point the exporter at <code>http://localhost:4318</code>, and run Jaeger in a container that publishes the OTLP port and the UI on <code>16686</code>. A request that crosses two services then shows up as one trace with a bar per step. This works on a laptop with no cloud account.</p>
+
+<h2 id="what-you-are-setting-up">What you are setting up</h2>
+<p>Three parts talk to each other. Your service creates spans (one per incoming request, outgoing call or database query). The OpenTelemetry SDK batches them and sends them over OTLP, which is plain HTTP on port 4318 or gRPC on 4317. Jaeger receives them, stores them in memory, and shows them in a web UI. Jaeger's current image, <code>jaegertracing/jaeger</code>, accepts OTLP directly, so you do not need a collector between the two for local work. If you want one, read <a href="/@odykyi/observability-local/run-opentelemetry-collector-locally/">how to run an OpenTelemetry Collector locally</a>.</p>
+
+<h2 id="add-tracing-to-the-service">Add tracing to the service</h2>
+<pre><code>npm install @opentelemetry/sdk-node \
+  @opentelemetry/auto-instrumentations-node \
+  @opentelemetry/exporter-trace-otlp-http</code></pre>
+<pre><code>// tracing.js
+const { NodeSDK } = require("@opentelemetry/sdk-node");
+const { getNodeAutoInstrumentations } = require("@opentelemetry/auto-instrumentations-node");
+const { OTLPTraceExporter } = require("@opentelemetry/exporter-trace-otlp-http");
+
+const sdk = new NodeSDK({
+  traceExporter: new OTLPTraceExporter(),   // reads the endpoint from the environment
+  instrumentations: [getNodeAutoInstrumentations()],
+});
+
+sdk.start();
+process.on("SIGTERM", () =&gt; sdk.shutdown().finally(() =&gt; process.exit(0)));</code></pre>
+<p>The file must run before anything else imports <code>http</code>, <code>express</code> or your database driver, because instrumentation works by patching those modules as they load. Start the app with:</p>
+<pre><code>node --require ./tracing.js server.js</code></pre>
+<p>Configuration comes from the standard OpenTelemetry environment variables, so the code does not change between machines:</p>
+<pre><code>OTEL_SERVICE_NAME=orders
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_BSP_SCHEDULE_DELAY=1000</code></pre>
+<p>The exporter adds <code>/v1/traces</code> to the endpoint itself. <code>OTEL_BSP_SCHEDULE_DELAY</code> lowers the batch delay from its default of five seconds so spans appear quickly while you experiment.</p>
+
+<h2 id="run-jaeger-with-flisk">Run Jaeger with Flisk</h2>
+<p>Jaeger is an image you start, not code you write, so it is a bring-your-own resource. Create it with the CLI, then set the ports by hand, because the generator picks a port in the 4000 to 5999 range and Jaeger's UI is on 16686:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource jaeger --type bring-your-own --image jaegertracing/jaeger:2.5.0 --stack obs --yes</code></pre>
+<p>Edit the generated <code>service.json</code>. Pin a current 2.x tag from Docker Hub rather than trusting the one shown here:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "jaeger",
+  "appType": "bring-your-own",
+  "stack": "obs",
+  "port": 16686,
+  "image": "jaegertracing/jaeger:2.5.0",
+  "extraPorts": [{ "port": 4317 }, { "port": 4318 }]
+}</code></pre>
+<p><code>port</code> is the UI. <code>extraPorts</code> publishes the two OTLP ports on <code>127.0.0.1</code> only, so nothing else on your network can send data to it. Then add the environment to your own service and make it wait for Jaeger:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders",
+  "appType": "backend",
+  "command": "node --require ./tracing.js server.js",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["jaeger"],
+  "env": {
+    "OTEL_SERVICE_NAME": "orders",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+    "OTEL_BSP_SCHEDULE_DELAY": "1000"
+  }
+}</code></pre>
+<p>Flisk's documentation describes this as a mixed run: your code runs as local processes, the image runs with <code>docker run</code> next to it, and a local process reaches the container at <code>localhost</code>. Docker must be running for it. Start with <code>flisk up</code>, send a few requests, and open <code>http://localhost:16686</code>. To check what the process really received, run <code>flisk run orders -- printenv OTEL_EXPORTER_OTLP_ENDPOINT</code>.</p>
+<p>If you run your services as containers on the Docker and Tilt path instead, they are on a Docker network with Jaeger, and the endpoint becomes <code>http://jaeger:4318</code> (the resource name), not <code>localhost</code>. That is the most common reason for "no traces" after a switch.</p>
+
+<h2 id="read-the-trace">Read the trace</h2>
+<p>In the Jaeger UI pick the <code>orders</code> service and press Find Traces. Open one: each bar is a span, nested by caller, with its duration. When <code>orders</code> calls another traced service over HTTP, the SDK sends a <code>traceparent</code> header and the second service's spans join the same trace. Look for the longest bar first, and for a database query repeated many times in a row, which is the usual sign of an N+1 problem.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>No spans at all.</strong> Check that <code>tracing.js</code> loads first, that the service name is set, and that port 4318 answers: <code>curl -i http://localhost:4318/v1/traces</code> should return a 405 or similar, not a refused connection.</li>
+<li><strong>Too many spans.</strong> The auto-instrumentation bundle patches many libraries, including the file system. Recent versions let you pick: <code>OTEL_NODE_ENABLED_INSTRUMENTATIONS=http,express,pg</code>.</li>
+<li><strong>Traces vanish on restart.</strong> Jaeger keeps traces in memory by default. That is fine for debugging a request, and wrong for comparing yesterday with today.</li>
+<li><strong>Watch mode.</strong> If you use <code>node --watch</code>, keep <code>--require ./tracing.js</code> in the command so every restart reloads it.</li>
+<li><strong>Not for production as set up here.</strong> The in-memory store, the sampling at 100 percent and the open local ports are for development.</li>
+</ul>
+
+<p>Services written in Python can send to the same Jaeger. <a href="/@odykyi/observability-local/opentelemetry-fastapi-traces/">Adding OpenTelemetry tracing to a FastAPI service</a> shows the equivalent steps.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which port does a Node.js service send OTLP traces to?</summary><p>OTLP over HTTP uses port 4318 and OTLP over gRPC uses 4317. The Node HTTP exporter normally targets 4318.</p></details><details><summary>Why do I see no traces in Jaeger?</summary><p>Common causes are a wrong endpoint, tracing.js loaded after the app instead of with --require, or the service exiting before the exporter flushes.</p></details><details><summary>Does Flisk provide tracing?</summary><p>No. Flisk runs Jaeger as a bring-your-own image resource and starts your service next to it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Logs, traces and metrics locally</span></div>
+<div class="rgrid"><a href="/@odykyi/observability-local/run-opentelemetry-collector-locally/"><span class="lbl">Guide</span><b>Run an OpenTelemetry Collector locally with Flisk</b><span>A local collector lets services send telemetry to one place while you change where it goes.</span></a><a href="/@odykyi/observability-local/opentelemetry-fastapi-traces/"><span class="lbl">Guide</span><b>OpenTelemetry traces for FastAPI with Jaeger</b><span>Automatic instrumentation covers requests and clients; a manual span covers your own code.</span></a><a href="/@odykyi/observability-local/grafana-loki-tempo-local-one-container/"><span class="lbl">Guide</span><b>Grafana, Loki, Tempo and Prometheus in one container</b><span>One development image gives you Grafana with logs, traces and metrics wired together.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

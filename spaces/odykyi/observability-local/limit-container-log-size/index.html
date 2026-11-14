@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Limit Docker container log size with log rotation</title>
+<meta name="description" content="Stop container logs from filling your disk: set max-size and max-file in Compose or daemon.json and check native process logs when you run without Docker.">
+<meta name="keywords" content="docker logs, log rotation, max-size, json-file, disk space">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/observability-local/limit-container-log-size/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Limit Docker container log size with log rotation">
+<meta property="og:description" content="Stop container logs from filling your disk: set max-size and max-file in Compose or daemon.json and check native process logs when you run without Docker.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/observability-local/limit-container-log-size/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Limit Docker container log size with log rotation","description":"Stop container logs from filling your disk: set max-size and max-file in Compose or daemon.json and check native process logs when you run without Docker.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/observability-local/limit-container-log-size/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/observability-local/limit-container-log-size/","keywords":"docker logs, log rotation, max-size, json-file, disk space","wordCount":724,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Logs, traces and metrics locally","item":"https://pages.flisk.si/@odykyi/observability-local/"},{"@type":"ListItem","position":3,"name":"Limit Docker container log size with log rotation","item":"https://pages.flisk.si/@odykyi/observability-local/limit-container-log-size/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the default Docker log size limit?","acceptedAnswer":{"@type":"Answer","text":"With the json-file driver there is no limit unless you set max-size and max-file."}},{"@type":"Question","name":"Do new log options apply to running containers?","acceptedAnswer":{"@type":"Answer","text":"No. The container must be recreated, and daemon.json defaults apply only to containers created afterwards."}},{"@type":"Question","name":"Where do Flisk local process logs go?","acceptedAnswer":{"@type":"Answer","text":"Flisk writes them to .flisk/native/logs/\u003cservice>.log, and flisk logs reads them."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/observability-local/">Logs, traces and metrics locally</a></div>
+<section class="hero"><div><div class="lbl">Logs, traces and metrics locally</div><h1>Limit Docker container log size with log rotation</h1><p class="dek">Docker keeps every log line by default. Two options put a ceiling on it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#find-out-whether-logs-are-the-problem">Find out whether logs are the problem</a></li><li><a href="#limit-logs-for-one-service-in-compose">Limit logs for one service in Compose</a></li><li><a href="#limit-logs-for-every-container">Limit logs for every container</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Docker's default <code>json-file</code> log driver keeps every line a container writes until the container is removed, with no size limit. Set <code>max-size</code> and <code>max-file</code> on the logging options, per container in Compose or for every container in <code>daemon.json</code>, and old lines rotate away. A service that logs in a tight loop can otherwise fill your disk in an afternoon.</p>
+
+<h2 id="find-out-whether-logs-are-the-problem">Find out whether logs are the problem</h2>
+<p>Before changing anything, look at the size of the logs you have. For one container, ask Docker where its log file is and how big it is:</p>
+<pre><code>docker inspect --format '{{.LogPath}}' my-container
+docker ps -q | xargs docker inspect --format '{{.Name}} {{.LogPath}}' | head</code></pre>
+<p>On Linux you can run <code>ls -lh</code> on those paths with sudo. On macOS and Windows the files live inside the Docker virtual machine, not on your normal file system, so you will not see them in Finder. What you will see is the virtual disk growing, and <code>docker system df</code> will not show it, because that report does not count container log files. The guide on <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a> covers cleanup in general.</p>
+<p>The usual cause is one service in a retry loop printing an error many times a second. Fix that first. Rotation protects the disk, but a service that prints a million identical lines is still broken. See <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a> for the related case.</p>
+
+<h2 id="limit-logs-for-one-service-in-compose">Limit logs for one service in Compose</h2>
+<pre><code>services:
+  api:
+    image: my-api
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"</code></pre>
+<p>Docker writes up to 5 MB to the current file, then rotates it, and keeps three files, so the cap per container is about 15 MB. Quote the values to keep them strings. The container must be recreated for new options to apply, and restarting it is not enough.</p>
+
+<h2 id="limit-logs-for-every-container">Limit logs for every container</h2>
+<p>Put the same options in the Docker daemon's configuration so every new container gets them, including ones started by tools that never mention logging:</p>
+<pre><code>{
+  "log-driver": "json-file",
+  "log-opts": { "max-size": "10m", "max-file": "3" }
+}</code></pre>
+<p>On Linux this is <code>/etc/docker/daemon.json</code>, followed by a daemon restart. In Docker Desktop it is Settings, then Docker Engine. In Colima, the <code>docker</code> section of <code>colima.yaml</code> holds the daemon configuration, and you edit it with <code>colima start --edit</code>. The new defaults apply to containers created afterwards, not to existing ones.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>For a bring-your-own resource, Flisk's <code>service.json</code> has a <code>logging</code> field that is written into the generated Compose file as the Compose <code>logging</code> key:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "legacy-api",
+  "appType": "bring-your-own",
+  "stack": "shop",
+  "port": 4500,
+  "image": "my-api",
+  "logging": {
+    "driver": "json-file",
+    "options": { "max-size": "5m", "max-file": "3" }
+  }
+}</code></pre>
+<p>The option values are strings, as in Compose, and <code>flisk config verify</code> checks the shape. This field is documented for bring-your-own resources only. For services Flisk generates from a template, such as a backend, use the daemon setting above, which covers them without any per-service entry.</p>
+<p>When a stack runs as local processes (a <code>command</code> in <code>service.json</code>), there is no Docker log file. Flisk's documentation says each line is written, with a timestamp, to <code>.flisk/native/logs/&lt;service&gt;.log</code>, which is what <code>flisk logs</code> reads. That folder is inside the project and the documentation does not describe rotation for it, so check its size now and then if a service is very noisy.</p>
+<pre><code>du -sh .flisk/native/logs/*</code></pre>
+<p>To read just the lines you need without scrolling, use <code>flisk logs --service api --since 5m --tail 100</code>. It prints a bounded snapshot, so it never dumps a huge file to your terminal.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Rotation loses old lines.</strong> That is the point, but if you need history to debug an overnight problem, raise <code>max-file</code> or send logs elsewhere.</li>
+<li><strong>Quoting.</strong> In Flisk's <code>service.json</code> the option values must be strings, so write <code>"3"</code>, not <code>3</code>.</li>
+<li><strong>Other drivers.</strong> The <code>local</code> driver rotates by default and stores logs more compactly than <code>json-file</code>. The catch is that it uses its own file format, so tools that read the log file directly will not understand it.</li>
+<li><strong>Logs in the container.</strong> A service that writes its own log file inside the container grows the container layer instead, and none of this applies. Log to stdout.</li>
+</ul>
+
+<p>Smaller logs help, but structure helps more once you read them. <a href="/@odykyi/observability-local/structured-json-logs-node/">Structured JSON logs in Node.js</a> shows how to make each line searchable.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the default Docker log size limit?</summary><p>With the json-file driver there is no limit unless you set max-size and max-file.</p></details><details><summary>Do new log options apply to running containers?</summary><p>No. The container must be recreated, and daemon.json defaults apply only to containers created afterwards.</p></details><details><summary>Where do Flisk local process logs go?</summary><p>Flisk writes them to .flisk/native/logs/&lt;service&gt;.log, and flisk logs reads them.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Logs, traces and metrics locally</span></div>
+<div class="rgrid"><a href="/@odykyi/observability-local/structured-json-logs-node/"><span class="lbl">Guide</span><b>Structured JSON logs in Node.js with pino</b><span>One JSON object per line turns logs from text you scroll into data you can search.</span></a><a href="/@odykyi/observability-local/keep-secrets-out-of-logs/"><span class="lbl">Guide</span><b>Keep secrets out of local logs</b><span>Most leaks come from logging whole objects. Allow-list fields and redact the rest.</span></a><a href="/@odykyi/observability-local/correlation-id-across-services/"><span class="lbl">Guide</span><b>Correlation IDs across services in Node.js</b><span>A shared request ID lets you follow one request through every service that touched it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
