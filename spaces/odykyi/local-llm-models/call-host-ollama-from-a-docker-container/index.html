@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to call Ollama on the host from a Docker container</title>
+<meta name="description" content="A container cannot reach the host&#39;s localhost. Use host.docker.internal, add host-gateway on Linux, and check which interface Ollama listens on.">
+<meta name="keywords" content="host.docker.internal ollama, docker container connect to host ollama, ollama connection refused docker, OLLAMA_HOST 0.0.0.0">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to call Ollama on the host from a Docker container">
+<meta property="og:description" content="A container cannot reach the host&#39;s localhost. Use host.docker.internal, add host-gateway on Linux, and check which interface Ollama listens on.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to call Ollama on the host from a Docker container","description":"A container cannot reach the host's localhost. Use host.docker.internal, add host-gateway on Linux, and check which interface Ollama listens on.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/","keywords":"host.docker.internal ollama, docker container connect to host ollama, ollama connection refused docker, OLLAMA_HOST 0.0.0.0","wordCount":736,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local LLMs for development","item":"https://pages.flisk.si/@odykyi/local-llm-models/"},{"@type":"ListItem","position":3,"name":"How to call Ollama on the host from a Docker container","item":"https://pages.flisk.si/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What address does a container use to reach the host?","acceptedAnswer":{"@type":"Answer","text":"host.docker.internal on Docker Desktop and recent Colima. On Linux add it with extra_hosts set to host-gateway."}},{"@type":"Question","name":"Why is Ollama refusing connections from Docker on Linux?","acceptedAnswer":{"@type":"Answer","text":"It listens on 127.0.0.1 by default, and container traffic arrives from the Docker bridge. Set OLLAMA_HOST to an address the bridge can reach, and mind who else can connect."}},{"@type":"Question","name":"How do I set extra_hosts in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Add container.extraHosts to the service.json, for example host.docker.internal:host-gateway, then run flisk config regenerate."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-llm-models/">Local LLMs for development</a></div>
+<section class="hero"><div><div class="lbl">Local LLMs for development</div><h1>How to call Ollama on the host from a Docker container</h1><p class="dek">Inside a container, localhost means the container itself. That is why your app gets connection refused even though Ollama works from your terminal.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-this-is-worth-doing">Why this is worth doing</a></li><li><a href="#docker-desktop-and-colima">Docker Desktop and Colima</a></li><li><a href="#linux">Linux</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#a-three-step-way-to-find-where-the-break-is">A three-step way to find where the break is</a></li></ol></nav></aside>
+<article><p>From inside a container, <code>localhost</code> is the container, not your computer. To reach an Ollama server running on the host, use <code>host.docker.internal</code>, for example <code>http://host.docker.internal:11434</code>. On Linux, add the name yourself with <code>--add-host=host.docker.internal:host-gateway</code>, and make Ollama listen on an address the container can reach.</p>
+
+<h2 id="why-this-is-worth-doing">Why this is worth doing</h2>
+<p>On a Mac, a container cannot use the GPU, as covered in <a href="/@odykyi/local-llm-models/ollama-gpu-in-docker/">the GPU guide</a>. The native Ollama app uses Metal. So the fast setup is the model on the host and everything else in containers. You pay for it with one networking detail.</p>
+
+<h2 id="docker-desktop-and-colima">Docker Desktop and Colima</h2>
+<p>Docker Desktop provides the name <code>host.docker.internal</code> on macOS and Windows. Recent Colima versions provide it too. Test it from a throwaway container before changing your app:</p>
+<pre><code>docker run --rm curlimages/curl -s http://host.docker.internal:11434/api/tags</code></pre>
+<p>If this prints your model list, the path works. Set the app's base URL to <code>http://host.docker.internal:11434/v1</code> and you are done.</p>
+
+<h2 id="linux">Linux</h2>
+<p>Docker on Linux does not define the name by default. Add it, mapped to the special value <code>host-gateway</code>:</p>
+<pre><code>services:
+  app:
+    image: my-app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LLM_BASE_URL: http://host.docker.internal:11434/v1</code></pre>
+<p>On Linux the request arrives from the Docker bridge, not from loopback. Ollama listens on <code>127.0.0.1</code> by default and will refuse it. Set <code>OLLAMA_HOST=0.0.0.0:11434</code> for the server, for example in the systemd unit's environment, then restart it. Be aware of what that does: anyone who can reach your machine's network address can then use your model. On an untrusted network, bind to the bridge address or add a firewall rule instead.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>In a Flisk project the consumer is a container service, and <code>extraHosts</code> lives in the <code>container</code> block of its <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "chat-api",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 3000,
+  "image": "my-chat-api:dev",
+  "container": {
+    "extraHosts": ["host.docker.internal:host-gateway"]
+  },
+  "env": {
+    "LLM_BASE_URL": "http://host.docker.internal:11434/v1"
+  }
+}</code></pre>
+<p>Flisk writes that as <code>extra_hosts</code> in the generated Compose service. The same mapping works on Docker Desktop, where it is harmless. Do not copy the generated file by hand, run <code>flisk config regenerate</code> after editing, and <code>flisk config verify</code> to check that the generated files match.</p>
+<p>If you would rather not touch the host, the alternative is the model server as a stack resource. That is <code>flisk resource brain --type inference</code>, reached as <code>http://brain:11434/v1</code>. It runs on the CPU on a Mac. Choose per project: the host server when speed matters, the stack resource when you want <code>flisk up</code> to be the only step.</p>
+<p>Flisk's documentation also describes a third route: a service with a top-level <code>command</code> such as <code>ollama serve</code> runs on the host with no Docker. It applies when your whole project runs as local processes, because a project cannot mix local processes and containers yet. For a pure local-process project, the app and the model are both on the host, and <code>http://localhost:11434</code> is correct. See <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run local services without Docker</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Using localhost in the container's env.</strong> It is the number one cause. The value must be the host alias or the service name.</li>
+<li><strong>Port clash.</strong> If a containerized Ollama also publishes 11434, only one of them can own the port. Stop one, or publish the second on another host port.</li>
+<li><strong>Corporate VPNs and firewalls.</strong> They can block traffic from the Docker bridge to the host. Test with the <code>curl</code> command above, not with your app.</li>
+<li><strong>Binding to 0.0.0.0 permanently.</strong> Do it only on networks you trust.</li>
+</ul>
+<h2 id="a-three-step-way-to-find-where-the-break-is">A three-step way to find where the break is</h2>
+<ol>
+<li>On the host, run <code>curl http://localhost:11434/api/tags</code>. If this fails, Ollama is not running, and nothing about Docker matters yet.</li>
+<li>From a throwaway container, run the <code>curlimages/curl</code> command above. If this fails, the problem is the alias or the binding address.</li>
+<li>From your app's own container, run the same request with <code>flisk run chat-api -- curl -s http://host.docker.internal:11434/api/tags</code>, or with <code>docker exec</code> in plain Compose, if the image has curl. If only this fails, the app's configuration is wrong, usually the environment variable.</li>
+</ol>
+<p>Keep the address in one variable and document it in <code>.env.example</code>, so a teammate on Linux and a teammate on a Mac can each set the right value without editing code. The alias works the same way for any other host service, such as a database you run natively, so the habit pays off beyond Ollama.</p>
+<p>When the call works, point your client at it as described in <a href="/@odykyi/local-llm-models/point-openai-sdk-at-ollama/">pointing the OpenAI SDK at Ollama</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What address does a container use to reach the host?</summary><p>host.docker.internal on Docker Desktop and recent Colima. On Linux add it with extra_hosts set to host-gateway.</p></details><details><summary>Why is Ollama refusing connections from Docker on Linux?</summary><p>It listens on 127.0.0.1 by default, and container traffic arrives from the Docker bridge. Set OLLAMA_HOST to an address the bridge can reach, and mind who else can connect.</p></details><details><summary>How do I set extra_hosts in Flisk?</summary><p>Add container.extraHosts to the service.json, for example host.docker.internal:host-gateway, then run flisk config regenerate.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local LLMs for development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-llm-models/ollama-gpu-in-docker/"><span class="lbl">Guide</span><b>How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)</b><span>Where the GPU is available to a container depends on your operating system. Check this before you spend an hour on flags.</span></a><a href="/@odykyi/local-llm-models/point-openai-sdk-at-ollama/"><span class="lbl">Guide</span><b>How to point the OpenAI SDK at a local Ollama server</b><span>Most LLM code already uses an OpenAI client. You can keep it and change two settings to run against a model on your own machine.</span></a><a href="/@odykyi/local-llm-models/run-ollama-locally-for-app-development/"><span class="lbl">Guide</span><b>How to run Ollama locally for app development</b><span>A local model server gives your app a chat endpoint with no API key and no per-token bill. Here is the shortest path from nothing to a working call, and how to keep it next to your other services.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

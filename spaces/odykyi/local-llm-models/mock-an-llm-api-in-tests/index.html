@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to mock an LLM API in tests</title>
+<meta name="description" content="Tests should not call a real model: it is slow, costs money and gives a different answer each time. Use a fake server that returns fixed completions.">
+<meta name="keywords" content="mock llm api, mock openai api in tests, fake llm server, test llm app without api key">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-llm-models/mock-an-llm-api-in-tests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to mock an LLM API in tests">
+<meta property="og:description" content="Tests should not call a real model: it is slow, costs money and gives a different answer each time. Use a fake server that returns fixed completions.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-llm-models/mock-an-llm-api-in-tests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to mock an LLM API in tests","description":"Tests should not call a real model: it is slow, costs money and gives a different answer each time. Use a fake server that returns fixed completions.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-llm-models/mock-an-llm-api-in-tests/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-llm-models/mock-an-llm-api-in-tests/","keywords":"mock llm api, mock openai api in tests, fake llm server, test llm app without api key","wordCount":700,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local LLMs for development","item":"https://pages.flisk.si/@odykyi/local-llm-models/"},{"@type":"ListItem","position":3,"name":"How to mock an LLM API in tests","item":"https://pages.flisk.si/@odykyi/local-llm-models/mock-an-llm-api-in-tests/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should unit tests call a real LLM?","acceptedAnswer":{"@type":"Answer","text":"No. The answer varies, calls cost time and money, and failures are hard to reproduce. Use a fake for unit tests and a few loose checks against a real local model."}},{"@type":"Question","name":"How do I mock streaming responses?","acceptedAnswer":{"@type":"Answer","text":"Return text/event-stream with lines that start with data: followed by JSON chunks, and finish with data: [DONE]."}},{"@type":"Question","name":"What is a local alternative to the real API?","acceptedAnswer":{"@type":"Answer","text":"A small Ollama model behind the OpenAI-compatible /v1 route gives realistic responses without a key, but it is slower and not deterministic."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-llm-models/">Local LLMs for development</a></div>
+<section class="hero"><div><div class="lbl">Local LLMs for development</div><h1>How to mock an LLM API in tests</h1><p class="dek">A model call is a network request with a non-deterministic answer. Treat it like any other flaky dependency and replace it in tests.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-test-should-and-should-not-check">What a test should and should not check</a></li><li><a href="#option-1-mock-inside-the-process">Option 1: mock inside the process</a></li><li><a href="#option-2-a-fake-server-on-a-port">Option 2: a fake server on a port</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Replace the model with a small fake that returns a fixed, valid response. Run it as a local HTTP server that speaks the same API your code calls, and point your client's base URL at it in tests. That keeps the test fast, free and repeatable, and it exercises your real HTTP client code rather than a stub of it.</p>
+
+<h2 id="what-a-test-should-and-should-not-check">What a test should and should not check</h2>
+<p>A unit test for your own code needs to know that you send the right request and that you handle each kind of response. It cannot judge the quality of a model's answer. So write the cases you control: a normal reply, a tool call, an empty reply, a malformed JSON reply, a 429 rate limit, a 500 error and a timeout. A real model almost never produces the last four on demand, and these are the ones that break in production. The general rule for mocks and real services is in <a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/">mock or run the real service in tests</a>.</p>
+
+<h2 id="option-1-mock-inside-the-process">Option 1: mock inside the process</h2>
+<p>Most SDKs let you inject a transport or a fake client. This is the fastest test and fine for pure logic. The weakness is that it skips real serialization, headers, streaming and retries, so a bug in those still ships.</p>
+
+<h2 id="option-2-a-fake-server-on-a-port">Option 2: a fake server on a port</h2>
+<p>A tiny server is about twenty lines. This one answers the chat completions route with a fixed reply and lets a test force an error with a header:</p>
+<pre><code>import { createServer } from "node:http";
+
+createServer((req, res) =&gt; {
+  if (req.url === "/health") return res.end("ok");
+  if (req.headers["x-fake-error"]) {
+    res.writeHead(Number(req.headers["x-fake-error"]), { "content-type": "application/json" });
+    return res.end(JSON.stringify({ error: { message: "forced error" } }));
+  }
+  res.writeHead(200, { "content-type": "application/json" });
+  res.end(JSON.stringify({
+    id: "chatcmpl-test",
+    object: "chat.completion",
+    model: "fake",
+    choices: [{ index: 0, finish_reason: "stop",
+      message: { role: "assistant", content: "fixed answer" } }],
+    usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+  }));
+}).listen(Number(process.env.PORT || 4010));</code></pre>
+<p>Point the client at <code>http://localhost:4010/v1</code>. Add one more branch for streaming that sends <code>data:</code> lines and ends with <code>data: [DONE]</code>, because streaming is where hand-written parsers fail. Keep fixtures as files so a reviewer can read them.</p>
+<p>Record-and-replay libraries do the same job from captured traffic. They are useful, but a recording goes stale when the API changes, so re-record on a schedule.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>If your test or dev stack runs under Flisk, make the fake one more service. As a local process it needs only a <code>command</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "model",
+  "appType": "backend",
+  "command": "node server.mjs",
+  "port": 4010,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>The consumer lists it in <code>dependsOn</code> and gets the URL through <code>env</code>, so it starts only after the fake answers its health check:</p>
+<pre><code>"dependsOn": ["model"],
+"env": { "LLM_BASE_URL": "http://localhost:4010/v1" }</code></pre>
+<p>Flisk's <code>tool-loop</code> starter uses this shape. <code>flisk project tool-loop</code> creates an agent, an MCP tool server and a <code>model</code> service that stands in for the Anthropic Messages API, all as local processes with no Docker. The agent's <code>ANTHROPIC_BASE_URL</code> points at the mock, and you delete two lines of <code>env</code> and add a real key to use Claude. The mock follows one fixed strategy and is not a model. It is there so the real SDK loop runs offline. Read the walk-through in <a href="/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/">run an AI agent locally with MCP tools and a mock model</a>.</p>
+<p>In CI, the same <code>service.json</code> files start the fake before the tests, as described in <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">running a stack in GitHub Actions</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A mock that is too kind.</strong> If it never fails, your error handling is untested. Make failures one header or one fixture away.</li>
+<li><strong>Drift from the real API.</strong> Run a small number of tests against a real local model, such as Ollama with a 1B model, on a schedule. Mark them slow and keep assertions loose, for example "the reply is non-empty text", never an exact string.</li>
+<li><strong>Asserting on model wording.</strong> Even a seeded local model changes between versions. Assert on structure.</li>
+<li><strong>Secrets in tests.</strong> Use a dummy key. A test that needs a real key will be skipped by half your team.</li>
+</ul>
+<p>For the local-model side of testing, see <a href="/@odykyi/local-llm-models/run-ollama-locally-for-app-development/">running Ollama for app development</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should unit tests call a real LLM?</summary><p>No. The answer varies, calls cost time and money, and failures are hard to reproduce. Use a fake for unit tests and a few loose checks against a real local model.</p></details><details><summary>How do I mock streaming responses?</summary><p>Return text/event-stream with lines that start with data: followed by JSON chunks, and finish with data: [DONE].</p></details><details><summary>What is a local alternative to the real API?</summary><p>A small Ollama model behind the OpenAI-compatible /v1 route gives realistic responses without a key, but it is slower and not deterministic.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local LLMs for development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-llm-models/point-openai-sdk-at-ollama/"><span class="lbl">Guide</span><b>How to point the OpenAI SDK at a local Ollama server</b><span>Most LLM code already uses an OpenAI client. You can keep it and change two settings to run against a model on your own machine.</span></a><a href="/@odykyi/local-llm-models/switch-between-local-llm-and-hosted-api/"><span class="lbl">Guide</span><b>How to switch between a local LLM and a hosted API</b><span>Calling a hosted model on every dev change is slow and costs money. Calling only a local one hides production differences. Make the choice a setting.</span></a><a href="/@odykyi/local-llm-models/run-ollama-locally-for-app-development/"><span class="lbl">Guide</span><b>How to run Ollama locally for app development</b><span>A local model server gives your app a chat endpoint with no API key and no per-token bill. Here is the shortest path from nothing to a working call, and how to keep it next to your other services.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

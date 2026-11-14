@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)</title>
+<meta name="description" content="Ollama in Docker can use an NVIDIA GPU on Linux and WSL2 with the container toolkit. On a Mac, containers cannot use the GPU, so run Ollama on the host.">
+<meta name="keywords" content="ollama docker gpu, ollama nvidia container toolkit, ollama gpu mac docker, docker compose gpu">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-llm-models/ollama-gpu-in-docker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)">
+<meta property="og:description" content="Ollama in Docker can use an NVIDIA GPU on Linux and WSL2 with the container toolkit. On a Mac, containers cannot use the GPU, so run Ollama on the host.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-llm-models/ollama-gpu-in-docker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)","description":"Ollama in Docker can use an NVIDIA GPU on Linux and WSL2 with the container toolkit. On a Mac, containers cannot use the GPU, so run Ollama on the host.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-llm-models/ollama-gpu-in-docker/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-llm-models/ollama-gpu-in-docker/","keywords":"ollama docker gpu, ollama nvidia container toolkit, ollama gpu mac docker, docker compose gpu","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local LLMs for development","item":"https://pages.flisk.si/@odykyi/local-llm-models/"},{"@type":"ListItem","position":3,"name":"How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)","item":"https://pages.flisk.si/@odykyi/local-llm-models/ollama-gpu-in-docker/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Ollama use my Mac GPU in Docker?","acceptedAnswer":{"@type":"Answer","text":"No. Containers on macOS run in a Linux VM with no access to Metal. Run the native Ollama app on the host for GPU speed."}},{"@type":"Question","name":"What do I need for an NVIDIA GPU in Docker?","acceptedAnswer":{"@type":"Answer","text":"The NVIDIA driver and the NVIDIA Container Toolkit on the host, then start the container with GPU access, such as --gpus all."}},{"@type":"Question","name":"How do I give a Flisk resource a GPU?","acceptedAnswer":{"@type":"Answer","text":"Set container.gpus to all or a count in its service.json. The host still needs an NVIDIA GPU and the container toolkit."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-llm-models/">Local LLMs for development</a></div>
+<section class="hero"><div><div class="lbl">Local LLMs for development</div><h1>How to use a GPU with Ollama in Docker (NVIDIA, Mac, WSL2)</h1><p class="dek">Where the GPU is available to a container depends on your operating system. Check this before you spend an hour on flags.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-works-where">What works where</a></li><li><a href="#check-the-host-first">Check the host first</a></li><li><a href="#plain-docker-and-compose">Plain Docker and Compose</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#on-a-mac">On a Mac</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#sizing-the-container">Sizing the container</a></li></ol></nav></aside>
+<article><p>Ollama in Docker uses an NVIDIA GPU when the host has the NVIDIA Container Toolkit and the container is started with GPU access, for example <code>docker run --gpus=all</code>. Docker on macOS cannot reach the Apple GPU, so on a Mac the container runs on the CPU. There, run Ollama natively and let your other services call it.</p>
+
+<h2 id="what-works-where">What works where</h2>
+<table>
+<thead><tr><th>Host</th><th>Ollama in a container</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>Linux with an NVIDIA GPU</td><td>GPU works with the container toolkit</td><td>Install the driver and toolkit, start with GPU access</td></tr>
+<tr><td>Windows with WSL2 and an NVIDIA GPU</td><td>GPU works through Docker Desktop's WSL2 backend or Docker inside WSL2</td><td>Keep the Windows driver current, test with a one-line check</td></tr>
+<tr><td>macOS, Apple silicon</td><td>CPU only</td><td>Run the native Ollama app for Metal</td></tr>
+</tbody>
+</table>
+
+<h2 id="check-the-host-first">Check the host first</h2>
+<p>Do this before touching Compose or Flisk. If the host cannot pass a GPU into a plain container, no configuration will fix it:</p>
+<pre><code>nvidia-smi
+docker run --rm --gpus all ubuntu nvidia-smi</code></pre>
+<p>If the second command prints the same table as the first, the toolkit works. If Docker says it could not select a device driver, the NVIDIA Container Toolkit is missing or Docker was not restarted after you installed it.</p>
+
+<h2 id="plain-docker-and-compose">Plain Docker and Compose</h2>
+<pre><code>docker run -d --gpus=all \
+  -v ollama-models:/root/.ollama \
+  -p 11434:11434 ollama/ollama</code></pre>
+<p>In Compose, the GPU is a device reservation:</p>
+<pre><code>services:
+  ollama:
+    image: ollama/ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]</code></pre>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>A bring-your-own container, which is what <code>flisk resource brain --type inference</code> creates, has no CPU or memory limit unless you set one. GPU access goes in the <code>container</code> block of <code>service.json</code>:</p>
+<pre><code>"container": {
+  "gpus": "all",
+  "cpus": 8,
+  "memory": "32g",
+  "shmSize": "16g"
+}</code></pre>
+<p>Flisk turns <code>gpus</code> into an NVIDIA device reservation (<code>deploy.resources.reservations.devices</code> with <code>driver: nvidia</code> and <code>capabilities: [gpu]</code>). <code>gpus</code> takes <code>"all"</code> or a count. <code>cpus</code> and <code>memory</code> set limits, and <code>ipc</code> accepts <code>host</code>, <code>private</code>, <code>shareable</code> or <code>none</code>. Ollama itself does not need <code>shmSize</code> or <code>ipc</code>. Servers such as vLLM do, because PyTorch uses shared memory. Leave those out for Ollama and add them only when an engine asks for them.</p>
+<p>The host needs an NVIDIA GPU and the NVIDIA Container Toolkit. Without them, Docker refuses to start the container. That is the correct failure: it tells you the host is wrong, rather than silently running on the CPU. Flisk's own tests check that the generated Compose file passes <code>docker compose config</code>, but the live GPU check runs only on a host with the NVIDIA runtime, so verify with <code>flisk run brain -- nvidia-smi</code> on your machine after <code>flisk up llm</code>.</p>
+<p>You can also confirm Ollama is using the GPU: run <code>flisk run brain -- ollama ps</code> while a model is loaded. The processor column shows whether it sits on the GPU or the CPU.</p>
+
+<h2 id="on-a-mac">On a Mac</h2>
+<p>Do not try to force it. Docker Desktop, Colima and Podman all run containers in a Linux VM with no Metal access. The practical setup is the native Ollama app on the host and your services calling it. Flisk's documentation suggests the same: for Metal speed, run the model server on the host, either by hand or as a service with a top-level <code>command</code>. The container side of that is covered in <a href="/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/">calling a host Ollama from a container</a>. For the VM choice itself, see <a href="/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/">Docker Desktop vs Colima vs Podman</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Model larger than VRAM.</strong> Ollama splits the model between GPU and CPU, and speed falls toward CPU speed. Pick a model that fits, using the <a href="/@odykyi/local-llm-models/how-much-ram-to-run-a-local-llm/">memory rule of thumb</a>.</li>
+<li><strong>AMD and Intel GPUs.</strong> They need other images and device settings. Follow the Ollama documentation for your card. Flisk's <code>container.gpus</code> writes an NVIDIA reservation only, so for other vendors you would run the model server on the host instead.</li>
+<li><strong>CI.</strong> Hosted CI runners usually have no GPU. Use a tiny model or a mock there.</li>
+</ul>
+<h2 id="sizing-the-container">Sizing the container</h2>
+<p>A model server in a container with no limits can take most of the machine's memory while a model loads. If other services share the laptop, set <code>cpus</code> and <code>memory</code> next to <code>gpus</code> so that a large model fails inside its own limit and not by slowing everything down. Choose a limit above the model's size from the <a href="/@odykyi/local-llm-models/how-much-ram-to-run-a-local-llm/">memory estimate</a>, with headroom for the context cache.</p>
+<p>If a GPU is not an option, a smaller quantized model on the CPU is still fine for wiring work. Save the big model for the manual checks.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Ollama use my Mac GPU in Docker?</summary><p>No. Containers on macOS run in a Linux VM with no access to Metal. Run the native Ollama app on the host for GPU speed.</p></details><details><summary>What do I need for an NVIDIA GPU in Docker?</summary><p>The NVIDIA driver and the NVIDIA Container Toolkit on the host, then start the container with GPU access, such as --gpus all.</p></details><details><summary>How do I give a Flisk resource a GPU?</summary><p>Set container.gpus to all or a count in its service.json. The host still needs an NVIDIA GPU and the container toolkit.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local LLMs for development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-llm-models/keep-ollama-models-between-restarts/"><span class="lbl">Guide</span><b>How to keep Ollama models when the container restarts</b><span>A model is a file of several gigabytes. If it lives in the container&#39;s own filesystem, every recreate throws it away. One volume fixes that.</span></a><a href="/@odykyi/local-llm-models/call-host-ollama-from-a-docker-container/"><span class="lbl">Guide</span><b>How to call Ollama on the host from a Docker container</b><span>Inside a container, localhost means the container itself. That is why your app gets connection refused even though Ollama works from your terminal.</span></a><a href="/@odykyi/local-llm-models/how-much-ram-to-run-a-local-llm/"><span class="lbl">Guide</span><b>How much RAM do you need to run a local LLM?</b><span>A model that does not fit in memory swaps or fails to load. You can estimate the fit with arithmetic before you download anything.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
