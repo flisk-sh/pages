@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run pytest against a local API and database</title>
+<meta name="description" content="Run pytest integration tests against a local API and real Postgres: test database, BASE_URL, markers, readiness waits, flisk run and flisk up --json.">
+<meta name="keywords" content="pytest integration tests api, pytest against running server, pytest database test, pytest markers integration, python api integration testing">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run pytest against a local API and database">
+<meta property="og:description" content="Run pytest integration tests against a local API and real Postgres: test database, BASE_URL, markers, readiness waits, flisk run and flisk up --json.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run pytest against a local API and database","description":"Run pytest integration tests against a local API and real Postgres: test database, BASE_URL, markers, readiness waits, flisk run and flisk up --json.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/","keywords":"pytest integration tests api, pytest against running server, pytest database test, pytest markers integration, python api integration testing","wordCount":827,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run pytest against a local API and database","item":"https://pages.flisk.si/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I skip integration tests by default in pytest?","acceptedAnswer":{"@type":"Answer","text":"Register a marker such as integration and set addopts to -m 'not integration'. Run pytest -m integration to include them."}},{"@type":"Question","name":"Should integration tests use my development database?","acceptedAnswer":{"@type":"Answer","text":"No. Use a separate test database so test data and cleanup never touch your development data."}},{"@type":"Question","name":"How do I run pytest with a service's environment in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Use flisk run \u003cservice> -- pytest. For a local-process service it runs on the host from the service folder with that service's environment."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to run pytest against a local API and database</h1><p class="dek">Unit tests tell you a function works. Integration tests tell you the service, its database and its queue work together. In Python this is mostly an organizational problem, and a few habits make it manageable.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#two-kinds-of-tests-two-commands">Two kinds of tests, two commands</a></li><li><a href="#use-a-separate-database">Use a separate database</a></li><li><a href="#waiting-for-readiness">Waiting for readiness</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Keep fast unit tests and slow integration tests apart with a pytest marker, point the integration tests at a running service through a <code>BASE_URL</code> environment variable, and give them a separate test database so they never touch your development data. Start the stack, wait until it is ready, run <code>pytest -m integration</code>, and stop the stack.</p>
+
+<h2 id="two-kinds-of-tests-two-commands">Two kinds of tests, two commands</h2>
+<p>A unit test calls code in the same process, for example through FastAPI's <code>TestClient</code>. It needs no server and no database, and it runs in milliseconds. An integration test sends real HTTP requests to a running service that uses a real database. Mixing them makes the whole suite slow and flaky, so mark the second kind. In <code>pyproject.toml</code>:</p>
+<pre><code>[tool.pytest.ini_options]
+markers = ["integration: needs the stack to be running"]
+addopts = "-m 'not integration'"</code></pre>
+<p>Now plain <code>pytest</code> skips them, and <code>pytest -m integration</code> runs them. (The <code>-m</code> given on the command line replaces the default in <code>addopts</code>.) A test then reads the address from the environment and falls back to a local default:</p>
+<pre><code>import os
+import httpx
+import pytest
+
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:4000")
+
+@pytest.mark.integration
+def test_create_and_read_item():
+    created = httpx.post(f"{BASE_URL}/items", json={"name": "pen"}, timeout=5)
+    assert created.status_code == 201
+    item_id = created.json()["id"]
+    fetched = httpx.get(f"{BASE_URL}/items/{item_id}", timeout=5)
+    assert fetched.json()["name"] == "pen"</code></pre>
+<p>Always set a timeout. A test with no timeout that hits a hung service waits forever, which looks like a stuck CI job.</p>
+
+<h2 id="use-a-separate-database">Use a separate database</h2>
+<p>Tests create and delete rows. Run them against the same database you click around in and you will lose data, or get failures that depend on what you left behind. Two simple options:</p>
+<ul>
+<li>Create a second database on the same Postgres server, such as <code>app_test</code>, and give the service under test that <code>DATABASE_URL</code>.</li>
+<li>Let a test framework do it. <code>pytest-django</code> creates a throwaway <code>test_</code> database for you on its own.</li>
+</ul>
+<p>In either case, make each test clean up after itself or run inside a transaction that is rolled back, so the order of tests does not matter. More background in <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+
+<h2 id="waiting-for-readiness">Waiting for readiness</h2>
+<p>The classic flake is a test that fires before the service has finished starting. Wait for a health endpoint, not for a fixed sleep:</p>
+<pre><code>import time, httpx, pytest
+
+@pytest.fixture(scope="session", autouse=True)
+def wait_for_service():
+    for _ in range(60):
+        try:
+            if httpx.get(f"{BASE_URL}/health", timeout=1).status_code == 200:
+                return
+        except httpx.HTTPError:
+            pass
+        time.sleep(1)
+    pytest.fail("service did not become healthy within 60 seconds")</code></pre>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk starts the stack and waits for each service's health path, so the fixture above becomes a safety net rather than the main mechanism. In a project where services run as local processes:</p>
+<pre><code>flisk up --json
+BASE_URL=http://localhost:4000 pytest -m integration
+flisk down</code></pre>
+<p>With local processes, <code>flisk up --json</code> prints one JSON line once every service is ready. That line includes each service's URL, so a script can read the address instead of hard-coding it. Run in the foreground, <code>flisk up</code> keeps running in its terminal, so in a script you start it in the background or in a second terminal first. Then <code>flisk down</code> stops the stack and frees the ports.</p>
+<p>To run the tests with the service's own environment, so you do not copy <code>DATABASE_URL</code> by hand, use <code>flisk run</code>:</p>
+<pre><code>flisk run api -- pytest -m integration</code></pre>
+<p>For a service with a <code>command</code>, this runs on your machine from the service folder with the project <code>.env</code>, your shell and the service's own <code>env</code> and <code>PORT</code>. For a container service it uses <code>docker exec</code> in the running container, so the service must already be up. Add <code>--json</code> if an agent or script needs the exit code and output as one JSON object.</p>
+<p>On the container route there is also an opt-in for fast feedback while coding. A Python service can set <code>"dev": { "testOnSave": true }</code> in its <code>service.json</code>, and Flisk registers a separate Tilt resource that runs pytest in the container when files under <code>src/</code> or the test folder change. A failing test turns that resource red while the service keeps running. It runs the tests in your <code>tests</code> folder, so keep integration tests out of that path or behind the marker.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Shared state between tests.</strong> If test B needs test A to have run, you have a hidden dependency. Create the data each test needs.</li>
+<li><strong>Testing against production URLs.</strong> A <code>BASE_URL</code> that someone changed in a shell profile can send writes to a real system. Default to localhost in the code.</li>
+<li><strong>Mocking everything.</strong> Mocks are fine for the edges you do not own. See <a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/">mock or run the real service</a> for a rule of thumb.</li>
+<li><strong>Slow suites.</strong> Run the integration tests in CI and on demand, and keep the default <code>pytest</code> for fast checks.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Add a background job to the stack and test it the same way with <a href="/@odykyi/python-dev-setup/celery-with-redis-locally/">Celery and Redis locally</a>. For a database-backed web app, <a href="/@odykyi/python-dev-setup/django-with-postgres-locally/">Django with Postgres</a> shows the ordering of migrations and server.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I skip integration tests by default in pytest?</summary><p>Register a marker such as integration and set addopts to -m &#39;not integration&#39;. Run pytest -m integration to include them.</p></details><details><summary>Should integration tests use my development database?</summary><p>No. Use a separate test database so test data and cleanup never touch your development data.</p></details><details><summary>How do I run pytest with a service&#39;s environment in Flisk?</summary><p>Use flisk run &lt;service&gt; -- pytest. For a local-process service it runs on the host from the service folder with that service&#39;s environment.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/django-with-postgres-locally/"><span class="lbl">Guide</span><b>How to run Django locally with Postgres in Docker</b><span>Django reloads fast on the host, and Postgres is easiest in a container. Splitting them this way is a common setup. Here is how to wire it so migrations run first and data survives restarts.</span></a><a href="/@odykyi/python-dev-setup/celery-with-redis-locally/"><span class="lbl">Guide</span><b>How to run Celery with Redis for local development</b><span>A Celery setup has three moving parts: something that enqueues, a broker that holds the jobs, and a worker that runs them. Locally you can run all three with a couple of small files.</span></a><a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/"><span class="lbl">Guide</span><b>How to debug a Python service with debugpy and VS Code</b><span>Print statements get you far. When they stop being enough, attach a real debugger to the running service. It is a small amount of setup and it works the same for a service you start by hand or through a tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

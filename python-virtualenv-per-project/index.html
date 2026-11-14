@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set up a Python virtual environment for each project</title>
+<meta name="description" content="Create, activate and reuse a venv per project, keep it out of git, rebuild it from a requirements file, and make services started by other tools use it.">
+<meta name="keywords" content="python virtual environment, python venv per project, create venv python, activate virtualenv, requirements.txt venv">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/python-virtualenv-per-project/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set up a Python virtual environment for each project">
+<meta property="og:description" content="Create, activate and reuse a venv per project, keep it out of git, rebuild it from a requirements file, and make services started by other tools use it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/python-virtualenv-per-project/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set up a Python virtual environment for each project","description":"Create, activate and reuse a venv per project, keep it out of git, rebuild it from a requirements file, and make services started by other tools use it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/python-virtualenv-per-project/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/python-virtualenv-per-project/","keywords":"python virtual environment, python venv per project, create venv python, activate virtualenv, requirements.txt venv","wordCount":748,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to set up a Python virtual environment for each project","item":"https://pages.flisk.si/@odykyi/python-dev-setup/python-virtualenv-per-project/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need to activate a virtual environment every time?","acceptedAnswer":{"@type":"Answer","text":"Only if you want python and pip to resolve to it. You can always run .venv/bin/python directly, and editors and process managers can be pointed at that path."}},{"@type":"Question","name":"Should the venv folder be committed to git?","acceptedAnswer":{"@type":"Answer","text":"No. Commit requirements.txt or pyproject.toml and add .venv/ to .gitignore. The environment can be rebuilt from those files."}},{"@type":"Question","name":"Can I move or rename a virtual environment?","acceptedAnswer":{"@type":"Answer","text":"Not safely. Its scripts contain absolute paths. Delete it and create a new one with python3 -m venv .venv."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to set up a Python virtual environment for each project</h1><p class="dek">One virtual environment per project keeps dependencies from colliding. The commands are short. The part people trip on is making every tool use the same one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#create-and-activate-the-environment">Create and activate the environment</a></li><li><a href="#record-and-rebuild-dependencies">Record and rebuild dependencies</a></li><li><a href="#where-to-put-the-folder">Where to put the folder</a></li><li><a href="#making-a-process-manager-use-the-venv">Making a process manager use the venv</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Create one virtual environment inside each project folder with <code>python3 -m venv .venv</code>, activate it, and install the project's dependencies into it. Each project then gets its own packages and its own <code>pip</code>, so upgrading a library for one project cannot break another. Keep the <code>.venv</code> folder out of git and rebuild it from a requirements file whenever you need a fresh copy.</p>
+
+<h2 id="create-and-activate-the-environment">Create and activate the environment</h2>
+<p>From the project root:</p>
+<pre><code>python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt</code></pre>
+<p>On Windows PowerShell the activation line is <code>.venv\Scripts\Activate.ps1</code>. After activation, <code>python</code> and <code>pip</code> point at the copies inside <code>.venv</code>. Check it with:</p>
+<pre><code>python -c "import sys; print(sys.executable)"</code></pre>
+<p>The path should end in <code>.venv/bin/python</code>. If it does not, you are still using the system interpreter, and that is the cause of most "I installed it but it is not found" reports. Calling <code>python -m pip</code> instead of bare <code>pip</code> is a habit worth keeping, because it guarantees the package lands in the interpreter you just ran.</p>
+<p>You do not have to activate the environment to use it. <code>.venv/bin/python script.py</code> and <code>.venv/bin/pytest</code> work from any shell, which is how editors, cron jobs and other tools usually run it.</p>
+
+<h2 id="record-and-rebuild-dependencies">Record and rebuild dependencies</h2>
+<p>A virtual environment is disposable. The files that describe it are not. Pick one of these and commit it:</p>
+<ul>
+<li><strong><code>requirements.txt</code></strong>: write it by hand with the top-level packages, or generate it with <code>python -m pip freeze &gt; requirements.txt</code>. Freezing pins every transitive package too, which is reproducible but noisy.</li>
+<li><strong><code>pyproject.toml</code></strong> with a <code>dependencies</code> list, installed with <code>python -m pip install -e .</code> for a package or by a tool such as uv.</li>
+</ul>
+<p>Then add <code>.venv/</code> to <code>.gitignore</code>. To start over, delete the folder and run the three commands again. If rebuilding the environment feels expensive, your dependency list is not complete enough, which is worth knowing early.</p>
+
+<h2 id="where-to-put-the-folder">Where to put the folder</h2>
+<p>The common choice is <code>.venv</code> at the repository root. Editors such as VS Code and PyCharm look for it there and offer it as the interpreter. In a repository with several Python services, you have two reasonable layouts:</p>
+<ul>
+<li>One shared <code>.venv</code> at the root, when all services use compatible versions of the same libraries.</li>
+<li>One <code>.venv</code> per service folder, when they differ. It costs disk space and gives clean isolation.</li>
+</ul>
+<p>Do not copy a venv to another machine or folder. The scripts inside contain absolute paths, so a moved environment breaks in confusing ways. Recreate it instead.</p>
+
+<h2 id="making-a-process-manager-use-the-venv">Making a process manager use the venv</h2>
+<p>Any tool that starts your service has to find the right interpreter. There are two ways, and both are plain shell behaviour.</p>
+<ol>
+<li>Activate the environment in the shell that starts the tool. Child processes inherit the changed <code>PATH</code>.</li>
+<li>Name the interpreter in the command, for example <code>.venv/bin/uvicorn</code>.</li>
+</ol>
+<p>Flisk runs a service whose <code>service.json</code> has a <code>command</code> as a local process, from the service's own folder, and the process inherits your shell's environment. So the first way works: activate, then run <code>flisk up</code>. Flisk does not create or activate a virtualenv itself. Here is a manifest that names the interpreter explicitly, which does not depend on the shell:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": ".venv/bin/uvicorn main:app --reload --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>The path is relative to the service folder, so put the venv there or adjust the path. On native Windows each command runs through <code>cmd.exe</code>, where the folder is <code>.venv\Scripts</code>, so a team on mixed systems is better off activating the environment than hard-coding the path. The Flisk setup is described in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two environments, one project.</strong> An editor using <code>.venv</code> while a terminal uses a global Python gives you different results from the same code. Print <code>sys.executable</code> in both.</li>
+<li><strong>Installing as root with sudo.</strong> It writes into the system Python. Activate the venv and install without sudo.</li>
+<li><strong>Committing the folder.</strong> It is large and not portable.</li>
+<li><strong>Using venv when you need system libraries.</strong> A venv isolates Python packages only. A package that needs a C library still needs it installed on the machine, or a container image that has it.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once the environment is stable, decide how you will install into it quickly: <a href="/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/">uv or pip</a>. And if the interpreter version itself keeps drifting between machines, see <a href="/@odykyi/python-dev-setup/pin-python-version-per-project/">how to pin the Python version</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need to activate a virtual environment every time?</summary><p>Only if you want python and pip to resolve to it. You can always run .venv/bin/python directly, and editors and process managers can be pointed at that path.</p></details><details><summary>Should the venv folder be committed to git?</summary><p>No. Commit requirements.txt or pyproject.toml and add .venv/ to .gitignore. The environment can be rebuilt from those files.</p></details><details><summary>Can I move or rename a virtual environment?</summary><p>Not safely. Its scripts contain absolute paths. Delete it and create a new one with python3 -m venv .venv.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/"><span class="lbl">Guide</span><b>uv vs pip for a local Python project: which to use</b><span>pip is everywhere and does one job. uv replaces pip, venv and a few other tools with one program. Here is how to choose without a migration project.</span></a><a href="/@odykyi/python-dev-setup/pin-python-version-per-project/"><span class="lbl">Guide</span><b>How to pin the Python version for a project (pyenv, uv, mise)</b><span>A project that works on 3.12 and fails on 3.9 is a project nobody pinned. Pinning takes three small files and saves hours of confusing bug reports.</span></a><a href="/@odykyi/python-dev-setup/modulenotfounderror-in-local-service/"><span class="lbl">Guide</span><b>ModuleNotFoundError when starting a Python service: fixes</b><span>The error says a module is missing. Usually the module is installed, just not for the Python that is running. Here is how to find which Python that is, and the usual fixes.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
