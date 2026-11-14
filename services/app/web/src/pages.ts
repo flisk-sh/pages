@@ -9,7 +9,7 @@ import { links, type Space, spacePath } from "./spaces";
 // Spaces are previewed live in sandboxed frames (no allow-same-origin, so a space cannot reach this page), and
 // publishers' GitHub avatars and the DevHunt footer badge are the only images from elsewhere.
 const POLICY =
-	"default-src 'none'; script-src https://flisk.si; style-src 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com https://devhunt.org; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; script-src https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si; style-src 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com https://devhunt.org; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'";
 
 const STYLE = `
 :root{--bg:${SITE.themeColor.light};--fg:#141413;--muted:#66625b;--faint:#97928a;--line:#e7e2d8;--line2:#d6d0c3;--card:#fff;--soft:#f3f0e9;--accent:#2d4cc8;--accent2:#5b74ff;--mark:#ffe27a;--ink:#141413;--onink:#f4f2ec;--shadow:0 1px 2px rgba(20,20,19,.06),0 12px 40px -12px rgba(20,20,19,.18)}
@@ -104,7 +104,7 @@ function layout(base: string, meta: PageMeta, body: string): string {
 	return `<!doctype html><html lang="${SITE.lang}"><head>
 <meta http-equiv="Content-Security-Policy" content="${POLICY}">
 ${head(base, meta)}
-<style>${STYLE}</style><script src="https://flisk.si/assets/bar.js" defer></script></head><body>
+<style>${STYLE}</style><script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script></head><body>
 <header class="top"><div class="wrap"><a class="brand" href="${root}/"><img src="${root}/icon.svg" alt="" width="26" height="26">${esc(SITE.name)}<span>.flisk.si</span></a><nav aria-label="Site"><a class="hide-sm" href="${root}/#spaces">Spaces</a><a class="hide-sm" href="${root}/#how">How it works</a><a href="${root}/about">FAQ</a><a class="gh" href="${SITE.repo}">GitHub</a></nav></div></header>
 <main>
 ${body}
@@ -295,7 +295,7 @@ export function aboutPage(base: string): string {
 
 // The share page runs one same-origin script and nothing else. It is the only page that allows scripts.
 const SHARE_POLICY =
-	"default-src 'none'; script-src 'self' https://flisk.si; style-src 'unsafe-inline'; img-src 'self' https://devhunt.org; base-uri 'none'; form-action 'none'";
+	"default-src 'none'; script-src 'self' https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si; style-src 'unsafe-inline'; img-src 'self' https://devhunt.org; base-uri 'none'; form-action 'none'";
 
 export function sharePage(
 	base: string,

@@ -147,10 +147,11 @@ describe("the site around the spaces", () => {
 		const html = await (await get("/")).text();
 		expect(html).toContain("How GPUs work");
 		expect(html).toContain("default-src 'none'");
-		expect(html).toContain("script-src https://flisk.si;");
+		expect(html).toContain("script-src https://flisk.si https://flisk.sh;");
+		expect(html).toContain("connect-src https://analytics.flisk.si;");
 		expect(html.match(/<script src/g)).toHaveLength(1);
 		expect(html).toContain(
-			'<script src="https://flisk.si/assets/bar.js" defer></script>',
+			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script>',
 		);
 	});
 
