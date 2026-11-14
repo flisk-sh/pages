@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker BuildKit cache mounts for npm, pip and Go modules</title>
+<meta name="description" content="Layer caching dies when the lockfile changes. A BuildKit cache mount keeps the npm, pip, uv or Go download cache between builds. Examples and limits.">
+<meta name="keywords" content="buildkit cache mount, docker run --mount type=cache, npm ci cache docker, pip cache docker build, go build cache docker">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker BuildKit cache mounts for npm, pip and Go modules">
+<meta property="og:description" content="Layer caching dies when the lockfile changes. A BuildKit cache mount keeps the npm, pip, uv or Go download cache between builds. Examples and limits.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker BuildKit cache mounts for npm, pip and Go modules","description":"Layer caching dies when the lockfile changes. A BuildKit cache mount keeps the npm, pip, uv or Go download cache between builds. Examples and limits.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/","keywords":"buildkit cache mount, docker run --mount type=cache, npm ci cache docker, pip cache docker build, go build cache docker","wordCount":804,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"Docker BuildKit cache mounts for npm, pip and Go modules","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does a cache mount make my image bigger?","acceptedAnswer":{"@type":"Answer","text":"No. The mounted folder is not part of any layer, so the downloaded packages in the cache do not count toward image size. Installed packages in node_modules still do."}},{"@type":"Question","name":"Why is my cache mount empty in CI?","acceptedAnswer":{"@type":"Answer","text":"The cache lives in the local builder's storage and is not exported with the usual remote cache options. A fresh runner starts with an empty cache unless you persist the builder state."}},{"@type":"Question","name":"Do I need to configure Flisk to use cache mounts?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk builds a bring-your-own Dockerfile as written, so put the RUN --mount lines in the Dockerfile itself."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>Docker BuildKit cache mounts for npm, pip and Go modules</h1><p class="dek">Add one package and the whole install layer reruns from scratch. A cache mount keeps the downloads so only the new package is fetched.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-gap-that-layer-caching-leaves">The gap that layer caching leaves</a></li><li><a href="#node">Node</a></li><li><a href="#python">Python</a></li><li><a href="#go">Go</a></li><li><a href="#apt-packages">apt packages</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#checking-that-the-cache-is-used">Checking that the cache is used</a></li><li><a href="#limits-and-pitfalls">Limits and pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A BuildKit cache mount is a folder that survives between builds but is not part of the image. Mount your package manager's download cache there with <code>RUN --mount=type=cache,target=...</code> and a change to the lockfile only downloads the new packages instead of everything. It complements layer caching: layers help when nothing changed, cache mounts help when something small did.</p>
+
+<h2 id="the-gap-that-layer-caching-leaves">The gap that layer caching leaves</h2>
+<p>If you order your Dockerfile well, <code>npm ci</code> reruns only when <code>package-lock.json</code> changes. But when it does change, even by one package, that layer is invalid and the install starts from an empty cache: every package is downloaded again. On a slow connection or a large dependency tree this is the slowest part of the day. A cache mount fixes exactly this case.</p>
+
+<h2 id="node">Node</h2>
+<pre><code># syntax=docker/dockerfile:1
+FROM node:22-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+COPY . .
+CMD ["node", "server.js"]</code></pre>
+<p>npm keeps its download cache in <code>/root/.npm</code> when you run as root. The mounted folder is not written into the layer, so the image does not grow by the size of the cache. The packages themselves still end up in <code>node_modules</code>, which is part of the layer.</p>
+
+<h2 id="python">Python</h2>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt
+COPY . .</code></pre>
+<p>Do not pass <code>--no-cache-dir</code> here: it would turn off the very cache you are mounting. With uv, mount <code>/root/.cache/uv</code> instead.</p>
+
+<h2 id="go">Go</h2>
+<pre><code>FROM golang:1.23
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -o /out/api ./cmd/api</code></pre>
+<p>The second mount, the Go build cache, is the bigger win: it holds compiled packages, so a rebuild recompiles only what changed.</p>
+
+<h2 id="apt-packages">apt packages</h2>
+<p>Debian-based images delete downloaded packages after each install by default. To use a mount you have to turn that off and make the mounts lock so parallel builds do not collide:</p>
+<pre><code>FROM debian:bookworm-slim
+RUN rm -f /etc/apt/apt.conf.d/docker-clean
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update &amp;amp;&amp;amp; apt-get install -y --no-install-recommends git</code></pre>
+<p>Here the code block is written with the ampersands escaped for HTML, you type plain <code>&amp;amp;&amp;amp;</code> in your file.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk uses the same mechanism for the shared base images it builds for generated services: the dependency install step mounts a cache folder for Bun, so repeated installs reuse downloaded packages. For a Dockerfile you bring yourself, use the mounts above; Flisk builds it as written, and does not need any <code>service.json</code> setting for this.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile"
+}</code></pre>
+<p>The build cache is kept by Docker for the whole machine, not per project. If you prune it to free disk (<code>docker builder prune</code>), cache mounts go with it and the next build downloads everything once.</p>
+
+<h2 id="checking-that-the-cache-is-used">Checking that the cache is used</h2>
+<p>Build twice with plain progress output: <code>docker build --progress=plain .</code>. Change one line in your lockfile, build again, and watch the install step. With a working mount you will see packages come from the cache instead of the network, and the step finishes in a fraction of the first time. If every build is as slow as the first, check that the <code>target</code> path matches where your tool really stores its cache, and that the build runs as the user you expect. Run <code>npm config get cache</code>, <code>pip cache dir</code> or <code>go env GOMODCACHE GOCACHE</code> in a throwaway container to confirm the path for your image.</p>
+<p>You can also give a mount an <code>id</code> so two different steps share one cache, for example <code>--mount=type=cache,id=npm,target=/root/.npm</code> in both a dev stage and a build stage. Without an id, the target path is the cache key.</p>
+
+<h2 id="limits-and-pitfalls">Limits and pitfalls</h2>
+<ul>
+<li><strong>BuildKit is required.</strong> It is the default builder in current Docker releases. Check that <code>docker buildx version</code> works.</li>
+<li><strong>The cache is local.</strong> Cache mount contents are not exported by the usual remote cache options, so a clean CI runner starts empty. Use a persistent runner cache folder or accept the cold start in CI.</li>
+<li><strong>Match the user.</strong> If the build step runs as a non-root user, the target folder must belong to that user. The mount accepts <code>uid</code> and <code>gid</code> options, and the target path moves to that user's home.</li>
+<li><strong>Do not rely on the cache being there.</strong> It can be evicted at any time. The build must still work with an empty cache.</li>
+<li><strong>Do not mount the output you ship.</strong> Anything that only exists inside a cache mount is not in the image. Install into <code>node_modules</code>, not into the mount.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If builds are still slow, look at what is in the build context: <a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/">what to put in .dockerignore</a>. And if the cache is the thing filling your disk, <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">free the space without losing data</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does a cache mount make my image bigger?</summary><p>No. The mounted folder is not part of any layer, so the downloaded packages in the cache do not count toward image size. Installed packages in node_modules still do.</p></details><details><summary>Why is my cache mount empty in CI?</summary><p>The cache lives in the local builder&#39;s storage and is not exported with the usual remote cache options. A fresh runner starts with an empty cache unless you persist the builder state.</p></details><details><summary>Do I need to configure Flisk to use cache mounts?</summary><p>No. Flisk builds a bring-your-own Dockerfile as written, so put the RUN --mount lines in the Dockerfile itself.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/"><span class="lbl">Guide</span><b>How to speed up Docker builds with layer caching</b><span>Every code edit triggers a full npm install or pip install. The fix is the order of five lines in your Dockerfile, not a faster machine.</span></a><a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/"><span class="lbl">Guide</span><b>What to put in .dockerignore (and why builds get slow without it)</b><span>If docker build starts with a long &#39;transferring context&#39; step, the fix is usually a ten-line file.</span></a><a href="/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/"><span class="lbl">Guide</span><b>Alpine or Debian slim for a development Docker image</b><span>Smaller is not always faster. For many Python and Node projects, a slim Debian image builds sooner and fails less.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

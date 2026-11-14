@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multi-stage Dockerfile with separate dev and production stages</title>
+<meta name="description" content="One Dockerfile can hold a dev stage with watchers and a lean production stage. Learn --target, Compose build.target, and how to point Flisk at the right file.">
+<meta name="keywords" content="multi-stage dockerfile, docker build --target, dockerfile dev and prod, compose build target, multi stage build node">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Multi-stage Dockerfile with separate dev and production stages">
+<meta property="og:description" content="One Dockerfile can hold a dev stage with watchers and a lean production stage. Learn --target, Compose build.target, and how to point Flisk at the right file.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Multi-stage Dockerfile with separate dev and production stages","description":"One Dockerfile can hold a dev stage with watchers and a lean production stage. Learn --target, Compose build.target, and how to point Flisk at the right file.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/","keywords":"multi-stage dockerfile, docker build --target, dockerfile dev and prod, compose build target, multi stage build node","wordCount":718,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"Multi-stage Dockerfile with separate dev and production stages","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What happens if I run docker build without --target?","acceptedAnswer":{"@type":"Answer","text":"Docker builds the last stage in the Dockerfile. Order the stages so the one you want by default is last, usually production."}},{"@type":"Question","name":"Can Flisk select a build stage for my own Dockerfile?","acceptedAnswer":{"@type":"Answer","text":"No. service.json has no target field for a bring-your-own resource, and Flisk passes no target, so the last stage is built. Use a separate dockerfile path for a dev variant."}},{"@type":"Question","name":"Does the dev stage need to be a separate file?","acceptedAnswer":{"@type":"Answer","text":"No. Stages in one file are fine for Docker and Compose. A separate file is only needed when a tool, such as a Flisk bring-your-own resource, cannot choose a stage."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>Multi-stage Dockerfile with separate dev and production stages</h1><p class="dek">Production images should not carry compilers or test tools, and dev images should not run a minified build. Stages let one file serve both.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-shape-of-the-file">The shape of the file</a></li><li><a href="#build-the-stage-you-want">Build the stage you want</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#a-compiled-language-example">A compiled-language example</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A multi-stage Dockerfile has several <code>FROM</code> lines, each starting a named stage. You can build up to any stage with <code>docker build --target &amp;lt;name&amp;gt;</code>, so one file can produce a development image with watchers and dev tools, and a small production image that only contains what runs. Without <code>--target</code>, Docker builds the last stage.</p>
+
+<h2 id="the-shape-of-the-file">The shape of the file</h2>
+<p>Share the common work in a base stage, then branch:</p>
+<pre><code># syntax=docker/dockerfile:1
+FROM node:22-alpine AS base
+WORKDIR /app
+COPY package.json package-lock.json ./
+
+FROM base AS dev
+RUN npm ci
+COPY . .
+CMD ["npm", "run", "dev"]
+
+FROM base AS build
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM base AS production
+ENV NODE_ENV=production
+RUN npm ci --omit=dev
+COPY --from=build /app/dist ./dist
+USER node
+CMD ["node", "dist/server.js"]</code></pre>
+<p>The <code>build</code> stage has the compiler and dev dependencies. The <code>production</code> stage copies only the compiled output out of it with <code>COPY --from=build</code>, so the final image has no TypeScript, no test runner and no source. Because <code>production</code> is last, a plain <code>docker build .</code> produces it.</p>
+
+<h2 id="build-the-stage-you-want">Build the stage you want</h2>
+<pre><code>docker build --target dev -t myapp:dev .
+docker build -t myapp:prod .</code></pre>
+<p>In Docker Compose, pick the stage in the service's build block:</p>
+<pre><code>services:
+  web:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - ./src:/app/src</code></pre>
+<p>Stages that nothing depends on are skipped by BuildKit, so building <code>dev</code> does not run the <code>build</code> stage at all. The older classic builder ran stages in order, which is one reason to keep BuildKit on (it is the default in current Docker releases).</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>For a service you bring yourself, Flisk builds your Dockerfile and passes no build target, so Docker builds the last stage. <code>service.json</code> has no field to choose a stage. That leaves two honest options.</p>
+<ul>
+<li><strong>Put the stage you want locally last.</strong> If the file is only used for local work, end it with the dev stage.</li>
+<li><strong>Keep two files.</strong> Name the dev one <code>Dockerfile.dev</code> and point to it, leaving <code>Dockerfile</code> for production and CI:</li>
+</ul>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile.dev"
+}</code></pre>
+<p>If your Dockerfile lives higher in the repo, set <code>buildContext</code> to a path relative to the service folder. <code>dockerfile</code> is then relative to that context, as it is in Compose. If you let Flisk generate a service instead, it writes its own layered Dockerfile and you do not maintain stages at all. A Bun backend whose <code>dev</code> script uses <code>--watch</code> gets a development image so edits restart the app.</p>
+
+<h2 id="a-compiled-language-example">A compiled-language example</h2>
+<p>Stages matter most for compiled languages, where the build tools are large and the output is a single file. A Go service can build in one stage and run in a tiny one:</p>
+<pre><code>FROM golang:1.23 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /out/api ./cmd/api
+
+FROM gcr.io/distroless/static-debian12 AS production
+COPY --from=build /out/api /api
+USER nonroot
+ENTRYPOINT ["/api"]</code></pre>
+<p>The Go toolchain stays in the <code>build</code> stage and never reaches the final image. For development you would add a separate stage with a file watcher on top of <code>golang</code>, since a distroless image has no shell to debug in. The principle is the same as with Node: a stage for each job, and a last stage that holds only what must run.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Stage names are case-insensitive and must be unique.</strong> A typo in <code>--target</code> fails with "target stage could not be found".</li>
+<li><strong>Do not install dev dependencies in the final stage.</strong> It is the most common reason a production image is hundreds of megabytes larger than it needs to be.</li>
+<li><strong>Keep the dev stage close to production.</strong> Same base image and same OS packages, otherwise a bug that only appears in production is hard to reproduce. The <a href="/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/">Alpine or Debian slim</a> choice is one place this drifts.</li>
+<li><strong>Do not put secrets in an early stage and assume they vanish.</strong> A stage you copy from can still be inspected in the build cache and, if you push it, in the registry.</li>
+<li><strong>Layer order still matters inside each stage.</strong> See <a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">layer caching</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>A dev stage is only useful if edits reach the container without a rebuild. <a href="/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/">Bind mounting your source</a> is how the dev stage above picks up changes.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What happens if I run docker build without --target?</summary><p>Docker builds the last stage in the Dockerfile. Order the stages so the one you want by default is last, usually production.</p></details><details><summary>Can Flisk select a build stage for my own Dockerfile?</summary><p>No. service.json has no target field for a bring-your-own resource, and Flisk passes no target, so the last stage is built. Use a separate dockerfile path for a dev variant.</p></details><details><summary>Does the dev stage need to be a separate file?</summary><p>No. Stages in one file are fine for Docker and Compose. A separate file is only needed when a tool, such as a Flisk bring-your-own resource, cannot choose a stage.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/"><span class="lbl">Guide</span><b>How to bind mount source code into a container for development</b><span>The image has your code baked in, so every edit needs a rebuild. A bind mount replaces the baked-in copy with your live folder.</span></a><a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/"><span class="lbl">Guide</span><b>How to speed up Docker builds with layer caching</b><span>Every code edit triggers a full npm install or pip install. The fix is the order of five lines in your Dockerfile, not a faster machine.</span></a><a href="/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/"><span class="lbl">Guide</span><b>Alpine or Debian slim for a development Docker image</b><span>Smaller is not always faster. For many Python and Node projects, a slim Debian image builds sooner and fails less.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

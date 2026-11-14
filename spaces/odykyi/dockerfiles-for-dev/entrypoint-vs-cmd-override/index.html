@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker ENTRYPOINT vs CMD: how to override them in dev</title>
+<meta name="description" content="CMD is the default command, ENTRYPOINT is the fixed program. Exec vs shell form, signals, Compose overrides and the Flisk container block.">
+<meta name="keywords" content="docker entrypoint vs cmd, docker run override entrypoint, compose entrypoint command, docker exec form shell form, docker stop signal sigterm">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker ENTRYPOINT vs CMD: how to override them in dev">
+<meta property="og:description" content="CMD is the default command, ENTRYPOINT is the fixed program. Exec vs shell form, signals, Compose overrides and the Flisk container block.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker ENTRYPOINT vs CMD: how to override them in dev","description":"CMD is the default command, ENTRYPOINT is the fixed program. Exec vs shell form, signals, Compose overrides and the Flisk container block.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/","keywords":"docker entrypoint vs cmd, docker run override entrypoint, compose entrypoint command, docker exec form shell form, docker stop signal sigterm","wordCount":771,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"Docker ENTRYPOINT vs CMD: how to override them in dev","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between ENTRYPOINT and CMD?","acceptedAnswer":{"@type":"Answer","text":"ENTRYPOINT is the program the container always runs. CMD supplies default arguments, or the whole command when there is no entrypoint. Arguments to docker run replace CMD; docker run --entrypoint replaces ENTRYPOINT."}},{"@type":"Question","name":"Why does docker stop take ten seconds?","acceptedAnswer":{"@type":"Answer","text":"Process 1 did not handle SIGTERM, often because a shell or a script without exec sits in front of the app. Use exec form and exec the final command in scripts."}},{"@type":"Question","name":"How do I override the command of a Flisk bring-your-own service?","acceptedAnswer":{"@type":"Answer","text":"Use the container block in service.json: entrypoint and command take lists of strings in exec form. Set command too when you set entrypoint, since Compose drops the image CMD."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>Docker ENTRYPOINT vs CMD: how to override them in dev</h1><p class="dek">One line in a Dockerfile decides whether docker run image bash gives you a shell or passes the word bash to your app.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-the-two-combine">How the two combine</a></li><li><a href="#exec-form-and-shell-form">Exec form and shell form</a></li><li><a href="#a-wrapper-script-that-does-not-swallow-signals">A wrapper script that does not swallow signals</a></li><li><a href="#overriding-in-docker-and-compose">Overriding in Docker and Compose</a></li><li><a href="#overriding-in-a-flisk-stack">Overriding in a Flisk stack</a></li><li><a href="#a-worked-example-a-debug-run">A worked example: a debug run</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p><code>ENTRYPOINT</code> sets the program a container always runs, and <code>CMD</code> sets its default arguments, or its whole command if there is no entrypoint. Arguments after the image name in <code>docker run</code> replace <code>CMD</code>. To replace the entrypoint you need <code>--entrypoint</code>. Use the exec (JSON array) form for both, so the app is process 1 and receives stop signals.</p>
+
+<h2 id="how-the-two-combine">How the two combine</h2>
+<table>
+<thead><tr><th>Dockerfile</th><th>docker run image</th><th>docker run image extra</th></tr></thead>
+<tbody>
+<tr><td><code>CMD ["node","server.js"]</code></td><td>node server.js</td><td>extra (CMD replaced)</td></tr>
+<tr><td><code>ENTRYPOINT ["node"]</code> + <code>CMD ["server.js"]</code></td><td>node server.js</td><td>node extra</td></tr>
+<tr><td><code>ENTRYPOINT ["./start.sh"]</code></td><td>./start.sh</td><td>./start.sh extra</td></tr>
+</tbody>
+</table>
+<p>A good habit: use <code>ENTRYPOINT</code> for a fixed wrapper (a script that prepares the environment) and <code>CMD</code> for the part you might change. That makes <code>docker run myimage node --inspect server.js</code> or <code>docker run myimage sh</code> do what you expect.</p>
+
+<h2 id="exec-form-and-shell-form">Exec form and shell form</h2>
+<p><code>CMD ["node", "server.js"]</code> is exec form: Docker starts <code>node</code> directly. <code>CMD node server.js</code> is shell form: Docker starts <code>/bin/sh -c "node server.js"</code>, so the shell is process 1 and your app is its child. Two consequences:</p>
+<ul>
+<li><strong>Signals.</strong> <code>docker stop</code> sends SIGTERM to process 1. A shell may not pass it on, so your app is killed after the timeout, not stopped cleanly. Exec form avoids this.</li>
+<li><strong>Variables.</strong> Exec form does no variable expansion. <code>CMD ["echo", "$HOME"]</code> prints the text <code>$HOME</code>. If you need expansion, start a shell yourself: <code>CMD ["sh", "-c", "echo $HOME"]</code>.</li>
+</ul>
+
+<h2 id="a-wrapper-script-that-does-not-swallow-signals">A wrapper script that does not swallow signals</h2>
+<pre><code>#!/bin/sh
+set -e
+# prepare something, then hand over to the real command
+cp -n .env.example .env 2&amp;gt;/dev/null || true
+exec "$@"</code></pre>
+<pre><code>COPY docker-entrypoint.sh /usr/local/bin/
+ENTRYPOINT ["docker-entrypoint.sh"]
+CMD ["node", "server.js"]</code></pre>
+<p>The <code>exec "$@"</code> at the end replaces the script with the command, so the app becomes process 1. Without <code>exec</code>, the script stays as process 1 and your app never sees SIGTERM.</p>
+
+<h2 id="overriding-in-docker-and-compose">Overriding in Docker and Compose</h2>
+<pre><code>docker run --rm -it --entrypoint sh myimage
+docker run --rm myimage node --version</code></pre>
+<pre><code>services:
+  web:
+    image: myimage
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "echo hello"]</code></pre>
+<p>Compose has the same two keys. One trap: setting <code>entrypoint</code> in Compose also clears the image's default <code>CMD</code>, so set <code>command</code> too if the app needs arguments.</p>
+
+<h2 id="overriding-in-a-flisk-stack">Overriding in a Flisk stack</h2>
+<p>For a <code>bring-your-own</code> resource, the <code>container</code> block in <code>service.json</code> maps to those Compose keys:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile",
+  "container": {
+    "entrypoint": ["docker-entrypoint.sh"],
+    "command": ["node", "--inspect=0.0.0.0:9229", "server.js"]
+  }
+}</code></pre>
+<p>Both are lists of non-empty strings in exec form, so there is no shell unless you write <code>["sh", "-c", "..."]</code>. Compose reads <code>$</code> itself, so write <code>$$VAR</code> for a variable the container should expand when it starts. An empty list, <code>"entrypoint": []</code>, removes the image's <code>ENTRYPOINT</code> and keeps its <code>CMD</code>. Do not confuse this <code>container.command</code> with the top-level <code>command</code> field of <code>service.json</code>: that one runs a local process on your machine with no container. Flisk also starts containers with <code>init</code> enabled by default, which helps with zombie processes, but it does not replace the <code>exec</code> habit above.</p>
+<p>To run a one-off command in an already running service instead, see <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">how to run a one-off command inside a running service</a>.</p>
+
+<h2 id="a-worked-example-a-debug-run">A worked example: a debug run</h2>
+<p>Say your image runs <code>node server.js</code> through <code>CMD</code> and you want an inspector for one session. You do not need to edit the Dockerfile. Run <code>docker run --rm -p 9229:9229 myimage node --inspect=0.0.0.0:9229 server.js</code>: the trailing words replace <code>CMD</code> completely, so you must repeat the program name. If the image uses an entrypoint script instead, the same trailing words become the arguments handed to <code>exec "$@"</code>, and the script still runs first. That is the main reason to keep setup in <code>ENTRYPOINT</code> and the app command in <code>CMD</code>: you can change the second without losing the first.</p>
+<p>To look around inside an image whose entrypoint insists on starting the app, run <code>docker run --rm -it --entrypoint sh myimage</code>. On a distroless or scratch image there is no shell to start, so build a debug stage that has one.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A shell script as entrypoint without <code>exec</code>.</strong> Ctrl+C and <code>docker stop</code> take ten seconds and then kill the app.</li>
+<li><strong>Windows line endings.</strong> A script saved with CRLF fails with "no such file or directory" because the shebang line has a hidden carriage return. Save it with LF.</li>
+<li><strong>Missing execute bit.</strong> Use <code>COPY --chmod=755</code> or <code>RUN chmod +x</code>.</li>
+<li><strong>Alpine has no bash.</strong> Use <code>#!/bin/sh</code>, or install bash.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If a container exits right after start because of its entrypoint, <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">find out why it keeps restarting</a> and read its logs.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between ENTRYPOINT and CMD?</summary><p>ENTRYPOINT is the program the container always runs. CMD supplies default arguments, or the whole command when there is no entrypoint. Arguments to docker run replace CMD; docker run --entrypoint replaces ENTRYPOINT.</p></details><details><summary>Why does docker stop take ten seconds?</summary><p>Process 1 did not handle SIGTERM, often because a shell or a script without exec sits in front of the app. Use exec form and exec the final command in scripts.</p></details><details><summary>How do I override the command of a Flisk bring-your-own service?</summary><p>Use the container block in service.json: entrypoint and command take lists of strings in exec form. Set command too when you set entrypoint, since Compose drops the image CMD.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/"><span class="lbl">Guide</span><b>How to run a Docker container as a non-root user</b><span>Containers run as root unless you say otherwise. Changing that takes four lines, plus a plan for the files the app writes.</span></a><a href="/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/"><span class="lbl">Guide</span><b>How to write a Dockerfile HEALTHCHECK that works in dev</b><span>Slim images often lack curl, so a copied HEALTHCHECK fails forever. Write one that matches what is in your image.</span></a><a href="/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/"><span class="lbl">Guide</span><b>How to bind mount source code into a container for development</b><span>The image has your code baked in, so every edit needs a rebuild. A bind mount replaces the baked-in copy with your live folder.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

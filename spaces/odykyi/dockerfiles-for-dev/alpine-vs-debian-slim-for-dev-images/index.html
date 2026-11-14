@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alpine or Debian slim for a development Docker image</title>
+<meta name="description" content="Alpine images are small but use musl, which breaks some native modules and Python wheels. Pick by language and dependencies, and keep dev close to production.">
+<meta name="keywords" content="alpine vs debian slim, docker alpine musl problems, python docker alpine slow build, node alpine native modules, smallest docker base image">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Alpine or Debian slim for a development Docker image">
+<meta property="og:description" content="Alpine images are small but use musl, which breaks some native modules and Python wheels. Pick by language and dependencies, and keep dev close to production.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Alpine or Debian slim for a development Docker image","description":"Alpine images are small but use musl, which breaks some native modules and Python wheels. Pick by language and dependencies, and keep dev close to production.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/","keywords":"alpine vs debian slim, docker alpine musl problems, python docker alpine slow build, node alpine native modules, smallest docker base image","wordCount":717,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"Alpine or Debian slim for a development Docker image","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is Alpine faster than Debian slim?","acceptedAnswer":{"@type":"Answer","text":"Not necessarily. Alpine images are smaller to pull, but builds can be slower when packages must compile because no musl binary exists. For Python and native Node modules, Debian slim is often faster to build."}},{"@type":"Question","name":"Why does pip compile packages on Alpine?","acceptedAnswer":{"@type":"Answer","text":"Many Python wheels target glibc. On musl, pip may find no prebuilt wheel and builds from source, which needs a compiler and takes longer."}},{"@type":"Question","name":"Can Flisk run an image directly without a Dockerfile?","acceptedAnswer":{"@type":"Answer","text":"Yes, a bring-your-own resource can take an image name with the image option instead of a dockerfile, for example python:3.12-slim, although an app normally needs its own Dockerfile to include its code."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>Alpine or Debian slim for a development Docker image</h1><p class="dek">Smaller is not always faster. For many Python and Node projects, a slim Debian image builds sooner and fails less.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-actually-differs">What actually differs</a></li><li><a href="#where-alpine-hurts">Where Alpine hurts</a></li><li><a href="#where-alpine-is-fine">Where Alpine is fine</a></li><li><a href="#a-practical-rule-for-development">A practical rule for development</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Choose Alpine when your app is a static binary (Go, Rust) or pure JavaScript with no native modules, and choose Debian slim (<code>-slim</code> tags) when you depend on Python packages with compiled parts or Node modules with native addons. Alpine is smaller, but it uses musl instead of glibc, and the difference shows up as slow builds and odd crashes more often than as a saving that matters on a laptop.</p>
+
+<h2 id="what-actually-differs">What actually differs</h2>
+<table>
+<thead><tr><th></th><th>Alpine</th><th>Debian slim</th></tr></thead>
+<tbody>
+<tr><td>C library</td><td>musl</td><td>glibc</td></tr>
+<tr><td>Package manager</td><td><code>apk</code></td><td><code>apt-get</code></td></tr>
+<tr><td>Shell</td><td>BusyBox <code>sh</code>, no bash</td><td>bash and the usual GNU tools</td></tr>
+<tr><td>Typical base size</td><td>a few megabytes</td><td>tens of megabytes</td></tr>
+<tr><td>Prebuilt binaries</td><td>Often missing for musl</td><td>Almost always available</td></tr>
+</tbody>
+</table>
+<p>Exact sizes change with every release, so check <code>docker images</code> for your own tags instead of trusting a table.</p>
+
+<h2 id="where-alpine-hurts">Where Alpine hurts</h2>
+<ul>
+<li><strong>Python wheels.</strong> Many packages ship prebuilt wheels for glibc ("manylinux"). On Alpine, pip may find no matching wheel and compile from source, which needs a compiler and headers and can turn a thirty second install into several minutes. Support for musl wheels has improved, but it is still package by package.</li>
+<li><strong>Node native addons.</strong> Packages with native code (image processing, password hashing, database drivers) often have prebuilt binaries for glibc and a separate set for musl, or none. A build that works on your Mac and on Debian may fail on Alpine.</li>
+<li><strong>Behaviour differences.</strong> musl's DNS resolver and some locale and threading details differ from glibc. They are rare, but they are exactly the kind of bug that eats an afternoon.</li>
+<li><strong>Debugging tools.</strong> No bash, and <code>curl</code>, <code>ps</code> and friends are minimal or absent until you add them.</li>
+</ul>
+
+<h2 id="where-alpine-is-fine">Where Alpine is fine</h2>
+<ul>
+<li>Go and Rust services built as static binaries, ideally in a multi-stage build where the final image only holds the binary.</li>
+<li>Node apps whose dependencies are pure JavaScript.</li>
+<li>Small infrastructure images such as nginx, where the official <code>-alpine</code> tag is the common choice.</li>
+</ul>
+
+<h2 id="a-practical-rule-for-development">A practical rule for development</h2>
+<ol>
+<li>Start with the <code>-slim</code> Debian variant of your language image.</li>
+<li>Switch to Alpine only if size really matters and your dependency list builds cleanly there.</li>
+<li>Use the same family in dev and production. If production is Debian, test on Debian. A mismatch is where "works in my container" bugs come from. The <a href="/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/">multi-stage article</a> shows how to share one base.</li>
+</ol>
+<p>Note that size matters less on a laptop than people think. The layers of a base image are pulled once and shared by every image that uses it, so the base's size is paid one time. What you feel every day is build time and how often a native module breaks.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk's own shared base images for generated services are Alpine based (the lowest layer is Alpine with Bun, and the Node variant uses a Node 22 Alpine image), and they are built and cached by Flisk, so you do not choose a base for those. For a service you bring, the base is whatever your Dockerfile says, or you can skip building altogether and point at an existing image:</p>
+<pre><code>flisk resource api --type bring-your-own --stack app --image python:3.12-slim --port 4000 --yes</code></pre>
+<p>That writes a <code>service.json</code> with an <code>image</code> instead of a <code>dockerfile</code>. You will normally still want your own Dockerfile, because a bare language image has no application code. If you use Alpine, remember it has no <code>curl</code> by default: Flisk routes to your service and probes <code>healthCheckPath</code> itself, but a <code>HEALTHCHECK</code> in your own Dockerfile still needs a tool that exists. See <a href="/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/">writing a HEALTHCHECK that works</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not mix.</strong> Copying a binary compiled on glibc into an Alpine image fails with "not found", because the dynamic loader is missing. Build and run on the same family, or build a static binary.</li>
+<li><strong>Do not use <code>latest</code>.</strong> Pin a version tag so the base does not move under you. A digest pins it exactly.</li>
+<li><strong>Image size is not the same as attack surface.</strong> A smaller image has fewer packages, but patching and scanning habits matter more than the base.</li>
+<li><strong>Distroless images</strong> are good for production but have no shell, which makes them awkward for a dev stage.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Whichever base you choose, make it fast to rebuild: <a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">layer caching</a> and <a href="/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/">cache mounts</a> matter more than the base image size.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is Alpine faster than Debian slim?</summary><p>Not necessarily. Alpine images are smaller to pull, but builds can be slower when packages must compile because no musl binary exists. For Python and native Node modules, Debian slim is often faster to build.</p></details><details><summary>Why does pip compile packages on Alpine?</summary><p>Many Python wheels target glibc. On musl, pip may find no prebuilt wheel and builds from source, which needs a compiler and takes longer.</p></details><details><summary>Can Flisk run an image directly without a Dockerfile?</summary><p>Yes, a bring-your-own resource can take an image name with the image option instead of a dockerfile, for example python:3.12-slim, although an app normally needs its own Dockerfile to include its code.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/"><span class="lbl">Guide</span><b>Multi-stage Dockerfile with separate dev and production stages</b><span>Production images should not carry compilers or test tools, and dev images should not run a minified build. Stages let one file serve both.</span></a><a href="/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/"><span class="lbl">Guide</span><b>Docker BuildKit cache mounts for npm, pip and Go modules</b><span>Add one package and the whole install layer reruns from scratch. A cache mount keeps the downloads so only the new package is fetched.</span></a><a href="/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/"><span class="lbl">Guide</span><b>How to write a Dockerfile HEALTHCHECK that works in dev</b><span>Slim images often lack curl, so a copied HEALTHCHECK fails forever. Write one that matches what is in your image.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
