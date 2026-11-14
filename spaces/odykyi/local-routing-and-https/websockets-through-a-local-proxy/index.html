@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to proxy WebSockets through a local reverse proxy</title>
+<meta name="description" content="Make WebSockets and hot-reload sockets work behind nginx, Caddy or Traefik on localhost: upgrade headers, timeouts, Vite HMR ports and how to test with curl.">
+<meta name="keywords" content="websocket reverse proxy localhost, nginx websocket proxy, vite hmr websocket proxy, websocket connection failed local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to proxy WebSockets through a local reverse proxy">
+<meta property="og:description" content="Make WebSockets and hot-reload sockets work behind nginx, Caddy or Traefik on localhost: upgrade headers, timeouts, Vite HMR ports and how to test with curl.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to proxy WebSockets through a local reverse proxy","description":"Make WebSockets and hot-reload sockets work behind nginx, Caddy or Traefik on localhost: upgrade headers, timeouts, Vite HMR ports and how to test with curl.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/","keywords":"websocket reverse proxy localhost, nginx websocket proxy, vite hmr websocket proxy, websocket connection failed local","wordCount":678,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local URLs, routing and HTTPS","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/"},{"@type":"ListItem","position":3,"name":"How to proxy WebSockets through a local reverse proxy","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my WebSocket close immediately behind nginx?","acceptedAnswer":{"@type":"Answer","text":"nginx needs proxy_http_version 1.1 and the Upgrade and Connection headers passed on. Without them the handshake fails."}},{"@type":"Question","name":"Why does the socket drop after a minute of silence?","acceptedAnswer":{"@type":"Answer","text":"The proxy's idle timeout, 60 seconds by default in nginx. Send pings every 20 to 30 seconds or raise proxy_read_timeout."}},{"@type":"Question","name":"Does Traefik support WebSockets?","acceptedAnswer":{"@type":"Answer","text":"Yes, natively, with no extra router setting. Problems there come from the route or the stripped prefix."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-routing-and-https/">Local URLs, routing and HTTPS</a></div>
+<section class="hero"><div><div class="lbl">Local URLs, routing and HTTPS</div><h1>How to proxy WebSockets through a local reverse proxy</h1><p class="dek">HTTP works through your proxy, but the socket closes at once. The cause is almost always a missing Upgrade header.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-websocket-needs-from-a-proxy">What a WebSocket needs from a proxy</a></li><li><a href="#nginx">nginx</a></li><li><a href="#caddy-and-traefik">Caddy and Traefik</a></li><li><a href="#hot-reload-sockets-vite-and-friends">Hot reload sockets (Vite and friends)</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#how-to-test-a-socket-without-a-browser">How to test a socket without a browser</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To proxy WebSockets, the reverse proxy has to forward the HTTP <code>Upgrade</code> handshake. Caddy and Traefik do this by default. In nginx you must set <code>proxy_http_version 1.1</code> and pass the <code>Upgrade</code> and <code>Connection</code> headers. If HTTP calls through the proxy work but the socket fails at once, check that first.</p>
+
+<h2 id="what-a-websocket-needs-from-a-proxy">What a WebSocket needs from a proxy</h2>
+<p>A WebSocket starts as a normal GET request with <code>Upgrade: websocket</code> and <code>Connection: Upgrade</code>. The server replies <code>101 Switching Protocols</code> and the connection stays open as a raw stream. A proxy that treats this like any other request closes the connection or strips the headers, and the browser shows <code>WebSocket connection failed</code> or a 400 or 426 answer.</p>
+<p>Three things go wrong again and again: the upgrade headers are dropped, an idle timeout closes quiet connections, and the page connects to the wrong address.</p>
+
+<h2 id="nginx">nginx</h2>
+<pre><code>location /socket/ {
+  proxy_pass http://127.0.0.1:4000/;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+  proxy_read_timeout 3600s;
+}</code></pre>
+<p>nginx closes a connection that has been silent for <code>proxy_read_timeout</code>, 60 seconds by default. A chat or dashboard socket that sends nothing for a minute drops. Either raise the timeout in development or send application-level pings every 20 to 30 seconds. Pings are the better fix because production proxies have the same limit.</p>
+
+<h2 id="caddy-and-traefik">Caddy and Traefik</h2>
+<p>Caddy's <code>reverse_proxy</code> upgrades connections without extra settings. Traefik also supports WebSockets natively and needs no special router option. The failure there is usually the route (a prefix that strips the path the server needs, or a wrong host), not the protocol.</p>
+
+<h2 id="hot-reload-sockets-vite-and-friends">Hot reload sockets (Vite and friends)</h2>
+<p>Dev servers use a WebSocket for hot module replacement. Behind a proxy on another port, the browser tries to open it on the wrong address. In Vite, tell the client where to connect:</p>
+<pre><code>// vite.config.ts
+export default {
+  server: {
+    hmr: { clientPort: 8080 },
+  },
+};</code></pre>
+<p>Use the port your browser uses to reach the proxy. Behind an HTTPS proxy, <code>clientPort</code> is 443 and the protocol is <code>wss</code>. If the page loads but never live-updates, open devtools, Network, filter by WS, and look at the status of the socket request. The hot reload troubleshooting article covers the file-watching causes.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk's Docker path routes through Traefik, which handles WebSocket upgrades natively. Flisk's service manifest also lists a <code>websocket</code> feature among its generator features. The two things to check are the ones above: whether the socket URL the browser uses goes through the route Flisk prints, and whether the prefix is stripped. A backend at <code>http://api.&lt;project&gt;.localhost/api/chat</code> is reached with the prefix <code>/api/chat</code> removed, so a socket at <code>/ws</code> on your server is opened as <code>ws://api.&lt;project&gt;.localhost/api/chat/ws</code>. Run <code>flisk networks</code> for the base URL, and use <code>ws://</code> in place of <code>http://</code>.</p>
+<p>The frontend gets its API address from a generated variable (<code>VITE_API_URL</code> for Vite), which starts with <code>http://</code>. If your code builds a socket URL from it, swap the scheme to <code>ws://</code>, and to <code>wss://</code> when the page itself is served over HTTPS.</p>
+
+<h2 id="how-to-test-a-socket-without-a-browser">How to test a socket without a browser</h2>
+<pre><code>curl -i -N \
+  -H "Connection: Upgrade" -H "Upgrade: websocket" \
+  -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  http://127.0.0.1:8080/socket/</code></pre>
+<p>A <code>101 Switching Protocols</code> answer means the proxy and the server agree. Any other status tells you which side refused. A dedicated client such as <code>websocat</code> lets you send and read messages as well.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Mixed content.</strong> A page over HTTPS cannot open a <code>ws://</code> socket to a non-local host. Use <code>wss://</code>.</li>
+<li><strong>Sticky routing.</strong> With several replicas, a stateful socket needs the same server for the whole connection. Locally this rarely matters.</li>
+<li><strong>Auth in the query string.</strong> Browsers cannot set headers on a WebSocket, so tokens often travel in the URL and end up in logs. Keep them short lived.</li>
+</ul>
+
+<p>For nginx setup in full, see <a href="/@odykyi/local-routing-and-https/nginx-route-several-local-services/">routing several local services through one nginx</a>. If the proxy is Caddy, read <a href="/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/">Caddy as a local HTTPS reverse proxy</a>. For reload problems unrelated to the proxy, see <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my WebSocket close immediately behind nginx?</summary><p>nginx needs proxy_http_version 1.1 and the Upgrade and Connection headers passed on. Without them the handshake fails.</p></details><details><summary>Why does the socket drop after a minute of silence?</summary><p>The proxy&#39;s idle timeout, 60 seconds by default in nginx. Send pings every 20 to 30 seconds or raise proxy_read_timeout.</p></details><details><summary>Does Traefik support WebSockets?</summary><p>Yes, natively, with no extra router setting. Problems there come from the route or the stripped prefix.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local URLs, routing and HTTPS</span></div>
+<div class="rgrid"><a href="/@odykyi/local-routing-and-https/nginx-route-several-local-services/"><span class="lbl">Guide</span><b>How to route several local services through one nginx</b><span>One address in the browser, three processes behind it. The details that break are the trailing slash and the Host header.</span></a><a href="/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/"><span class="lbl">Guide</span><b>How to run Caddy as a local HTTPS reverse proxy</b><span>Caddy issues and renews local certificates by itself. You write the routes, it does the TLS.</span></a><a href="/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/"><span class="lbl">Guide</span><b>Why redirects go to http or the wrong port behind a proxy</b><span>Your app sees the proxy, not the browser. Forwarded headers are how it learns the truth, if you tell it to believe them.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

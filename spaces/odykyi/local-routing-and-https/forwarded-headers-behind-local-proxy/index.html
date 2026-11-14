@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why redirects go to http or the wrong port behind a proxy</title>
+<meta name="description" content="Fix wrong redirects, http links and lost client IPs behind a local reverse proxy by trusting X-Forwarded-Proto, Host and Prefix in Express, Django, Flask and Rails.">
+<meta name="keywords" content="x-forwarded-proto redirect http, trust proxy express, x-forwarded-prefix, wrong redirect behind reverse proxy">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why redirects go to http or the wrong port behind a proxy">
+<meta property="og:description" content="Fix wrong redirects, http links and lost client IPs behind a local reverse proxy by trusting X-Forwarded-Proto, Host and Prefix in Express, Django, Flask and Rails.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why redirects go to http or the wrong port behind a proxy","description":"Fix wrong redirects, http links and lost client IPs behind a local reverse proxy by trusting X-Forwarded-Proto, Host and Prefix in Express, Django, Flask and Rails.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/","keywords":"x-forwarded-proto redirect http, trust proxy express, x-forwarded-prefix, wrong redirect behind reverse proxy","wordCount":657,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local URLs, routing and HTTPS","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/"},{"@type":"ListItem","position":3,"name":"Why redirects go to http or the wrong port behind a proxy","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my app redirect to http behind an HTTPS proxy?","acceptedAnswer":{"@type":"Answer","text":"The app sees a plain HTTP connection from the proxy. Tell it to trust X-Forwarded-Proto, for example with app.set('trust proxy', 1) in Express."}},{"@type":"Question","name":"Is it safe to trust forwarded headers?","acceptedAnswer":{"@type":"Answer","text":"Only when the proxy sets them and clients cannot reach the app directly. Any client can send the headers, so trust the narrowest number of hops."}},{"@type":"Question","name":"Does Flisk strip the path prefix?","acceptedAnswer":{"@type":"Answer","text":"Yes, in the Docker path the generated Traefik route for a backend strips /api/name before the request reaches your container."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-routing-and-https/">Local URLs, routing and HTTPS</a></div>
+<section class="hero"><div><div class="lbl">Local URLs, routing and HTTPS</div><h1>Why redirects go to http or the wrong port behind a proxy</h1><p class="dek">Your app sees the proxy, not the browser. Forwarded headers are how it learns the truth, if you tell it to believe them.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-symptoms">The symptoms</a></li><li><a href="#what-each-header-means">What each header means</a></li><li><a href="#tell-the-framework-to-trust-them">Tell the framework to trust them</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#how-to-check">How to check</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Behind a reverse proxy your app sees the proxy's connection: plain HTTP, the proxy's address, and sometimes a different host and port. The proxy reports the original values in <code>X-Forwarded-Proto</code>, <code>X-Forwarded-Host</code>, <code>X-Forwarded-For</code> and <code>X-Forwarded-Prefix</code>. You must tell your framework to trust those headers, or it builds redirects, absolute links and cookies from the wrong values.</p>
+
+<h2 id="the-symptoms">The symptoms</h2>
+<ul>
+<li>A login redirect goes to <code>http://</code> when the page is on <code>https://</code>, and the browser blocks it as mixed content or loops.</li>
+<li>A redirect drops a port or prefix: you were at <code>http://shop.localhost:8080/api/orders</code> and land on <code>http://shop.localhost/login</code>.</li>
+<li>Logs show <code>127.0.0.1</code> or a container address as every client IP.</li>
+<li>OAuth providers reject the callback because the redirect URI your app built does not match the registered one.</li>
+</ul>
+
+<h2 id="what-each-header-means">What each header means</h2>
+<table><thead><tr><th>Header</th><th>Carries</th></tr></thead><tbody>
+<tr><td><code>X-Forwarded-For</code></td><td>The client address, or a chain of addresses</td></tr>
+<tr><td><code>X-Forwarded-Proto</code></td><td><code>http</code> or <code>https</code> as the browser used</td></tr>
+<tr><td><code>X-Forwarded-Host</code></td><td>The original <code>Host</code></td></tr>
+<tr><td><code>X-Forwarded-Prefix</code></td><td>A path prefix the proxy removed, for example <code>/api/orders</code></td></tr>
+</tbody></table>
+<p>Traefik sets the first three on requests it forwards, and its StripPrefix middleware adds <code>X-Forwarded-Prefix</code>. Caddy sets the <code>X-Forwarded-*</code> trio. In nginx you add them yourself with <code>proxy_set_header</code>.</p>
+
+<h2 id="tell-the-framework-to-trust-them">Tell the framework to trust them</h2>
+<p>Frameworks ignore these headers by default, because any client can send them. Trust them only when the proxy is the one that sets them, and in local dev that is always true for traffic that goes through your proxy.</p>
+<pre><code>// Express
+app.set("trust proxy", 1);   // one proxy hop
+
+# Django settings.py
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
+
+# Flask
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)</code></pre>
+<p>Rails honors <code>X-Forwarded-Proto</code> and <code>X-Forwarded-For</code> through its trusted proxy list, which already includes loopback and private address ranges. Spring Boot has <code>server.forward-headers-strategy=framework</code>. In Go, read the header yourself or use middleware you trust.</p>
+<p>The prefix is different. Most frameworks do not read <code>X-Forwarded-Prefix</code> unless asked (Flask's <code>ProxyFix</code> with <code>x_prefix=1</code> does, as does Spring with the framework strategy). Otherwise you set a base path or root path option: <code>root_path</code> in FastAPI, <code>base</code> in Vite, <code>basePath</code> in Next.js.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>In the Docker path, Flisk's generated route for a backend strips the prefix with Traefik's StripPrefix middleware. The service therefore receives <code>/orders</code>, while the browser used <code>http://api.&lt;project&gt;.localhost/api/orders</code>. For JSON APIs that is what you want. For anything that creates absolute URLs (pagination links, OAuth redirect URIs, Swagger or OpenAPI docs) read the forwarded host, proto and prefix, or the links will leave out the <code>/api/orders</code> part. Flisk's own documentation notes that a frontend served under a stripped path needs its <code>base</code> set.</p>
+<p>The ingress port is another part of the URL: <code>flisk up</code> prefers port 80, and falls back to 8080 or another port when 80 is busy. Printed URLs then include it. Check what your app sees by logging the three headers once. Everything else on this page applies unchanged, because Traefik is an ordinary reverse proxy.</p>
+<p>For a project of local processes there is no Flisk gateway, so there is nothing to forward unless you add your own proxy.</p>
+
+<h2 id="how-to-check">How to check</h2>
+<pre><code>curl -i http://api.shop.localhost/api/orders/debug -L</code></pre>
+<p>Add a temporary route that returns <code>req.protocol</code>, <code>req.hostname</code> and <code>req.ip</code> (Express names). If the protocol says <code>http</code> behind an HTTPS proxy, the trust setting is missing. If the IP is always the proxy's, same cause.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Trusting too much.</strong> <code>trust proxy: true</code> trusts any client-sent <code>X-Forwarded-For</code>. Locally harmless, but copy only the narrow setting into production.</li>
+<li><strong>Two proxies.</strong> Caddy in front of Traefik gives two hops. Set the hop count to 2, or you read the inner proxy's address.</li>
+<li><strong>Relative redirects.</strong> Prefer relative <code>Location</code> headers where your framework allows them. They survive any front proxy.</li>
+</ul>
+
+<p>For proxy examples that set these headers, see <a href="/@odykyi/local-routing-and-https/nginx-route-several-local-services/">routing several local services through one nginx</a>. If your problem is a rejected name instead of a wrong URL, read <a href="/@odykyi/local-routing-and-https/invalid-host-header-in-local-dev/">Invalid Host header in local dev</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my app redirect to http behind an HTTPS proxy?</summary><p>The app sees a plain HTTP connection from the proxy. Tell it to trust X-Forwarded-Proto, for example with app.set(&#39;trust proxy&#39;, 1) in Express.</p></details><details><summary>Is it safe to trust forwarded headers?</summary><p>Only when the proxy sets them and clients cannot reach the app directly. Any client can send the headers, so trust the narrowest number of hops.</p></details><details><summary>Does Flisk strip the path prefix?</summary><p>Yes, in the Docker path the generated Traefik route for a backend strips /api/name before the request reaches your container.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local URLs, routing and HTTPS</span></div>
+<div class="rgrid"><a href="/@odykyi/local-routing-and-https/invalid-host-header-in-local-dev/"><span class="lbl">Guide</span><b>Fix &quot;Invalid Host header&quot; and blocked hosts in local dev</b><span>Your proxy works. The framework behind it refuses the name in the Host header, on purpose.</span></a><a href="/@odykyi/local-routing-and-https/nginx-route-several-local-services/"><span class="lbl">Guide</span><b>How to route several local services through one nginx</b><span>One address in the browser, three processes behind it. The details that break are the trailing slash and the Host header.</span></a><a href="/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/"><span class="lbl">Guide</span><b>How to run Caddy as a local HTTPS reverse proxy</b><span>Caddy issues and renews local certificates by itself. You write the routes, it does the TLS.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

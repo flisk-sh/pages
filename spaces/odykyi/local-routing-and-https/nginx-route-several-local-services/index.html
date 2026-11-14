@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to route several local services through one nginx</title>
+<meta name="description" content="Put a frontend and two APIs behind a single local nginx on port 8080 with path routing, prefix stripping, the Host header and timeouts that work.">
+<meta name="keywords" content="nginx reverse proxy multiple services, nginx proxy_pass strip prefix, local api gateway nginx, nginx localhost routing">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-routing-and-https/nginx-route-several-local-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to route several local services through one nginx">
+<meta property="og:description" content="Put a frontend and two APIs behind a single local nginx on port 8080 with path routing, prefix stripping, the Host header and timeouts that work.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-routing-and-https/nginx-route-several-local-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to route several local services through one nginx","description":"Put a frontend and two APIs behind a single local nginx on port 8080 with path routing, prefix stripping, the Host header and timeouts that work.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-routing-and-https/nginx-route-several-local-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-routing-and-https/nginx-route-several-local-services/","keywords":"nginx reverse proxy multiple services, nginx proxy_pass strip prefix, local api gateway nginx, nginx localhost routing","wordCount":734,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local URLs, routing and HTTPS","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/"},{"@type":"ListItem","position":3,"name":"How to route several local services through one nginx","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/nginx-route-several-local-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my API get a path with a double slash?","acceptedAnswer":{"@type":"Answer","text":"The location has no trailing slash but proxy_pass does. Make both end in a slash to strip the prefix, or neither to keep it."}},{"@type":"Question","name":"Why use 127.0.0.1 instead of localhost in proxy_pass?","acceptedAnswer":{"@type":"Answer","text":"nginx resolves the name once at start, and localhost can resolve to ::1 while your service listens only on IPv4, which gives 502 errors."}},{"@type":"Question","name":"Does Flisk need nginx?","acceptedAnswer":{"@type":"Answer","text":"No. In the Docker path Flisk generates Traefik routes from service.json. You can still put nginx in front of services that run as local processes."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-routing-and-https/">Local URLs, routing and HTTPS</a></div>
+<section class="hero"><div><div class="lbl">Local URLs, routing and HTTPS</div><h1>How to route several local services through one nginx</h1><p class="dek">One address in the browser, three processes behind it. The details that break are the trailing slash and the Host header.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-working-configuration">A working configuration</a></li><li><a href="#the-trailing-slash-rule">The trailing slash rule</a></li><li><a href="#other-settings-worth-knowing">Other settings worth knowing</a></li><li><a href="#run-it-and-check-it">Run it and check it</a></li><li><a href="#how-flisk-relates">How Flisk relates</a></li><li><a href="#when-not-to-use-nginx">When not to use nginx</a></li></ol></nav></aside>
+<article><p>To route several local services through one nginx, add one <code>server</code> block and one <code>location</code> per service, each with a <code>proxy_pass</code> to that service's port. A trailing slash on both the location and the <code>proxy_pass</code> URL strips the prefix before the request reaches the service. Pass the <code>Host</code> header on, and reload nginx with <code>nginx -s reload</code>.</p>
+
+<h2 id="a-working-configuration">A working configuration</h2>
+<p>Say you have a frontend on port 3000, an orders API on 4000 and a billing API on 4100. Save this as <code>dev.conf</code> and include it from <code>nginx.conf</code>, or run nginx with <code>-c</code>:</p>
+<pre><code>server {
+  listen 8080;
+  server_name shop.localhost;
+
+  location /api/orders/ {
+    proxy_pass http://127.0.0.1:4000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $remote_addr;
+  }
+
+  location /api/billing/ {
+    proxy_pass http://127.0.0.1:4100/;
+    proxy_set_header Host $host;
+  }
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+  }
+}</code></pre>
+<p>Now <code>http://shop.localhost:8080/api/orders/health</code> reaches <code>/health</code> on the orders service. Use <code>127.0.0.1</code> instead of <code>localhost</code> in <code>proxy_pass</code>: nginx resolves the name once at startup and <code>localhost</code> may resolve to the IPv6 address <code>::1</code> while your service listens only on IPv4.</p>
+
+<h2 id="the-trailing-slash-rule">The trailing slash rule</h2>
+<p>This is where most routing bugs come from.</p>
+<table><thead><tr><th>location</th><th>proxy_pass</th><th>request <code>/api/orders/42</code> arrives as</th></tr></thead><tbody>
+<tr><td><code>/api/orders/</code></td><td><code>http://127.0.0.1:4000/</code></td><td><code>/42</code> (prefix stripped)</td></tr>
+<tr><td><code>/api/orders/</code></td><td><code>http://127.0.0.1:4000</code></td><td><code>/api/orders/42</code> (kept)</td></tr>
+<tr><td><code>/api/orders</code></td><td><code>http://127.0.0.1:4000/</code></td><td><code>//42</code> (double slash)</td></tr>
+</tbody></table>
+<p>Keep the slashes matched. If the service expects to be mounted at <code>/api/orders</code> itself, do not strip.</p>
+
+<h2 id="other-settings-worth-knowing">Other settings worth knowing</h2>
+<ul>
+<li><strong>Timeouts.</strong> <code>proxy_read_timeout</code> defaults to 60 seconds. A debugger pause or a slow job returns 504 from nginx, not from your app. Raise it in development.</li>
+<li><strong>Buffering.</strong> For server-sent events or streamed responses, add <code>proxy_buffering off;</code> or the browser sees the stream late.</li>
+<li><strong>Upload size.</strong> <code>client_max_body_size</code> defaults to 1 MB. Set it higher for file uploads.</li>
+<li><strong>Restart after crash.</strong> If an upstream is down, nginx answers 502. That tells you which service is missing.</li>
+</ul>
+
+<h2 id="run-it-and-check-it">Run it and check it</h2>
+<p>Test the file before you load it with <code>nginx -t -c /full/path/dev.conf</code>. It reports a syntax error with a line number. Then start nginx in the foreground with <code>nginx -c /full/path/dev.conf -g "daemon off;"</code> so you see the log in your terminal, or load the file into your installed nginx and run <code>nginx -s reload</code>. On macOS with Homebrew the main config is under <code>/opt/homebrew/etc/nginx/</code>, and you can drop your file into its <code>servers</code> folder.</p>
+<p>Use <code>curl -i</code> against each route in turn, and read the status first. A 404 with an nginx footer means no location matched. A 404 with your own app's error body means the route matched but the prefix was not stripped as you expected. A 502 means nginx could not connect to the port, so the service is down or the port is wrong. A 504 means the service accepted the connection and then took longer than the timeout.</p>
+<p>Check one more thing when the frontend loads but its API calls fail: the browser calls the address in the page, not the one you typed in <code>curl</code>. Open devtools, Network, and read the real URL the page requested. A hard-coded <code>localhost:4000</code> in the frontend bypasses nginx completely, and works only on your own machine.</p>
+
+<h2 id="how-flisk-relates">How Flisk relates</h2>
+<p>You do not need to write this by hand in a Flisk Docker project. Flisk generates Traefik routes from each <code>service.json</code>: a backend named <code>orders-api</code> is reachable at <code>http://api.&lt;project&gt;.localhost/api/orders</code>, and Flisk strips the prefix before the request reaches your container, the same result as the trailing slash rule above. <code>flisk networks</code> lists every routed URL. That is the same job nginx does here, with the route taken from the manifest.</p>
+<p>The nginx approach still fits when your services run without Docker and you want one address and path routing. Flisk starts them as local processes and prints <code>http://localhost:&lt;port&gt;</code> for each, and nginx gives you the single origin. Keep nginx's job small: routing only.</p>
+
+<h2 id="when-not-to-use-nginx">When not to use nginx</h2>
+<p>If your dev server already proxies (Vite's <code>server.proxy</code>, Next.js <code>rewrites</code>), a second proxy adds one more place for bugs. Use nginx when several backends of different stacks need one address, or when you want your local routing to resemble production.</p>
+
+<p>If a service answers with the wrong paths behind your proxy, read <a href="/@odykyi/local-routing-and-https/path-prefix-or-subdomain-routing/">path prefix or subdomain routing</a> to choose a scheme. For a ready-made version of this idea with <code>*.localhost</code> names, see <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of port numbers</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my API get a path with a double slash?</summary><p>The location has no trailing slash but proxy_pass does. Make both end in a slash to strip the prefix, or neither to keep it.</p></details><details><summary>Why use 127.0.0.1 instead of localhost in proxy_pass?</summary><p>nginx resolves the name once at start, and localhost can resolve to ::1 while your service listens only on IPv4, which gives 502 errors.</p></details><details><summary>Does Flisk need nginx?</summary><p>No. In the Docker path Flisk generates Traefik routes from service.json. You can still put nginx in front of services that run as local processes.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local URLs, routing and HTTPS</span></div>
+<div class="rgrid"><a href="/@odykyi/local-routing-and-https/path-prefix-or-subdomain-routing/"><span class="lbl">Guide</span><b>Path prefix or subdomain: how to route local services</b><span>Both work. The choice decides whether you fight CORS or fight base paths.</span></a><a href="/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/"><span class="lbl">Guide</span><b>How to proxy WebSockets through a local reverse proxy</b><span>HTTP works through your proxy, but the socket closes at once. The cause is almost always a missing Upgrade header.</span></a><a href="/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/"><span class="lbl">Guide</span><b>Why redirects go to http or the wrong port behind a proxy</b><span>Your app sees the proxy, not the browser. Forwarded headers are how it learns the truth, if you tell it to believe them.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
