@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a Rust service next to a Python API locally</title>
+<meta name="description" content="Run a Rust axum service and a FastAPI app on one laptop: ports, start order, passing the Rust URL to Python, a first-build timeout trap, and one command to start both.">
+<meta name="keywords" content="rust and python together, axum with fastapi, run rust service locally, python calls rust http, multi language local dev">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a Rust service next to a Python API locally">
+<meta property="og:description" content="Run a Rust axum service and a FastAPI app on one laptop: ports, start order, passing the Rust URL to Python, a first-build timeout trap, and one command to start both.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a Rust service next to a Python API locally","description":"Run a Rust axum service and a FastAPI app on one laptop: ports, start order, passing the Rust URL to Python, a first-build timeout trap, and one command to start both.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/","keywords":"rust and python together, axum with fastapi, run rust service locally, python calls rust http, multi language local dev","wordCount":758,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run a Rust service next to a Python API locally","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I call Rust from Python over HTTP or use PyO3?","acceptedAnswer":{"@type":"Answer","text":"Use PyO3 with maturin when you only need a fast function inside the Python process. Use a separate HTTP service when Rust needs its own lifecycle, state or deploy."}},{"@type":"Question","name":"Why does the Python service start before Rust is ready?","acceptedAnswer":{"@type":"Answer","text":"Without a dependency it does. Add the Rust service to dependsOn in service.json, and Flisk starts Python only once the Rust health path answers."}},{"@type":"Question","name":"Can Flisk start a Rust and a Python service without Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes, when both services declare a command. Flisk runs them as local processes in dependsOn order. It needs cargo and python on your PATH."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>How to run a Rust service next to a Python API locally</h1><p class="dek">Python is quick to change and Rust is quick to run. Putting a hot path in Rust and keeping the rest in Python works, once the two processes find each other.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#when-this-split-makes-sense">When this split makes sense</a></li><li><a href="#the-two-services">The two services</a></li><li><a href="#wire-them-together">Wire them together</a></li><li><a href="#the-first-build-trap">The first-build trap</a></li><li><a href="#without-flisk">Without Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Run both as plain processes with fixed ports, give the Python app the Rust service's URL through an environment variable, and start Rust first so Python can call it from its first request. The shortest working setup is two commands under a process manager. Flisk can be that manager, and the same layout also works with a Procfile runner or two terminal tabs.</p>
+
+<h2 id="when-this-split-makes-sense">When this split makes sense</h2>
+<p>Keep the product logic, the routes and the glue in Python. Move one narrow, CPU-heavy or latency-sensitive piece to Rust, such as a parser, a pricing calculation or a validator, and expose it over HTTP. The boundary should be a clear request and response, so each side can be tested alone. If you only need a function from Python, a PyO3 extension module (built with maturin) is a different and often simpler route, since it avoids a network call. Choose a separate service when the Rust part needs its own lifecycle, its own deploy, or a long-lived state such as a cache.</p>
+
+<h2 id="the-two-services">The two services</h2>
+<p>With Flisk, create both as local processes in one stack:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk resource billing --language rust --local --stack app --yes
+flisk resource api --language python --local --stack app --yes</code></pre>
+<p>The Rust scaffold is axum on tokio with a <code>/health</code> route, and its command is <code>cargo run</code>. The Python scaffold is a FastAPI app, and its command runs <code>uvicorn</code> with <code>--reload</code> on <code>src</code>, so edits to the Python code restart the app by themselves. Both read <code>PORT</code> from the environment. Check the generated ports in each <code>service.json</code>; the examples below use 4004 and 4005.</p>
+
+<h2 id="wire-them-together">Wire them together</h2>
+<p>Edit the Python service's <code>service.json</code> so that it starts after Rust and knows where it is:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "stack": "app",
+  "language": "python",
+  "command": "uvicorn main:app --app-dir src --host localhost --port ${PORT:-4000} --reload --reload-dir src",
+  "port": 4005,
+  "healthCheckPath": "/health",
+  "toolchain": "python@3.12",
+  "dependsOn": ["billing"],
+  "env": { "BILLING_URL": "http://localhost:4004" }
+}</code></pre>
+<p>In Python, read the address once and call it with a client that has a timeout:</p>
+<pre><code>import os
+import httpx
+
+BILLING_URL = os.environ["BILLING_URL"]
+
+async def price_for(order: dict) -> dict:
+    async with httpx.AsyncClient(base_url=BILLING_URL, timeout=2.0) as client:
+        r = await client.post("/price", json=order)
+        r.raise_for_status()
+        return r.json()</code></pre>
+<p>Then run <code>flisk up</code>. Flisk starts <code>billing</code> first, waits for its <code>/health</code> to answer, starts <code>api</code>, and prints a link for each service. <code>flisk logs --service billing</code> shows one service's output, and <code>flisk down</code> stops both. This is the same pattern as <a href="/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/">a Python worker next to a Node API</a>, with Rust on the other end.</p>
+
+<h2 id="the-first-build-trap">The first-build trap</h2>
+<p>The first <code>cargo run</code> compiles every dependency, and with axum and tokio that can take longer than a minute. Flisk waits up to 60 seconds for a service to become ready, so on a cold machine <code>billing</code> can be late and <code>api</code> never gets its turn. Compile once before the first <code>flisk up</code>:</p>
+<pre><code>cd services/app/billing &amp;&amp; cargo build</code></pre>
+<p>Later runs reuse that build, and only your own crate is recompiled. The Rust command does not reload on save by default; to get that, change its command to <code>cargo watch -x run</code>, as in <a href="/@odykyi/stack-recipes/rust-api-local-dev/">Rust API local dev</a>.</p>
+
+<h2 id="without-flisk">Without Flisk</h2>
+<p>The same layout works with two terminals, or with a <code>Procfile</code> and a runner such as overmind or honcho. The parts you must supply yourself are the start order, a wait for the Rust port to open, and a restart when a process dies. Docker Compose gives you ordering with <code>depends_on</code> and a healthcheck, at the cost of building a container for each service.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Bind address.</strong> The Rust scaffold binds <code>localhost</code>, and a URL with <code>127.0.0.1</code> may not match if <code>localhost</code> resolves to IPv6 on your machine. Use <code>localhost</code> on both sides, or bind explicitly.</li>
+<li><strong>No timeout on the client.</strong> A hung Rust service then hangs every Python request. Set a timeout and handle it.</li>
+<li><strong>Mixed runtimes.</strong> A project cannot mix services that run as local processes with services that Flisk builds into containers, and <code>flisk up</code> stops with <code>MIXED_RUNTIME</code>. A ready-made image such as Postgres can sit next to local processes.</li>
+<li><strong>Two Pythons.</strong> The <code>python</code> that <code>uvicorn</code> uses is whichever one is on <code>PATH</code>. Activate the virtual environment before <code>flisk up</code>, or Flisk's <code>toolchain</code> check will report a mismatch.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For debugging across the boundary, see <a href="/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/">debug a Rust service with LLDB</a>, and for what to do when the pair needs a shared database, <a href="/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/">migrations for Go and Rust services</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I call Rust from Python over HTTP or use PyO3?</summary><p>Use PyO3 with maturin when you only need a fast function inside the Python process. Use a separate HTTP service when Rust needs its own lifecycle, state or deploy.</p></details><details><summary>Why does the Python service start before Rust is ready?</summary><p>Without a dependency it does. Add the Rust service to dependsOn in service.json, and Flisk starts Python only once the Rust health path answers.</p></details><details><summary>Can Flisk start a Rust and a Python service without Docker?</summary><p>Yes, when both services declare a command. Flisk runs them as local processes in dependsOn order. It needs cargo and python on your PATH.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/"><span class="lbl">Guide</span><b>Go API and Vite frontend locally: proxy instead of CORS</b><span>The browser calls the API from one origin and the API answers on another. A dev proxy makes the two look like one, so you can leave CORS rules for the day you deploy.</span></a><a href="/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/"><span class="lbl">Guide</span><b>Database migrations for Go and Rust: goose and sqlx locally</b><span>Go and Rust each have a good migration tool. The part that goes wrong is when the migrations run, and who runs them.</span></a><a href="/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/"><span class="lbl">Guide</span><b>How to debug a Rust service with LLDB and VS Code</b><span>The Rust compiler catches a lot before you run anything. For the bugs that remain, a debugger and good logs cover most of what you need.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

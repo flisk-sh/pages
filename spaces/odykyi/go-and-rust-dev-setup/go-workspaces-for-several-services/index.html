@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Go workspaces (go.work) for a repo with several services</title>
+<meta name="description" content="Use go.work to develop several Go modules in one repo without replace directives: setup, running tests per module, committing go.work, and the Docker build catch.">
+<meta name="keywords" content="go.work, go workspace multiple modules, go monorepo multiple services, go replace directive local, go work init">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go workspaces (go.work) for a repo with several services">
+<meta property="og:description" content="Use go.work to develop several Go modules in one repo without replace directives: setup, running tests per module, committing go.work, and the Docker build catch.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Go workspaces (go.work) for a repo with several services","description":"Use go.work to develop several Go modules in one repo without replace directives: setup, running tests per module, committing go.work, and the Docker build catch.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/","keywords":"go.work, go workspace multiple modules, go monorepo multiple services, go replace directive local, go work init","wordCount":827,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"Go workspaces (go.work) for a repo with several services","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I still need replace directives with go.work?","acceptedAnswer":{"@type":"Answer","text":"No for local development. The workspace resolves imports between listed modules to your local folders. Test with GOWORK=off to be sure the released modules also work."}},{"@type":"Question","name":"Should I commit go.work?","acceptedAnswer":{"@type":"Answer","text":"Commit it if every module is in the repo and the team always works on them together. Keep it out of git if it holds personal paths or you publish modules to others."}},{"@type":"Question","name":"Does go.work work in the Flisk Docker route?","acceptedAnswer":{"@type":"Answer","text":"The Flisk docs say only the service folder is copied into the generated image and that go.work was not tried. Use a bring-your-own Dockerfile with a wider build context."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>Go workspaces (go.work) for a repo with several services</h1><p class="dek">One module per service keeps builds small. A workspace file lets those modules see each other&#39;s local code while you edit, with nothing to undo before you commit.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-problem-it-solves">The problem it solves</a></li><li><a href="#set-it-up">Set it up</a></li><li><a href="#test-every-module">Test every module</a></li><li><a href="#should-go-work-be-committed">Should go.work be committed?</a></li><li><a href="#running-the-services-with-flisk">Running the services with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Create a <code>go.work</code> file at the repo root with <code>go work init</code>, list your module folders in it, and Go will resolve imports between those modules to your local copies. You do not need a <code>replace</code> directive in each <code>go.mod</code>. The catch is that the workspace only exists on your machine and in any build that uses the repo root, so a Docker build of one service folder will not see it.</p>
+
+<h2 id="the-problem-it-solves">The problem it solves</h2>
+<p>Say you have two services and a shared package, each its own module:</p>
+<pre><code>repo/
+  go.work
+  libs/shared/go.mod        # module example.com/repo/shared
+  services/app/api/go.mod   # module example.com/repo/api
+  services/app/worker/go.mod</code></pre>
+<p>Without a workspace, <code>api</code> imports <code>example.com/repo/shared</code> from the module proxy at a tagged version. To test an edit to <code>shared</code> you either tag and push, or add <code>replace example.com/repo/shared =&gt; ../../../libs/shared</code> to the <code>go.mod</code> and remember to remove it. A workspace removes both chores.</p>
+
+<h2 id="set-it-up">Set it up</h2>
+<pre><code>cd repo
+go work init ./libs/shared ./services/app/api ./services/app/worker
+cat go.work</code></pre>
+<pre><code>go 1.23
+
+use (
+	./libs/shared
+	./services/app/api
+	./services/app/worker
+)</code></pre>
+<p>Add a module later with <code>go work use ./services/app/newsvc</code>. <code>go work sync</code> pushes the workspace's dependency versions back into each module's <code>go.mod</code>, and Go writes a <code>go.work.sum</code> next to the file. Check what is in the workspace with <code>go list -m</code>.</p>
+<p>Go finds <code>go.work</code> by looking in the current folder and then in each parent, so running <code>go run .</code> or <code>go test ./...</code> inside <code>services/app/api</code> uses the workspace without extra flags. To prove a module builds without it, which is what a published build sees, run <code>GOWORK=off go build ./...</code>.</p>
+
+<h2 id="test-every-module">Test every module</h2>
+<p><code>go test ./...</code> covers the packages of one module. To run all modules in the workspace:</p>
+<pre><code>for d in $(go list -f '{{.Dir}}' -m); do (cd "$d" &amp;&amp; go test ./...); done</code></pre>
+<p>Run this once with <code>GOWORK=off</code> in CI as well. It catches the case where a module only builds because the workspace supplies a change that was never released.</p>
+
+<h2 id="should-go-work-be-committed">Should go.work be committed?</h2>
+<p>Both choices are used. If every module lives in this repo and the team always develops them together, committing <code>go.work</code> saves each person one command. If developers keep personal paths in it, or you publish modules that others import, keep it out of git (add <code>go.work</code> and <code>go.work.sum</code> to <code>.gitignore</code>) and document <code>go work init</code> in the README. Whatever you pick, make CI check the build with <code>GOWORK=off</code>.</p>
+
+<h2 id="running-the-services-with-flisk">Running the services with Flisk</h2>
+<p>Create each service as a local process:</p>
+<pre><code>flisk resource api --language go --local --stack app --yes
+flisk resource worker --language go --local --stack app --yes
+flisk up</code></pre>
+<p>For a local process Flisk starts the <code>command</code> from the service directory, and the Go tool searches upward from there, so it finds <code>go.work</code> at the repo root. That follows from how Go and Flisk each work, and I did not run it end to end. Setting <code>"toolchain": "go@1.23"</code> in each <code>service.json</code> makes <code>flisk up</code> check that the Go on your <code>PATH</code> matches.</p>
+<blockquote>The Docker route is where workspaces break. The Flisk docs say that only the service folder is copied into the generated image, so a <code>replace</code> to a folder outside it fails at <code>go mod download</code>, and that a <code>go.work</code> workspace was not tried.</blockquote>
+<p>If a service must build in a container and needs the shared module, use your own Dockerfile and set the build context to a folder that contains everything. Flisk's bring-your-own resources accept a <code>buildContext</code> in <code>service.json</code>, a path relative to the resource directory, and the Dockerfile path is then relative to that context. A Dockerfile for the layout above:</p>
+<pre><code>FROM golang:1.23-bookworm AS build
+WORKDIR /src
+COPY go.work go.work.sum* ./
+COPY libs/shared libs/shared
+COPY services/app/api services/app/api
+RUN cd services/app/api &amp;&amp; CGO_ENABLED=0 go build -o /out/app .
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/app /app
+ENTRYPOINT ["/app"]</code></pre>
+<p>That Dockerfile copies <code>go.work</code>, so the build resolves the shared module the same way your editor does. It also copies the modules the workspace lists but this service does not need, unless you trim the <code>use</code> list in a CI copy. Note that a container built this way loses the live reload that the generated Go image offers, as explained in <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">run an existing Dockerfile in a local dev stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Works here, fails in CI.</strong> The workspace hid a missing release or a missing <code>require</code>. Build with <code>GOWORK=off</code>.</li>
+<li><strong>Editor shows errors.</strong> <code>gopls</code> needs to be opened at the repo root, or at a folder inside it, to find <code>go.work</code>. Opening one service folder in a separate window usually still works, since the lookup goes upward.</li>
+<li><strong>Different Go versions per module.</strong> The workspace's <code>go</code> line must be at least the highest module version.</li>
+<li><strong>Vendoring.</strong> <code>go work vendor</code> exists, and it is a different workflow from the one above.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For the general repo layout, read <a href="/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">local development setup for a monorepo with several services</a>. For building the images from this layout, see <a href="/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/">cross-compile a Go service for Linux containers</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I still need replace directives with go.work?</summary><p>No for local development. The workspace resolves imports between listed modules to your local folders. Test with GOWORK=off to be sure the released modules also work.</p></details><details><summary>Should I commit go.work?</summary><p>Commit it if every module is in the repo and the team always works on them together. Keep it out of git if it holds personal paths or you publish modules to others.</p></details><details><summary>Does go.work work in the Flisk Docker route?</summary><p>The Flisk docs say only the service folder is copied into the generated image and that go.work was not tried. Use a bring-your-own Dockerfile with a wider build context.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/"><span class="lbl">Guide</span><b>Database migrations for Go and Rust: goose and sqlx locally</b><span>Go and Rust each have a good migration tool. The part that goes wrong is when the migrations run, and who runs them.</span></a><a href="/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/"><span class="lbl">Guide</span><b>How to cross-compile a Go service for Linux containers</b><span>Go cross-compiles with two environment variables. The real questions are cgo, which architecture your servers use, and how to keep the image small.</span></a><a href="/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/"><span class="lbl">Guide</span><b>Air vs reflex vs watchexec: reload a Go app on save</b><span>Go has no built-in watcher. Three small tools fill the gap, and they differ in one detail that decides whether your API is down while it compiles.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

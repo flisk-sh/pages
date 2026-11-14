@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Go API and Vite frontend locally: proxy instead of CORS</title>
+<meta name="description" content="Run a Go API and a Vite app together: why a browser blocks the call, a Vite proxy that removes CORS, the other fix on the Go side, and the Flisk service.json.">
+<meta name="keywords" content="go api vite cors, vite proxy go backend, go cors localhost, vite dev server proxy, react go local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Go API and Vite frontend locally: proxy instead of CORS">
+<meta property="og:description" content="Run a Go API and a Vite app together: why a browser blocks the call, a Vite proxy that removes CORS, the other fix on the Go side, and the Flisk service.json.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Go API and Vite frontend locally: proxy instead of CORS","description":"Run a Go API and a Vite app together: why a browser blocks the call, a Vite proxy that removes CORS, the other fix on the Go side, and the Flisk service.json.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/","keywords":"go api vite cors, vite proxy go backend, go cors localhost, vite dev server proxy, react go local development","wordCount":755,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"Go API and Vite frontend locally: proxy instead of CORS","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does CORS fail when both run on localhost?","acceptedAnswer":{"@type":"Answer","text":"Different ports are different origins. The browser blocks the response unless the API sends an Access-Control-Allow-Origin header that matches the page's origin."}},{"@type":"Question","name":"Is a Vite proxy a production fix?","acceptedAnswer":{"@type":"Answer","text":"No. It only exists in the dev server. In production use a reverse proxy that serves both under one origin, or configure CORS on the API."}},{"@type":"Question","name":"Why does the Flisk Go scaffold block my local frontend?","acceptedAnswer":{"@type":"Answer","text":"Its CORS pattern allows origins like app.project.localhost, which fits the Docker route. A frontend on http://localhost:3004 does not match, so use a Vite proxy or widen the pattern."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>Go API and Vite frontend locally: proxy instead of CORS</h1><p class="dek">The browser calls the API from one origin and the API answers on another. A dev proxy makes the two look like one, so you can leave CORS rules for the day you deploy.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-browser-blocks-the-call">Why the browser blocks the call</a></li><li><a href="#fix-1-a-vite-proxy-usually-the-better-one">Fix 1: a Vite proxy (usually the better one)</a></li><li><a href="#fix-2-allow-the-origin-in-go">Fix 2: allow the origin in Go</a></li><li><a href="#running-both-with-flisk">Running both with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Put a proxy in the Vite dev server so the browser calls <code>/api/...</code> on its own origin, and Vite forwards the request to the Go API. The browser then sees one origin and does not apply CORS at all. If you prefer direct calls, the other fix is an allowed-origin rule in the Go server, and it has to include the exact origin Vite uses.</p>
+
+<h2 id="why-the-browser-blocks-the-call">Why the browser blocks the call</h2>
+<p>A page at <code>http://localhost:3004</code> that calls <code>http://localhost:4003</code> makes a cross-origin request, because the port differs. The browser sends the request, and then it hides the response unless the API replies with an <code>Access-Control-Allow-Origin</code> header that matches. A request with a JSON body or custom headers triggers a preflight <code>OPTIONS</code> request first, and the API has to answer that as well. The error in the console says "blocked by CORS policy", and the request still shows in the network tab, which is why it is confusing: the server did get it.</p>
+
+<h2 id="fix-1-a-vite-proxy-usually-the-better-one">Fix 1: a Vite proxy (usually the better one)</h2>
+<p>Configure the dev server to forward a path prefix to the API:</p>
+<pre><code>// vite.config.ts
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    host: 'localhost',
+    port: Number(process.env.PORT ?? 3004),
+    strictPort: true,
+    proxy: {
+      '/api': {
+        target: process.env.API_URL ?? 'http://localhost:4003',
+        changeOrigin: true,
+        rewrite: (path) =&gt; path.replace(/^\/api/, ''),
+      },
+    },
+  },
+});</code></pre>
+<p>In the app, call <code>fetch('/api/health')</code>. Vite receives it and forwards <code>/health</code> to the Go server. Cookies and auth headers also work as on a single site, because the browser thinks there is one. This proxy exists only in <code>vite dev</code>. A production build needs a real reverse proxy or a CORS policy, so it is worth keeping the API prefix the same in both.</p>
+
+<h2 id="fix-2-allow-the-origin-in-go">Fix 2: allow the origin in Go</h2>
+<p>If the frontend must call the API directly, answer the preflight and set the header for known origins. Here is a small middleware with an explicit list:</p>
+<pre><code>func withCORS(next http.Handler, allowed map[string]bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if allowed[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		}
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}</code></pre>
+<p>Never answer with <code>*</code> if you send cookies, since browsers refuse the combination. List the origins instead, and echo the matching one.</p>
+
+<h2 id="running-both-with-flisk">Running both with Flisk</h2>
+<p>Create both services as local processes:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk resource api --language go --local --stack app --yes
+flisk resource web --type frontend --local --stack app --yes
+cd services/app/web &amp;&amp; npm install &amp;&amp; cd ../../..</code></pre>
+<p>Then edit the frontend's <code>service.json</code> to start after the API and to receive its address:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "stack": "app",
+  "framework": "react",
+  "command": "npm run dev",
+  "port": 3004,
+  "dependsOn": ["api"],
+  "env": { "API_URL": "http://localhost:4003" }
+}</code></pre>
+<p>Use the ports your scaffold picked, since Flisk assigns the next free one. <code>flisk up</code> starts <code>api</code>, waits until its <code>/health</code> answers, then starts <code>web</code>, and prints a <code>http://localhost:&lt;port&gt;</code> link for each. The Vite config above reads <code>API_URL</code> from that <code>env</code> block, which keeps the target out of the code.</p>
+<blockquote>The Go and Rust scaffolds include a CORS rule, but it only allows origins of the form <code>name.localhost</code>, which matches the Docker route (<code>app.&lt;project&gt;.localhost</code>). In the local-process route the frontend is <code>http://localhost:3004</code>, which that pattern does not match, so a direct call is blocked. Use the Vite proxy, or widen the pattern in <code>main.go</code>.</blockquote>
+<p>The Vite config written by <code>flisk resource --local</code> is a plain one with <code>strictPort</code> on, so if the port is taken Vite fails instead of moving, which keeps it on the port Flisk checks. More on running a frontend and API together is in <a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/">run a frontend and an API together</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Proxy path mismatch.</strong> If the Go routes do not live under <code>/api</code>, the <code>rewrite</code> must strip the prefix, or the Go side must register it.</li>
+<li><strong><code>localhost</code> against <code>127.0.0.1</code>.</strong> These are different origins. Use one name everywhere.</li>
+<li><strong>WebSockets.</strong> Add <code>ws: true</code> to the proxy entry if the API upgrades connections.</li>
+<li><strong>Preflight that returns 404.</strong> A router that only registers <code>GET /x</code> will reject <code>OPTIONS /x</code>. Handle <code>OPTIONS</code> in middleware before routing.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Add a second language to the mix with <a href="/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/">a Rust service next to a Python API</a>, or see the Vue and Svelte variant in <a href="/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/">Vue or Svelte frontend with a local API</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does CORS fail when both run on localhost?</summary><p>Different ports are different origins. The browser blocks the response unless the API sends an Access-Control-Allow-Origin header that matches the page&#39;s origin.</p></details><details><summary>Is a Vite proxy a production fix?</summary><p>No. It only exists in the dev server. In production use a reverse proxy that serves both under one origin, or configure CORS on the API.</p></details><details><summary>Why does the Flisk Go scaffold block my local frontend?</summary><p>Its CORS pattern allows origins like app.project.localhost, which fits the Docker route. A frontend on http://localhost:3004 does not match, so use a Vite proxy or widen the pattern.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/"><span class="lbl">Guide</span><b>Air vs reflex vs watchexec: reload a Go app on save</b><span>Go has no built-in watcher. Three small tools fill the gap, and they differ in one detail that decides whether your API is down while it compiles.</span></a><a href="/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/"><span class="lbl">Guide</span><b>How to run a Rust service next to a Python API locally</b><span>Python is quick to change and Rust is quick to run. Putting a hot path in Rust and keeping the rest in Python works, once the two processes find each other.</span></a><a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/"><span class="lbl">Guide</span><b>Go workspaces (go.work) for a repo with several services</b><span>One module per service keeps builds small. A workspace file lets those modules see each other&#39;s local code while you edit, with nothing to undo before you commit.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

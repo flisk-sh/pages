@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to debug a Rust service with LLDB and VS Code</title>
+<meta name="description" content="Set breakpoints in a Rust web service: CodeLLDB in VS Code, rust-lldb on the command line, backtraces, logs for async code, and running tests under a debugger.">
+<meta name="keywords" content="debug rust with lldb, codelldb vscode rust, rust-lldb, RUST_BACKTRACE, debug axum service">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to debug a Rust service with LLDB and VS Code">
+<meta property="og:description" content="Set breakpoints in a Rust web service: CodeLLDB in VS Code, rust-lldb on the command line, backtraces, logs for async code, and running tests under a debugger.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to debug a Rust service with LLDB and VS Code","description":"Set breakpoints in a Rust web service: CodeLLDB in VS Code, rust-lldb on the command line, backtraces, logs for async code, and running tests under a debugger.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/","keywords":"debug rust with lldb, codelldb vscode rust, rust-lldb, RUST_BACKTRACE, debug axum service","wordCount":753,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to debug a Rust service with LLDB and VS Code","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between rust-lldb and plain lldb?","acceptedAnswer":{"@type":"Answer","text":"rust-lldb is a wrapper from the Rust toolchain that loads pretty-printers so standard types such as String and Vec are shown in readable form."}},{"@type":"Question","name":"Why does my Rust breakpoint not hit?","acceptedAnswer":{"@type":"Answer","text":"Usually the build has no debug information, the line was optimised away in a release build, or the binary is older than the source. Rebuild the dev profile and restart the session."}},{"@type":"Question","name":"How do I run tests with the service's environment in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Use flisk run \u003cservice> -- cargo test. For a local process it runs the command on the host with the environment that the service has."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>How to debug a Rust service with LLDB and VS Code</h1><p class="dek">The Rust compiler catches a lot before you run anything. For the bugs that remain, a debugger and good logs cover most of what you need.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#check-that-the-build-has-debug-information">Check that the build has debug information</a></li><li><a href="#debug-from-vs-code">Debug from VS Code</a></li><li><a href="#debug-from-the-terminal">Debug from the terminal</a></li><li><a href="#async-code-logs-beat-breakpoints">Async code: logs beat breakpoints</a></li><li><a href="#run-it-under-flisk">Run it under Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>In VS Code, install the CodeLLDB extension and the rust-analyzer extension, then click the Debug link rust-analyzer shows above <code>main</code> or above a test. From a terminal, run <code>rust-lldb target/debug/app</code>. Both work on the default dev build, which already contains debug information. For async code, such as an axum handler, breakpoints are only half the answer: set up structured logs too, because a task can hop between threads.</p>
+
+<h2 id="check-that-the-build-has-debug-information">Check that the build has debug information</h2>
+<p><code>cargo build</code> uses the dev profile, which includes debug data. Two common settings remove it. A release build does not have full debug data by default, and a dev profile with <code>debug = "line-tables-only"</code> keeps backtraces but drops variable inspection. If your <code>Cargo.toml</code> has that setting for faster builds (see <a href="/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/">speed up Cargo builds</a>), turn it back to the default while you debug:</p>
+<pre><code>[profile.dev]
+debug = true</code></pre>
+
+<h2 id="debug-from-vs-code">Debug from VS Code</h2>
+<p>With CodeLLDB installed, a <code>.vscode/launch.json</code> entry builds and starts your binary under the debugger:</p>
+<pre><code>{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug billing",
+      "cargo": { "args": ["build", "--bin=app"] },
+      "cwd": "${workspaceFolder}/services/app/billing",
+      "env": { "PORT": "4004", "RUST_BACKTRACE": "1" }
+    }
+  ]
+}</code></pre>
+<p>The <code>cargo</code> block lets the extension find the binary, and the <code>env</code> block is how you give it the settings that a runner would normally pass. Put a breakpoint on a line inside a handler, call the route with <code>curl</code>, and execution stops there. To debug one test, use the rust-analyzer Debug link over the <code>#[test]</code> function, or run <code>cargo test --no-run</code> and start the test binary under <code>rust-lldb</code>.</p>
+
+<h2 id="debug-from-the-terminal">Debug from the terminal</h2>
+<pre><code>cargo build
+PORT=4004 rust-lldb target/debug/app
+(lldb) b main.rs:30
+(lldb) run</code></pre>
+<p><code>rust-lldb</code> is a wrapper that ships with the Rust toolchain and loads pretty-printers, so <code>String</code>, <code>Vec</code> and <code>Option</code> values are readable. To attach to a process that is already running, use <code>lldb -p &lt;pid&gt;</code>. On macOS this needs permission for the terminal under Developer Tools, and it can be refused for a binary that was not built locally.</p>
+
+<h2 id="async-code-logs-beat-breakpoints">Async code: logs beat breakpoints</h2>
+<p>A tokio task can resume on a different thread after each <code>.await</code>, and stepping over an await can jump somewhere unexpected. Use breakpoints for straight-line logic, and use the <code>tracing</code> crate with <code>RUST_LOG</code> for flow:</p>
+<pre><code>RUST_LOG=billing=debug,tower_http=debug cargo run</code></pre>
+<p>Also set <code>RUST_BACKTRACE=1</code> to get a stack trace on a panic, and <code>RUST_BACKTRACE=full</code> when the short form is not enough. If you suspect a task that never finishes or a lock that is held, tokio-console shows live task states, and it needs the <code>console-subscriber</code> crate and the <code>tokio_unstable</code> cfg flag.</p>
+
+<h2 id="run-it-under-flisk">Run it under Flisk</h2>
+<p>With a Rust service created by <code>flisk resource billing --language rust --local --stack app --yes</code>, Flisk runs <code>cargo run</code> as a local process. Pass the debugging environment through the <code>env</code> field of its <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "billing",
+  "appType": "backend",
+  "stack": "app",
+  "language": "rust",
+  "command": "cargo run",
+  "port": 4004,
+  "healthCheckPath": "/health",
+  "env": { "RUST_BACKTRACE": "1", "RUST_LOG": "billing=debug" }
+}</code></pre>
+<p>Read the output with <code>flisk logs --service billing --tail 50</code>. To run the tests with the same environment the service has, use <code>flisk run billing -- cargo test</code>; for a local process Flisk runs the command on the host, and the <code>--</code> keeps <code>cargo</code>'s own flags apart from Flisk's.</p>
+<p>When you debug from the editor, the binary you start takes the port. Stop the Flisk-managed copy first with <code>flisk down</code>, or start the other services alone with <code>flisk up --only</code>, remembering that <code>--only</code> also starts what a service lists in <code>dependsOn</code>. Flisk refuses to start a service whose port is already in use and names the process that holds it, which tells you quickly when the two copies collide.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Breakpoints that look grey or never hit.</strong> The code in that line was optimised away, or you are debugging a release binary. Debug the dev build.</li>
+<li><strong>Source mismatch after a rebuild.</strong> The debugger is stopped on an old binary. Restart the session after each build.</li>
+<li><strong>Paused service reported as down.</strong> While you stand on a breakpoint the health path does not answer.</li>
+<li><strong>Docker.</strong> Debugging inside a container needs ptrace permission and a debug-friendly image. It is usually quicker to debug the process on the host and keep only the database in Docker.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>The same workflow for Go is in <a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/">debug a Go service with Delve</a>. If the problem is a service that does not start, read <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">how to read logs from every service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between rust-lldb and plain lldb?</summary><p>rust-lldb is a wrapper from the Rust toolchain that loads pretty-printers so standard types such as String and Vec are shown in readable form.</p></details><details><summary>Why does my Rust breakpoint not hit?</summary><p>Usually the build has no debug information, the line was optimised away in a release build, or the binary is older than the source. Rebuild the dev profile and restart the session.</p></details><details><summary>How do I run tests with the service&#39;s environment in Flisk?</summary><p>Use flisk run &lt;service&gt; -- cargo test. For a local process it runs the command on the host with the environment that the service has.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/"><span class="lbl">Guide</span><b>How to debug a Go service with Delve while it runs locally</b><span>A print statement gets you far, but a breakpoint in a handler is quicker once the bug depends on state. Delve is the Go debugger, and it needs a binary that still has its debug data.</span></a><a href="/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/"><span class="lbl">Guide</span><b>How to speed up Cargo builds in local development</b><span>A cold Rust build is slow for good reasons. Most of the daily wait is avoidable if you stop rebuilding what has not changed.</span></a><a href="/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/"><span class="lbl">Guide</span><b>How to run a Rust service next to a Python API locally</b><span>Python is quick to change and Rust is quick to run. Putting a hot path in Rust and keeping the rest in Python works, once the two processes find each other.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Air vs reflex vs watchexec: reload a Go app on save</title>
+<meta name="description" content="Compare Air, reflex and watchexec for restarting a Go program when you save a file, with the config for each and how to run the chosen one under Flisk.">
+<meta name="keywords" content="go live reload, air vs reflex, watchexec go, go run on save, golang hot reload">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Air vs reflex vs watchexec: reload a Go app on save">
+<meta property="og:description" content="Compare Air, reflex and watchexec for restarting a Go program when you save a file, with the config for each and how to run the chosen one under Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Air vs reflex vs watchexec: reload a Go app on save","description":"Compare Air, reflex and watchexec for restarting a Go program when you save a file, with the config for each and how to run the chosen one under Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/","keywords":"go live reload, air vs reflex, watchexec go, go run on save, golang hot reload","wordCount":870,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"Air vs reflex vs watchexec: reload a Go app on save","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Go have built-in hot reload?","acceptedAnswer":{"@type":"Answer","text":"No. go run compiles and runs once. You need a watcher such as Air, reflex or watchexec to restart the program on each save."}},{"@type":"Question","name":"Is Air still maintained?","acceptedAnswer":{"@type":"Answer","text":"The project moved to the air-verse organisation on GitHub, and that is the module path to install. Check its repository for recent releases before you adopt it."}},{"@type":"Question","name":"Can I use these tools with Flisk?","acceptedAnswer":{"@type":"Answer","text":"Yes for local processes. Put the watcher in the command field of service.json, and Flisk starts it, passes PORT and restarts it if it exits."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>Air vs reflex vs watchexec: reload a Go app on save</h1><p class="dek">Go has no built-in watcher. Three small tools fill the gap, and they differ in one detail that decides whether your API is down while it compiles.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-go-reload-tool-has-to-do">What a Go reload tool has to do</a></li><li><a href="#air">Air</a></li><li><a href="#reflex-and-watchexec">reflex and watchexec</a></li><li><a href="#which-one-to-pick">Which one to pick</a></li><li><a href="#running-the-watcher-under-flisk">Running the watcher under Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Use Air if you want a Go-specific tool with a config file, and use watchexec or reflex if you want one small binary that restarts any command when files change. All three do the same core job: watch your files, stop the running program, and start it again. The difference that matters is the order. Some tools stop the old process before they compile, so your API is unreachable for the length of the build.</p>
+
+<h2 id="what-a-go-reload-tool-has-to-do">What a Go reload tool has to do</h2>
+<p><code>go run .</code> compiles and runs once, then you stop it by hand. A watcher repeats that loop for you. It needs to ignore the files it generates (a <code>tmp</code> folder, test files), wait a moment so that a burst of saves causes one rebuild, and kill the old process cleanly, including any child it started. That last part is where simple setups go wrong: <code>go run</code> compiles a binary and starts it as a child, and if the parent is killed hard the child can keep the port open. Building a binary yourself and running that file avoids the problem.</p>
+
+<h2 id="air">Air</h2>
+<p>Air is written for Go and reads a <code>.air.toml</code> file.</p>
+<pre><code>go install github.com/air-verse/air@latest
+air init   # writes .air.toml
+air</code></pre>
+<p>The part of the config you will touch is the build section:</p>
+<pre><code>[build]
+  cmd = "go build -o ./tmp/main ."
+  bin = "./tmp/main"
+  exclude_dir = ["tmp", "vendor"]
+  exclude_regex = ["_test.go"]
+  # poll = true   # needed when files change on a network or bind-mounted drive</code></pre>
+<p>Air stops the running binary as soon as it sees a change and then compiles, so there is a gap with no server. For a small service that gap is a fraction of a second. For a large one, a request in that window fails.</p>
+<p>Since Go 1.24 you can pin the tool in <code>go.mod</code> instead of installing it globally: <code>go get -tool github.com/air-verse/air@latest</code>, then run <code>go tool air</code>. Every developer then gets the same version.</p>
+
+<h2 id="reflex-and-watchexec">reflex and watchexec</h2>
+<p>Both are generic. They know nothing about Go, so you tell them what to watch and what to run.</p>
+<pre><code># reflex: -s treats the command as a long-running service and restarts it
+reflex -r '\.go$' -s -- go run .
+
+# watchexec: -r restarts the command, -e picks extensions
+watchexec -r -e go -- go run .</code></pre>
+<p>watchexec honours <code>.gitignore</code> by default, which keeps a git-ignored <code>tmp</code> folder out of the loop. Use <code>-e go,mod,sum</code> if you also want changes to <code>go.mod</code> and <code>go.sum</code> to restart the program. Neither tool needs a config file, which is the reason to choose them when you also work in Rust or Node and want one habit for all of them.</p>
+
+<h2 id="which-one-to-pick">Which one to pick</h2>
+<table>
+<thead><tr><th>Tool</th><th>Config</th><th>Go-aware</th><th>Good for</th></tr></thead>
+<tbody>
+<tr><td>Air</td><td><code>.air.toml</code></td><td>Yes (builds to a binary, excludes test files)</td><td>A Go-only repo, fine control of build flags</td></tr>
+<tr><td>reflex</td><td>Command line</td><td>No</td><td>A one-line loop, regex filters</td></tr>
+<tr><td>watchexec</td><td>Command line</td><td>No</td><td>Several languages, ignore rules from <code>.gitignore</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="running-the-watcher-under-flisk">Running the watcher under Flisk</h2>
+<p>With Flisk, a service that declares a <code>command</code> runs as a local process with no Docker. The command can be your watcher, because Flisk only starts it, reads its port, and restarts it if it exits. The Go scaffold gives you the service, and you change one field.</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource orders --language go --local --stack app --yes</code></pre>
+<p>The scaffold writes <code>go run .</code> as the command, which does not reload. Edit <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders",
+  "appType": "backend",
+  "stack": "app",
+  "language": "go",
+  "command": "air",
+  "toolchain": "go@1.23",
+  "port": 4003,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Flisk passes <code>PORT</code> to the process, and the scaffolded program listens on it. <code>toolchain</code> makes <code>flisk up</code> refuse to start if the Go on your <code>PATH</code> does not match, and Flisk also refuses to start when the program in <code>command</code> (here <code>air</code>) is not installed. Keep your port from the scaffold, since it picks the next free one.</p>
+<p>If you run the Docker route instead, Flisk has its own watcher behind <code>"dev": { "liveReload": true }</code>. It compiles into a staging binary while the old one keeps serving, and swaps only when the build succeeds. The Flisk docs say that Air, tried first, stopped the app before compiling, which is the gap described above. The Docker path is covered in <a href="/@odykyi/stack-recipes/go-api-local-dev/">Go API local dev</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A reload loop that never stops.</strong> If the program writes a file inside the watched tree (logs, a SQLite file), the watcher sees it and restarts. Exclude that folder.</li>
+<li><strong>Port still in use after a restart.</strong> Usually a leftover child from <code>go run</code>. See <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix port already in use</a>.</li>
+<li><strong>Nothing reloads in a container.</strong> File events do not always cross a bind mount. Turn on polling in Air, or see <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>.</li>
+<li><strong>Dependency changes.</strong> A watcher reloads on code changes. After <code>go get</code>, restart it so it picks up the new module graph.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once saves reload reliably, make the compile itself cheaper: the same ideas for Rust are in <a href="/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/">speed up Cargo builds in development</a>, and a debugger works best on a binary you built yourself, as shown in <a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/">debugging Go with Delve</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Go have built-in hot reload?</summary><p>No. go run compiles and runs once. You need a watcher such as Air, reflex or watchexec to restart the program on each save.</p></details><details><summary>Is Air still maintained?</summary><p>The project moved to the air-verse organisation on GitHub, and that is the module path to install. Check its repository for recent releases before you adopt it.</p></details><details><summary>Can I use these tools with Flisk?</summary><p>Yes for local processes. Put the watcher in the command field of service.json, and Flisk starts it, passes PORT and restarts it if it exits.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/go-api-with-vite-frontend-and-cors/"><span class="lbl">Guide</span><b>Go API and Vite frontend locally: proxy instead of CORS</b><span>The browser calls the API from one origin and the API answers on another. A dev proxy makes the two look like one, so you can leave CORS rules for the day you deploy.</span></a><a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/"><span class="lbl">Guide</span><b>How to debug a Go service with Delve while it runs locally</b><span>A print statement gets you far, but a breakpoint in a handler is quicker once the bug depends on state. Delve is the Go debugger, and it needs a binary that still has its debug data.</span></a><a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/"><span class="lbl">Guide</span><b>Go workspaces (go.work) for a repo with several services</b><span>One module per service keeps builds small. A workspace file lets those modules see each other&#39;s local code while you edit, with nothing to undo before you commit.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
