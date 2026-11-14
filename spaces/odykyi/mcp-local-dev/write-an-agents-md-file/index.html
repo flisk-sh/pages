@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write an AGENTS.md file for your repo</title>
+<meta name="description" content="Write a short AGENTS.md that tells coding assistants how to run, test and not break your project: what to include, what to skip, and how Claude Code reads it.">
+<meta name="keywords" content="write agents.md, agents.md example, agents.md claude code, agents.md codex cursor, ai coding assistant instructions file">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/mcp-local-dev/write-an-agents-md-file/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write an AGENTS.md file for your repo">
+<meta property="og:description" content="Write a short AGENTS.md that tells coding assistants how to run, test and not break your project: what to include, what to skip, and how Claude Code reads it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/mcp-local-dev/write-an-agents-md-file/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write an AGENTS.md file for your repo","description":"Write a short AGENTS.md that tells coding assistants how to run, test and not break your project: what to include, what to skip, and how Claude Code reads it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/mcp-local-dev/write-an-agents-md-file/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/mcp-local-dev/write-an-agents-md-file/","keywords":"write agents.md, agents.md example, agents.md claude code, agents.md codex cursor, ai coding assistant instructions file","wordCount":739,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"MCP servers and coding assistants","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/"},{"@type":"ListItem","position":3,"name":"How to write an AGENTS.md file for your repo","item":"https://pages.flisk.si/@odykyi/mcp-local-dev/write-an-agents-md-file/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Claude Code read AGENTS.md?","acceptedAnswer":{"@type":"Answer","text":"Only when the project has no CLAUDE.md. If you have a CLAUDE.md, add the line @AGENTS.md to it so the same instructions apply."}},{"@type":"Question","name":"How long should an AGENTS.md be?","acceptedAnswer":{"@type":"Answer","text":"As short as you can keep it true. Commands, hard rules and known traps usually fit in a few dozen lines. Move per-folder detail to a file in that folder."}},{"@type":"Question","name":"Does flisk project overwrite my existing AGENTS.md?","acceptedAnswer":{"@type":"Answer","text":"No. If the file exists it is left alone, and Flisk writes its own version only when there is none."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/mcp-local-dev/">MCP servers and coding assistants</a></div>
+<section class="hero"><div><div class="lbl">MCP servers and coding assistants</div><h1>How to write an AGENTS.md file for your repo</h1><p class="dek">AGENTS.md is a README for the assistant. The best ones are short, concrete and written from the mistakes the assistant actually made.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-file-is-for">What the file is for</a></li><li><a href="#what-to-put-in">What to put in</a></li><li><a href="#what-to-leave-out">What to leave out</a></li><li><a href="#an-example">An example</a></li><li><a href="#what-flisk-writes-for-you">What Flisk writes for you</a></li><li><a href="#how-each-tool-reads-it">How each tool reads it</a></li></ol></nav></aside>
+<article><p>Write an AGENTS.md as a short list of commands the assistant should run, rules it must not break, and places to look for details. Keep it to what a new colleague could not guess from the code. Codex and Cursor read the file as it is, and Claude Code reads it when the project has no <code>CLAUDE.md</code>, or when your <code>CLAUDE.md</code> includes it with <code>@AGENTS.md</code>.</p>
+<h2 id="what-the-file-is-for">What the file is for</h2>
+<p>A README is written for people who will decide whether to use the project. An AGENTS.md is for a reader that will edit it right now, starts with no memory, and follows instructions literally. That reader needs the exact build command, the test command, which folders are off limits, and what "done" means here. It does not need your mission statement.</p>
+<p>The file is plain Markdown. There is no required structure, so use headings that you would scan yourself.</p>
+<h2 id="what-to-put-in">What to put in</h2>
+<ul>
+<li><strong>Commands that work from the repository root.</strong> Install, run, test, lint, type check. Copy them from a terminal that actually ran them. A command that is slightly wrong costs the assistant several turns.</li>
+<li><strong>Hard rules, stated as rules.</strong> "Do not edit generated files." "Every behaviour change needs a test in the same change." "No secrets in the repository."</li>
+<li><strong>Where things live.</strong> One line per top-level folder is enough.</li>
+<li><strong>Traps you have already hit.</strong> The stale build output, the test that needs a database, the formatter that must be run through the package script. These lines earn their place fastest.</li>
+<li><strong>How to check the work.</strong> Which command proves the change, and what to report back.</li>
+</ul>
+<h2 id="what-to-leave-out">What to leave out</h2>
+<ul>
+<li>Anything that is already obvious from <code>package.json</code> or the folder names.</li>
+<li>Style rules a linter can enforce. Run the linter instead.</li>
+<li>Long prose. Every line is read on every task, so a 600-line file costs attention, and a rule buried in it gets missed.</li>
+<li>Secrets, tokens, internal URLs.</li>
+</ul>
+<p>When the file grows, split by area: a short root file that links to a deeper file in each package folder, and tell the assistant to read the local one before it changes that folder. Flisk's own repository does this, with a root file and one for each subsystem.</p>
+<h2 id="an-example">An example</h2>
+<pre><code># AGENTS.md
+
+Local dev stack for the shop. Runs with Flisk.
+
+## Commands
+- Check the machine: `flisk doctor`
+- Start everything: `flisk up main`, then `flisk networks` for URLs
+- Logs for one service: `flisk logs -s orders-api`
+- Tests: `npm test` in each service folder
+
+## Rules
+- Do not edit `.flisk/`, `.flisk/.flisk-out/` or `services/**/.autogenerated/`.
+  Change `service.json` instead, then run `flisk up`.
+- Database changes go in the `migrator` service, never in an API start script.
+- Never commit `.env`.
+
+## When something fails
+Read the logs of the failing service before changing code.</code></pre>
+<p>That is about fifteen lines, and each line prevents a specific mistake.</p>
+<h2 id="what-flisk-writes-for-you">What Flisk writes for you</h2>
+<p>When you run <code>flisk project</code> or <code>flisk connect</code>, Flisk writes an AGENTS.md with its own few rules (add a service with <code>flisk resource</code>, start it with <code>flisk up</code>, debug with <code>flisk doctor</code> and <code>flisk logs</code>, never hand-write Dockerfiles or Compose files, never edit <code>.autogenerated/</code>) and the skills the assistant uses. It never overwrites a file you already have: if <code>AGENTS.md</code> exists it is left as it is. Add your own rules above or below Flisk's lines. <code>flisk project --no-agent-skills</code> skips the skills and the file.</p>
+<h2 id="how-each-tool-reads-it">How each tool reads it</h2>
+<ul>
+<li><strong>Codex and Cursor</strong> read <code>AGENTS.md</code>.</li>
+<li><strong>Claude Code</strong> reads <code>CLAUDE.md</code>. It reads <code>AGENTS.md</code> only when the project has no <code>CLAUDE.md</code>. If you keep both, put the line <code>@AGENTS.md</code> in <code>CLAUDE.md</code>, so there is one source of truth.</li>
+</ul>
+<h3>Keep it true</h3>
+<p>An instruction file that lies is worse than none. Review it when the commands change, and add a line the moment the assistant makes the same mistake twice. Treat it like code: it lives in the repository, changes go through review, and a teammate's assistant benefits from them too. For a team, the same idea applies to <a href="/@odykyi/team-dev-environments/service-json-as-a-team-contract/">service.json as a team contract</a>.</p>
+<p>The most useful single rule to start with is about generated files. See <a href="/@odykyi/mcp-local-dev/stop-ai-from-editing-generated-files/">stopping AI from editing generated files</a>.</p>
+<p>Read the file back as a stranger would. If a line only makes sense to someone who sat in the last planning meeting, rewrite it with the command or the path spelled out.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Claude Code read AGENTS.md?</summary><p>Only when the project has no CLAUDE.md. If you have a CLAUDE.md, add the line @AGENTS.md to it so the same instructions apply.</p></details><details><summary>How long should an AGENTS.md be?</summary><p>As short as you can keep it true. Commands, hard rules and known traps usually fit in a few dozen lines. Move per-folder detail to a file in that folder.</p></details><details><summary>Does flisk project overwrite my existing AGENTS.md?</summary><p>No. If the file exists it is left alone, and Flisk writes its own version only when there is none.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">MCP servers and coding assistants</span></div>
+<div class="rgrid"><a href="/@odykyi/mcp-local-dev/stop-ai-from-editing-generated-files/"><span class="lbl">Guide</span><b>How to stop AI from editing generated files in your repo</b><span>Assistants edit whatever file they find. A generated file edited by hand is overwritten on the next build, so the fix has to live somewhere else.</span></a><a href="/@odykyi/mcp-local-dev/let-your-coding-assistant-start-the-stack/"><span class="lbl">Guide</span><b>How to let your coding assistant start and check your local stack</b><span>An assistant that can start your stack saves a lot of copy and paste. It also needs rules, because starting is not the same as being healthy.</span></a><a href="/@odykyi/mcp-local-dev/connect-claude-code-to-your-local-stack/"><span class="lbl">Guide</span><b>How to connect Claude Code to your local dev stack</b><span>Connecting Claude Code to a local stack means giving it a control plane, not just a shell. Here is the one-command setup and the manual steps behind it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
