@@ -23,7 +23,13 @@ import {
 	sitemapXml,
 	webManifest,
 } from "./seo";
-import { markdownPage, preparePage, type Space, spacePath } from "./spaces";
+import {
+	markdownPage,
+	preparePage,
+	type Space,
+	spacePath,
+	subPages,
+} from "./spaces";
 
 export interface AppOptions {
 	/** The address people use, ending in a slash. Without it, each request's own address. */
@@ -207,6 +213,12 @@ export function createApp(options: AppOptions = {}) {
 					path: spacePath(s),
 					lastmod: s.updated.slice(0, 10),
 				})),
+				...spaces.flatMap((s) =>
+					subPages(s).map((p) => ({
+						path: spacePath(s) + p,
+						lastmod: s.updated.slice(0, 10),
+					})),
+				),
 			]),
 			200,
 			{ "content-type": "application/xml; charset=utf-8" },

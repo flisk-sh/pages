@@ -270,6 +270,14 @@ describe("bar visibility badge", () => {
 	});
 });
 
+describe("sitemap sub-pages", () => {
+	it("lists a space's <folder>/index.html pages, and never a shared page's", async () => {
+		const xml = await (await get("/sitemap.xml")).text();
+		expect(xml).toContain("https://pages.test/@sam/gpu-explainer/part-two/");
+		expect(xml).not.toContain("for-bob");
+	});
+});
+
 describe("shared pages", () => {
 	it("open by their link but are in no list, spaces.json or sitemap", async () => {
 		const shared = spaces.find((s) => s.slug === "for-bob");
