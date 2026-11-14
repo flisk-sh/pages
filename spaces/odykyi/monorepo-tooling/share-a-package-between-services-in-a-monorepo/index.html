@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to share a package between services in a monorepo</title>
+<meta name="description" content="Share TypeScript code between an API, a website and a worker with workspace:* dependencies, a watch build or source exports, and avoid stale dist output.">
+<meta name="keywords" content="monorepo shared package, pnpm workspace:* protocol, share typescript code between services, monorepo internal package hot reload">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to share a package between services in a monorepo">
+<meta property="og:description" content="Share TypeScript code between an API, a website and a worker with workspace:* dependencies, a watch build or source exports, and avoid stale dist output.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to share a package between services in a monorepo","description":"Share TypeScript code between an API, a website and a worker with workspace:* dependencies, a watch build or source exports, and avoid stale dist output.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/","keywords":"monorepo shared package, pnpm workspace:* protocol, share typescript code between services, monorepo internal package hot reload","wordCount":647,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Monorepos with several services","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/"},{"@type":"ListItem","position":3,"name":"How to share a package between services in a monorepo","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does workspace:* mean?","acceptedAnswer":{"@type":"Answer","text":"It tells pnpm (and Yarn) to resolve the dependency to the package in the same workspace and link it, instead of downloading it from the registry."}},{"@type":"Question","name":"Why do my changes in the shared package not show up?","acceptedAnswer":{"@type":"Answer","text":"Usually the consumer reads a built dist folder that is out of date, or its file watcher ignores node_modules where the link lives. Run a watch build and restart once to check."}},{"@type":"Question","name":"Can I import TypeScript source from another package?","acceptedAnswer":{"@type":"Answer","text":"Yes, if the consumer compiles TypeScript itself, such as Vite, Next.js with transpilePackages, Bun or tsx. Plain Node needs a built JavaScript output."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-tooling/">Monorepos with several services</a></div>
+<section class="hero"><div><div class="lbl">Monorepos with several services</div><h1>How to share a package between services in a monorepo</h1><p class="dek">A shared package is the main reason to use a monorepo, and the main reason edits seem to have no effect. Here is how the links and the builds work.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#create-the-package-and-link-it">Create the package and link it</a></li><li><a href="#option-one-build-the-package-and-watch-it">Option one: build the package and watch it</a></li><li><a href="#option-two-export-the-source">Option two: export the source</a></li><li><a href="#how-flisk-fits">How Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Create the shared code as its own package under <code>packages/</code>, depend on it with <code>"@shop/shared": "workspace:*"</code>, and decide how consumers read it: either from a built <code>dist</code> folder that a watch process keeps fresh, or straight from the TypeScript source. The second is simpler when your tools can compile TypeScript; the first works everywhere.</p>
+<h2 id="create-the-package-and-link-it">Create the package and link it</h2>
+<p>A shared package is a normal package with a name and an entry point:</p>
+<pre><code>packages/shared/package.json
+{
+  "name": "@shop/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./dist/index.js" },
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch --preserveWatchOutput"
+  }
+}</code></pre>
+<p>In each service that uses it, add the dependency with the workspace protocol:</p>
+<pre><code>"dependencies": { "@shop/shared": "workspace:*" }</code></pre>
+<p>After <code>pnpm install</code>, pnpm links <code>node_modules/@shop/shared</code> to the folder in your repo. It is a link, not a copy, so an edit is visible immediately. npm and Yarn workspaces behave the same way for packages listed in <code>workspaces</code>, though they use <code>*</code> or the <code>workspace:</code> protocol in different forms.</p>
+<h2 id="option-one-build-the-package-and-watch-it">Option one: build the package and watch it</h2>
+<p>The consumer imports <code>dist/index.js</code>. That file only exists after a build, and it is stale after an edit until the next one. So the <code>dev</code> script above runs <code>tsc --watch</code>. Run it next to the services:</p>
+<pre><code>pnpm --filter @shop/shared dev &amp;
+pnpm --filter @shop/api dev</code></pre>
+<p>Or let a task runner do it: <code>pnpm -r --parallel run dev</code> starts the watcher and the apps together. The common surprise is that an API running with <code>node --watch</code> or <code>tsx watch</code> restarts only when files it loaded change. If your watcher ignores <code>node_modules</code>, which most do, a rebuilt <code>dist</code> reached through a link may not restart it. Restart the service once to check, and if that is the case, tell the watcher to include the package path.</p>
+<h2 id="option-two-export-the-source">Option two: export the source</h2>
+<p>Point the package at TypeScript directly:</p>
+<pre><code>"exports": { ".": "./src/index.ts" }</code></pre>
+<p>No build step and no stale output. This works when the consumer compiles TypeScript itself: Vite and Next.js (with <code>transpilePackages</code> set for the package), Bun, <code>tsx</code>, and bundlers. It does not work for plain <code>node</code> before native type stripping, and it cannot be published to npm as is. For an internal package that is never published, that is usually fine.</p>
+<h2 id="how-flisk-fits">How Flisk fits</h2>
+<p>Flisk starts services, not packages. A service folder has a <code>service.json</code> with a <code>command</code> and optional <code>dependsOn</code>. Your shared package does not need one if consumers read its source. If they read <code>dist</code>, run the watcher from the service command so it is always on:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "pnpm --filter @shop/shared build &amp;&amp; pnpm dev",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>That builds the package once before the API starts. For continuous rebuilds, keep a watcher in the shell that runs <code>flisk up</code>, or use option two. <code>flisk up</code> restarts a service that exits, and each service reloads with its own watcher, such as <code>tsx watch</code>. Flisk's schema also lists <code>library</code> and <code>sdk</code> as resource types for shared packages; I did not verify what Flisk does with them for a workspace package, so I do not rely on them here.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Stale build output.</strong> If an edit has no effect, look at the timestamp of <code>dist</code>. Delete it and rebuild.</li>
+<li><strong>Two copies of a dependency.</strong> If the shared package and a service resolve different versions of the same library (a validation library, say), instanceof checks and types can fail. Keep versions aligned with one lockfile.</li>
+<li><strong>Circular dependencies.</strong> If <code>shared</code> imports from a service, move that code into <code>shared</code> or a third package.</li>
+<li><strong>Types and runtime drift.</strong> Keep a shared <code>tsconfig</code>; see <a href="/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/">sharing one tsconfig</a>.</li>
+</ul>
+<p>If the shared code is an API contract between a frontend and a backend, also read <a href="/@odykyi/testing-and-shipping/contract-between-frontend-and-backend/">keeping a frontend and backend contract in sync</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does workspace:* mean?</summary><p>It tells pnpm (and Yarn) to resolve the dependency to the package in the same workspace and link it, instead of downloading it from the registry.</p></details><details><summary>Why do my changes in the shared package not show up?</summary><p>Usually the consumer reads a built dist folder that is out of date, or its file watcher ignores node_modules where the link lives. Run a watch build and restart once to check.</p></details><details><summary>Can I import TypeScript source from another package?</summary><p>Yes, if the consumer compiles TypeScript itself, such as Vite, Next.js with transpilePackages, Bun or tsx. Plain Node needs a built JavaScript output.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepos with several services</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/"><span class="lbl">Guide</span><b>pnpm workspace: how to run several services at once</b><span>A pnpm workspace gives you one install and one lockfile. It does not decide which services start, in what order, or where their logs go. Here is how to cover that.</span></a><a href="/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/"><span class="lbl">Guide</span><b>How to share one tsconfig across a monorepo</b><span>Ten copies of a tsconfig drift apart within a month. A base file and a few small per-package files keep strictness and module settings aligned.</span></a><a href="/@odykyi/monorepo-tooling/turborepo-dev-task-persistent-services/"><span class="lbl">Guide</span><b>Turborepo dev task: run many services with turbo dev</b><span>turbo dev can start every app in a repo with one command. The catch is a few settings that decide whether it works at all.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
