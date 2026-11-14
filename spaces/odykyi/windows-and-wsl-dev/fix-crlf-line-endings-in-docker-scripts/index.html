@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fix CRLF line endings that break shell scripts in Docker</title>
+<meta name="description" content="Errors like bad interpreter, ^M or exec format error come from Windows line endings. Fix them with .gitattributes, core.autocrlf and a one-time renormalize.">
+<meta name="keywords" content="crlf line endings docker, bad interpreter ^M, exec format error entrypoint.sh windows, git autocrlf input, gitattributes eol lf">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/fix-crlf-line-endings-in-docker-scripts/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fix CRLF line endings that break shell scripts in Docker">
+<meta property="og:description" content="Errors like bad interpreter, ^M or exec format error come from Windows line endings. Fix them with .gitattributes, core.autocrlf and a one-time renormalize.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/fix-crlf-line-endings-in-docker-scripts/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Fix CRLF line endings that break shell scripts in Docker","description":"Errors like bad interpreter, ^M or exec format error come from Windows line endings. Fix them with .gitattributes, core.autocrlf and a one-time renormalize.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/fix-crlf-line-endings-in-docker-scripts/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/fix-crlf-line-endings-in-docker-scripts/","keywords":"crlf line endings docker, bad interpreter ^M, exec format error entrypoint.sh windows, git autocrlf input, gitattributes eol lf","wordCount":681,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Windows and WSL local development","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/"},{"@type":"ListItem","position":3,"name":"Fix CRLF line endings that break shell scripts in Docker","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/fix-crlf-line-endings-in-docker-scripts/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does bad interpreter with ^M mean?","acceptedAnswer":{"@type":"Answer","text":"The script has Windows CRLF line endings, so the shebang names the interpreter with a trailing carriage return, which is not a real path."}},{"@type":"Question","name":"Should I use core.autocrlf true or input?","acceptedAnswer":{"@type":"Answer","text":"For projects that run in Linux containers, use input. It keeps LF in your working tree and still converts CRLF to LF when you commit."}},{"@type":"Question","name":"Does flisk doctor check autocrlf inside WSL2?","acceptedAnswer":{"@type":"Answer","text":"No. The autocrlf warning is part of the Windows diagnostics that run on native Windows. Inside WSL2, use .gitattributes."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/windows-and-wsl-dev/">Windows and WSL local development</a></div>
+<section class="hero"><div><div class="lbl">Windows and WSL local development</div><h1>Fix CRLF line endings that break shell scripts in Docker</h1><p class="dek">A shell script saved with CRLF endings looks fine in an editor and fails inside a Linux container. The fix is one repository file and one git setting.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-it-fails">Why it fails</a></li><li><a href="#fix-it-for-the-whole-team-gitattributes">Fix it for the whole team: .gitattributes</a></li><li><a href="#the-local-git-setting">The local git setting</a></li><li><a href="#where-flisk-helps">Where Flisk helps</a></li><li><a href="#a-guard-inside-the-dockerfile">A guard inside the Dockerfile</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Windows editors and Git can save text files with CRLF line endings, but Linux expects LF. A shell script with CRLF fails in a container with errors such as <code>/bin/sh^M: bad interpreter</code>, <code>exec ./entrypoint.sh: no such file or directory</code> or <code>exec format error</code>. Fix it by committing a <code>.gitattributes</code> file that forces LF for scripts, setting <code>core.autocrlf input</code> locally, and renormalizing the files once.</p>
+<h2 id="why-it-fails">Why it fails</h2>
+<p>The first line of a script is <code>#!/bin/sh</code>. With CRLF the kernel reads the interpreter as <code>/bin/sh</code> followed by a carriage return character, a path that does not exist. The error message is confusing because the file you point at does exist; it is the interpreter named inside it that does not. The same thing breaks <code>.env</code> files (a value ends with a hidden <code>\r</code>), Makefiles and any shell snippet copied into a Dockerfile.</p>
+<p>Check a file quickly:</p>
+<pre><code>file entrypoint.sh
+# entrypoint.sh: Bourne-Again shell script, ASCII text executable, with CRLF line terminators</code></pre>
+<p>"with CRLF line terminators" is the problem. You can also list all offenders in a repo:</p>
+<pre><code>git ls-files --eol | grep 'w/crlf'</code></pre>
+<h2 id="fix-it-for-the-whole-team-gitattributes">Fix it for the whole team: .gitattributes</h2>
+<p>A git setting on one laptop does not protect the next person. Put the rule in the repository so every clone follows it:</p>
+<pre><code>* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+.env* text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf</code></pre>
+<p>The wildcard line lets Git decide which files are text. The explicit <code>eol=lf</code> lines pin the ones that run on Linux. Batch and PowerShell files keep CRLF because those are Windows scripts.</p>
+<p>Then renormalize what is already in the repository, once, and commit the result:</p>
+<pre><code>git add --renormalize .
+git commit -m "Normalize line endings"</code></pre>
+<p>Teammates who already have CRLF files in their working tree can refresh them after pulling:</p>
+<pre><code>git rm --cached -r . 
+git reset --hard</code></pre>
+<p>Make sure they have committed or stashed their changes first, because <code>reset --hard</code> discards uncommitted work.</p>
+<h2 id="the-local-git-setting">The local git setting</h2>
+<p>Git for Windows often defaults to <code>core.autocrlf true</code>, which converts LF to CRLF on checkout. For a project that runs in Linux containers, set it to <code>input</code>, which leaves files alone on checkout and only converts CRLF to LF on commit:</p>
+<pre><code>git config --global core.autocrlf input</code></pre>
+<p>Run it in Ubuntu on WSL2, and also in Git for Windows if you use both, because each has its own global config.</p>
+<h2 id="where-flisk-helps">Where Flisk helps</h2>
+<p>On native Windows, <code>flisk doctor</code> reads <code>git config core.autocrlf</code> and warns when it is <code>true</code>, with the message that generated files may get CRLF while Docker Linux containers expect LF, and the fix <code>git config core.autocrlf input</code>. That check lives in Flisk's Windows diagnostics, so it runs on native Windows and not inside Ubuntu. Inside WSL2, rely on <code>.gitattributes</code> and the script snippet below. Flisk's own <code>setup-wsl.ps1</code> helper sets <code>core.autocrlf input</code> inside Ubuntu as part of its setup.</p>
+<p>The <code>.gitattributes</code> file is also what keeps files that Flisk generates from a service definition, such as Compose or Tilt files, from being rewritten with CRLF if you do commit them. Flisk keeps generated output in git-ignored folders by default, so this mostly matters for your own scripts and Dockerfiles.</p>
+<h2 id="a-guard-inside-the-dockerfile">A guard inside the Dockerfile</h2>
+<p>If you cannot control every contributor's setup, you can strip carriage returns during the image build. It treats the symptom, not the cause, but it stops builds from breaking:</p>
+<pre><code>COPY entrypoint.sh /entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh &amp;&amp; chmod +x /entrypoint.sh</code></pre>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Editors.</strong> Configure the editor to use LF for the repository. In VS Code the status bar shows CRLF or LF and can switch it; an <code>.editorconfig</code> with <code>end_of_line = lf</code> makes it automatic.</li>
+<li><strong>Binary files.</strong> <code>text=auto</code> detects binaries, but mark known ones with <code>binary</code> if you see corruption.</li>
+<li><strong>Files already mangled.</strong> Renormalizing fixes line endings, not content. If a script was edited in a tool that added a byte order mark, remove that too.</li>
+</ul>
+<p>Next step: add the <code>.gitattributes</code> file, then check the <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">service will not start</a> guide if a container still exits right away.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does bad interpreter with ^M mean?</summary><p>The script has Windows CRLF line endings, so the shebang names the interpreter with a trailing carriage return, which is not a real path.</p></details><details><summary>Should I use core.autocrlf true or input?</summary><p>For projects that run in Linux containers, use input. It keeps LF in your working tree and still converts CRLF to LF when you commit.</p></details><details><summary>Does flisk doctor check autocrlf inside WSL2?</summary><p>No. The autocrlf warning is part of the Windows diagnostics that run on native Windows. Inside WSL2, use .gitattributes.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Windows and WSL local development</span></div>
+<div class="rgrid"><a href="/@odykyi/windows-and-wsl-dev/wsl2-slow-on-mnt-c/"><span class="lbl">Guide</span><b>Why WSL2 is slow on /mnt/c and where to keep your project</b><span>WSL2 is fast inside its own Linux filesystem and slow across the bridge to your Windows drive. Where the repo lives decides which one you get.</span></a><a href="/@odykyi/windows-and-wsl-dev/docker-command-not-found-in-wsl2/"><span class="lbl">Guide</span><b>Docker command not found in WSL2: turn on the integration</b><span>When docker is missing or silent inside Ubuntu, Docker Desktop is almost never broken. It just has not been told to reach that distribution.</span></a><a href="/@odykyi/windows-and-wsl-dev/windows-hosts-file-for-localhost-names/"><span class="lbl">Guide</span><b>*.localhost not resolving on Windows: the hosts file fix</b><span>Names ending in .localhost should point at your own machine. On some Windows setups they do not, and the hosts file has no wildcard to fix it in one line.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

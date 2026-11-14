@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Docker Engine in WSL2 without Docker Desktop</title>
+<meta name="description" content="Install Docker Engine inside Ubuntu on WSL2, enable systemd, add your user to the docker group and test it. When this beats Docker Desktop and what you lose.">
+<meta name="keywords" content="docker without docker desktop wsl2, install docker engine ubuntu wsl2, wsl2 systemd docker, docker desktop alternative windows, docker group wsl">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Docker Engine in WSL2 without Docker Desktop">
+<meta property="og:description" content="Install Docker Engine inside Ubuntu on WSL2, enable systemd, add your user to the docker group and test it. When this beats Docker Desktop and what you lose.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Docker Engine in WSL2 without Docker Desktop","description":"Install Docker Engine inside Ubuntu on WSL2, enable systemd, add your user to the docker group and test it. When this beats Docker Desktop and what you lose.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/","keywords":"docker without docker desktop wsl2, install docker engine ubuntu wsl2, wsl2 systemd docker, docker desktop alternative windows, docker group wsl","wordCount":607,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Windows and WSL local development","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/"},{"@type":"ListItem","position":3,"name":"How to run Docker Engine in WSL2 without Docker Desktop","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use Docker on Windows without Docker Desktop?","acceptedAnswer":{"@type":"Answer","text":"Yes. Install Docker Engine inside Ubuntu on WSL2, enable systemd, and add your user to the docker group."}},{"@type":"Question","name":"Does Flisk work with Docker Engine in WSL2?","acceptedAnswer":{"@type":"Answer","text":"Flisk's own WSL2 CI runs on Docker Engine inside the distro. Its guide recommends Docker Desktop, and says the two paths are similar but not identical."}},{"@type":"Question","name":"Why do I need systemd?","acceptedAnswer":{"@type":"Answer","text":"It lets the Docker service start with the distro and be managed with systemctl, so you do not launch the daemon by hand."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/windows-and-wsl-dev/">Windows and WSL local development</a></div>
+<section class="hero"><div><div class="lbl">Windows and WSL local development</div><h1>How to run Docker Engine in WSL2 without Docker Desktop</h1><p class="dek">You can run containers on Windows with Docker Engine inside WSL2 and no Docker Desktop. It suits teams that cannot, or will not, license the desktop app.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-choose-this">Why choose this</a></li><li><a href="#install-it">Install it</a></li><li><a href="#using-it-with-flisk">Using it with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>You can run Docker Engine directly inside Ubuntu on WSL2: enable systemd in <code>/etc/wsl.conf</code>, install the engine from Docker's apt repository, add your user to the <code>docker</code> group and start the service. Containers then run entirely in Linux with no Docker Desktop, which also avoids its licence terms, but you lose its Windows GUI and its integration across distributions.</p>
+<h2 id="why-choose-this">Why choose this</h2>
+<ul>
+<li><strong>Licensing.</strong> Docker Desktop requires a paid subscription for larger companies. Docker Engine on Linux is free software.</li>
+<li><strong>One place.</strong> Everything lives in the distro: files, engine and tools. There is no socket bridge between Windows and Linux.</li>
+<li><strong>Scripts match servers.</strong> The setup is the same as on a Linux build agent.</li>
+</ul>
+<p>The trade-off: you manage updates yourself, there is no GUI, and your other WSL distros do not get the engine unless you install it there too. For a comparison with Colima and Podman, see <a href="/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/">Docker Desktop vs Colima vs Podman</a>.</p>
+<h2 id="install-it">Install it</h2>
+<ol>
+<li><strong>Remove the Desktop integration for this distro</strong> (Docker Desktop, Settings, Resources, WSL Integration), or uninstall Docker Desktop. Two engines in one distro cause confusing socket errors.</li>
+<li><strong>Enable systemd.</strong> In Ubuntu, create or edit <code>/etc/wsl.conf</code>:</li>
+</ol>
+<pre><code>[boot]
+systemd=true</code></pre>
+<ol start="3">
+<li>In PowerShell run <code>wsl --shutdown</code>, then reopen Ubuntu. Check with <code>systemctl is-system-running</code>.</li>
+<li><strong>Install the engine.</strong> Follow Docker's current instructions for Ubuntu at <code>docs.docker.com/engine/install/ubuntu</code>, which add Docker's apt repository and install <code>docker-ce</code>, <code>docker-ce-cli</code>, <code>containerd.io</code> and the Compose and Buildx plugins. For a throwaway dev machine the convenience script is shorter, but read it before you run it:</li>
+</ol>
+<pre><code>curl -fsSL https://get.docker.com -o get-docker.sh
+less get-docker.sh
+sudo sh get-docker.sh</code></pre>
+<ol start="5">
+<li><strong>Let your user run docker without sudo:</strong></li>
+</ol>
+<pre><code>sudo usermod -aG docker $USER
+newgrp docker</code></pre>
+<ol start="6">
+<li><strong>Start it and test:</strong></li>
+</ol>
+<pre><code>sudo systemctl enable --now docker
+docker run --rm hello-world
+docker compose version</code></pre>
+<p>Group membership gives root-equivalent power over the machine, which is normal for a developer VM but worth knowing.</p>
+<h2 id="using-it-with-flisk">Using it with Flisk</h2>
+<p>Flisk needs <code>docker</code> to answer in the environment where you run it, plus Tilt. It does not care which engine answers. Flisk's own WSL2 end-to-end tests run on Docker Engine installed inside the WSL2 distro, not Docker Desktop. Its docs say plainly that the recommended guide describes Docker Desktop integration and that the two paths are similar but not identical, so expect to read a few details yourself.</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk doctor</code></pre>
+<p>In WSL2, doctor's "Docker WSL integration" check passes when the <code>docker</code> command exists and the daemon answers from the distribution; it does not insist on Desktop. If it fails with "Docker does not answer from this WSL2 distribution", check <code>systemctl status docker</code> first, because the engine service is not running, rather than the Desktop settings the fix text mentions. Install Tilt in the same distro with the project's install script.</p>
+<p>On Linux as a non-root user, the gateway cannot take port 80, so Flisk uses a port in the 8080 to 8180 range and prints URLs with the port. Use the printed URLs.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>systemd not running.</strong> If <code>systemctl</code> says it is not booted with systemd, the <code>wsl.conf</code> change was not applied. Run <code>wsl --shutdown</code> and try again, and check that your WSL is recent with <code>wsl --update</code>.</li>
+<li><strong>Engine does not start with the distro.</strong> With systemd enabled, <code>systemctl enable docker</code> handles it. Without systemd, you would start the daemon by hand each time, which is why we enable it.</li>
+<li><strong>Disk growth.</strong> Images pile up in the distro's virtual disk. See <a href="/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/">how to shrink it</a>.</li>
+<li><strong>Corporate policy.</strong> Check that an engine in WSL is allowed on a managed laptop.</li>
+</ul>
+<p>Next step: if you would rather keep Desktop, read <a href="/@odykyi/windows-and-wsl-dev/docker-command-not-found-in-wsl2/">turning on its WSL integration</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I use Docker on Windows without Docker Desktop?</summary><p>Yes. Install Docker Engine inside Ubuntu on WSL2, enable systemd, and add your user to the docker group.</p></details><details><summary>Does Flisk work with Docker Engine in WSL2?</summary><p>Flisk&#39;s own WSL2 CI runs on Docker Engine inside the distro. Its guide recommends Docker Desktop, and says the two paths are similar but not identical.</p></details><details><summary>Why do I need systemd?</summary><p>It lets the Docker service start with the distro and be managed with systemctl, so you do not launch the daemon by hand.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Windows and WSL local development</span></div>
+<div class="rgrid"><a href="/@odykyi/windows-and-wsl-dev/docker-command-not-found-in-wsl2/"><span class="lbl">Guide</span><b>Docker command not found in WSL2: turn on the integration</b><span>When docker is missing or silent inside Ubuntu, Docker Desktop is almost never broken. It just has not been told to reach that distribution.</span></a><a href="/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/"><span class="lbl">Guide</span><b>How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space</b><span>The WSL2 disk file grows when you write data and does not shrink when you delete it. Here is how to get the space back.</span></a><a href="/@odykyi/windows-and-wsl-dev/limit-wsl2-memory-with-wslconfig/"><span class="lbl">Guide</span><b>WSL2 using too much memory: limit it with .wslconfig</b><span>WSL2 takes up to half your RAM by default and gives little back. A five-line file puts a ceiling on it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
