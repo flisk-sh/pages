@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test RAG retrieval quality with a small eval set</title>
+<meta name="description" content="Build a 30-question eval set, measure hit rate at k and mean reciprocal rank against your vector index, and compare chunk sizes or models with numbers you trust.">
+<meta name="keywords" content="test rag retrieval, rag evaluation small dataset, hit rate at k, mean reciprocal rank rag, evaluate vector search quality">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test RAG retrieval quality with a small eval set">
+<meta property="og:description" content="Build a 30-question eval set, measure hit rate at k and mean reciprocal rank against your vector index, and compare chunk sizes or models with numbers you trust.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test RAG retrieval quality with a small eval set","description":"Build a 30-question eval set, measure hit rate at k and mean reciprocal rank against your vector index, and compare chunk sizes or models with numbers you trust.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/","keywords":"test rag retrieval, rag evaluation small dataset, hit rate at k, mean reciprocal rank rag, evaluate vector search quality","wordCount":670,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"RAG and vector databases locally","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/"},{"@type":"ListItem","position":3,"name":"How to test RAG retrieval quality with a small eval set","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many questions do I need to evaluate RAG retrieval?","acceptedAnswer":{"@type":"Answer","text":"Twenty to fifty real questions is enough to catch big regressions. With so few, treat a difference of one or two questions as noise."}},{"@type":"Question","name":"What is hit rate at k?","acceptedAnswer":{"@type":"Answer","text":"The share of questions for which a correct source appears in the top k retrieved results. Choose k equal to the number of chunks you pass to the model."}},{"@type":"Question","name":"Should I evaluate the final answer or only retrieval?","acceptedAnswer":{"@type":"Answer","text":"Both, but separately. Retrieval first, because it is cheap and deterministic, and the model cannot use text it never receives."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/rag-and-vector-db-local/">RAG and vector databases locally</a></div>
+<section class="hero"><div><div class="lbl">RAG and vector databases locally</div><h1>How to test RAG retrieval quality with a small eval set</h1><p class="dek">You do not need a benchmark suite. Thirty real questions with known answers will tell you whether a change helped.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-test-retrieval-on-its-own">Why test retrieval on its own</a></li><li><a href="#build-the-eval-set">Build the eval set</a></li><li><a href="#compute-the-metrics">Compute the metrics</a></li><li><a href="#compare-changes-fairly">Compare changes fairly</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Test retrieval separately from generation. Write 20 to 50 questions, mark which source chunk or document should answer each, run each question against your index, and compute hit rate at k (is the right source in the top k results) and mean reciprocal rank. The result is two numbers you can compare before and after every change to chunking, the embedding model or the index.</p>
+
+<h2 id="why-test-retrieval-on-its-own">Why test retrieval on its own</h2>
+<p>A RAG answer can be wrong for two different reasons: the retriever did not bring the right text, or the model misused text that was there. Judging only the final answer hides which one broke. Retrieval is cheap and deterministic to test: no model call, no judging, just ids. Fix retrieval first, because the model cannot use text it never sees.</p>
+
+<h2 id="build-the-eval-set">Build the eval set</h2>
+<p>Keep it as a plain file in your repository, for example <code>eval/questions.json</code>:</p>
+<pre><code>[
+  {"q": "How long do refunds take?", "source": "billing.md"},
+  {"q": "Which ports does the gateway use?", "source": "networking.md"}
+]</code></pre>
+<p>Rules that make it useful:</p>
+<ul>
+<li><strong>Use real questions.</strong> Take them from support tickets, chat logs or teammates. Questions written by the person who wrote the documents tend to reuse the document's exact words, which flatters the retriever.</li>
+<li><strong>Vary the wording.</strong> Include paraphrases and questions with no keyword overlap with the answer.</li>
+<li><strong>Mark the source, not the exact chunk,</strong> unless you want to test chunk boundaries too. Source-level labels survive a change in chunking.</li>
+<li><strong>Include a few unanswerable questions</strong> and check what the top score looks like for them. This helps you pick a similarity threshold later.</li>
+</ul>
+
+<h2 id="compute-the-metrics">Compute the metrics</h2>
+<p>For each question, embed it, query the top k chunks, and look at the sources in rank order.</p>
+<ul>
+<li><strong>Hit rate at k:</strong> the share of questions where the right source appears anywhere in the top k. Use k of 3 or 5, matching how many chunks you will give the model.</li>
+<li><strong>Mean reciprocal rank (MRR):</strong> for each question, 1 divided by the rank of the first correct result (0 if absent), averaged. It rewards putting the right chunk first.</li>
+</ul>
+<pre><code>const ranks = results.map(({ sources, expected }) =&gt; {
+  const i = sources.indexOf(expected);
+  return i === -1 ? 0 : 1 / (i + 1);
+});
+const mrr = ranks.reduce((a, b) =&gt; a + b, 0) / ranks.length;
+const hit5 = results.filter(({ sources, expected }) =&gt; sources.slice(0, 5).includes(expected)).length / results.length;
+console.log({ hit5, mrr });</code></pre>
+<p>Run it as part of your test command, and print the failed questions with what was returned. Reading ten failures teaches you more than the averages do.</p>
+
+<h2 id="compare-changes-fairly">Compare changes fairly</h2>
+<p>Change one thing at a time: chunk size, overlap, embedding model, with or without a title prefix, exact scan or an HNSW index. Re-index into a new collection or table with a different name, run the same eval, and compare. With only 30 questions a difference of one or two questions is noise, so treat small gaps as ties and prefer the simpler setup. If you also change the model, remember vectors from different models must never share an index, see <a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/">re-embedding after a model change</a>.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>An eval like this needs a running vector store and embedding server, and a reset between runs. In a Flisk stack you can start them with <code>flisk up</code> and run the eval script against them, in CI too, the pattern shown in <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>. Nothing about the eval itself depends on Flisk, and a script pointed at any vector store works.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Overfitting to the set.</strong> Do not tune until all 30 pass. Keep a second set you only look at occasionally.</li>
+<li><strong>Testing with the index you built the questions from.</strong> If you copy a sentence from a chunk into a question, you are testing string matching.</li>
+<li><strong>Ignoring filters.</strong> If production queries use metadata filters, apply them in the eval too.</li>
+</ul>
+<p>When the retrieval numbers are good, move on to how the model uses the chunks, which is a separate test with its own questions.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many questions do I need to evaluate RAG retrieval?</summary><p>Twenty to fifty real questions is enough to catch big regressions. With so few, treat a difference of one or two questions as noise.</p></details><details><summary>What is hit rate at k?</summary><p>The share of questions for which a correct source appears in the top k retrieved results. Choose k equal to the number of chunks you pass to the model.</p></details><details><summary>Should I evaluate the final answer or only retrieval?</summary><p>Both, but separately. Retrieval first, because it is cheap and deterministic, and the model cannot use text it never receives.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">RAG and vector databases locally</span></div>
+<div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/chunk-documents-for-rag/"><span class="lbl">Guide</span><b>How to chunk documents for RAG: size, overlap and splitters</b><span>Chunking decides what the retriever can find. Most weak RAG answers come from chunks that cut an idea in half or bury it in unrelated text.</span></a><a href="/@odykyi/rag-and-vector-db-local/chroma-vs-qdrant-vs-pgvector/"><span class="lbl">Guide</span><b>Chroma vs Qdrant vs pgvector for a local RAG prototype</b><span>All three store vectors and return nearest neighbours. They differ in what else they give you, and in how much of your prototype you must rewrite when you move on.</span></a><a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/"><span class="lbl">Guide</span><b>How to re-embed documents after changing the embedding model</b><span>A new embedding model means a new index. Done in the wrong order you get silently bad search, so build beside the old one and switch when it is proven.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
