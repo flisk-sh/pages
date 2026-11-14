@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compose profiles vs Flisk stacks: start only part of a project</title>
+<meta name="description" content="Compose profiles hide optional services; Flisk adds profiles and stacks. See the commands, the rules, and which fits an admin tool or a service group.">
+<meta name="keywords" content="docker compose profiles, compose profile vs stack, start only some services docker compose, flisk up stack, flisk profiles">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Compose profiles vs Flisk stacks: start only part of a project">
+<meta property="og:description" content="Compose profiles hide optional services; Flisk adds profiles and stacks. See the commands, the rules, and which fits an admin tool or a service group.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Compose profiles vs Flisk stacks: start only part of a project","description":"Compose profiles hide optional services; Flisk adds profiles and stacks. See the commands, the rules, and which fits an admin tool or a service group.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/","keywords":"docker compose profiles, compose profile vs stack, start only some services docker compose, flisk up stack, flisk profiles","wordCount":730,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"Compose profiles vs Flisk stacks: start only part of a project","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/compose-profiles-vs-stacks/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I start a Compose profile?","acceptedAnswer":{"@type":"Answer","text":"Use docker compose --profile NAME up, or set COMPOSE_PROFILES=NAME. Services without profiles always start."}},{"@type":"Question","name":"How do I include a profile in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Run flisk up --profile NAME. Services with profiles are left out by default, and flisk up prints which ones it skipped. flisk up --only SERVICE starts a service regardless of its profile."}},{"@type":"Question","name":"What is a Flisk stack?","acceptedAnswer":{"@type":"Answer","text":"A named group of services set with the stack field in service.json. flisk up NAME starts that group, and its dependencies may come from other stacks."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>Compose profiles vs Flisk stacks: start only part of a project</h1><p class="dek">Two ways to run only part of a system: profiles for optional services and stacks for groups. Here is how each works and when to use which.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#compose-profiles">Compose profiles</a></li><li><a href="#flisk-profiles">Flisk profiles</a></li><li><a href="#stacks">Stacks</a></li><li><a href="#which-one-to-use">Which one to use</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use a Compose profile or a Flisk profile to keep optional services out of the default start, such as an admin tool or a debugger. Use a Flisk stack to group services that belong together and start a group with <code>flisk up &lt;stack&gt;</code>. Profiles answer "should this run by default", and stacks answer "which group am I working on".</p>
+
+<h2 id="compose-profiles">Compose profiles</h2>
+<p>A Compose service with a <code>profiles</code> list starts only when you enable one of its profiles. Services without profiles always start.</p>
+<pre><code>services:
+  api:
+    build: ./api
+  db:
+    image: postgres:17
+  pgadmin:
+    image: dpage/pgadmin4
+    profiles: ["admin"]</code></pre>
+<pre><code>docker compose up                      # api and db
+docker compose --profile admin up      # api, db and pgadmin
+COMPOSE_PROFILES=admin docker compose up</code></pre>
+<p>Profiles are a good fit for tools you want sometimes. They are weaker as a way to split a big system into parts, because every service still lives in one file and one project, and a service with a profile that another service depends on can be hard to reason about.</p>
+
+<h2 id="flisk-profiles">Flisk profiles</h2>
+<p>Flisk has the same idea in <code>service.json</code>. Add a <code>profiles</code> array with names made of lowercase letters, digits and dashes:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "admin",
+  "appType": "backend",
+  "command": "node admin.js",
+  "port": 4100,
+  "profiles": ["admin"]
+}</code></pre>
+<p>Then choose at start time:</p>
+<pre><code>flisk up                      # leaves out services with profiles
+flisk up --profile admin      # includes the admin profile
+flisk up --only admin         # starts it regardless of profile</code></pre>
+<p>Services without profiles always start. <code>flisk up</code> prints which services it skipped, so a missing service is not a mystery. An unknown profile name is refused, and the error lists the profiles in the project. Profiles work for both container services and local-process services, and they were added in Flisk 1.4.24. If you import a Compose file, its <code>profiles</code> are carried over when the names fit that pattern.</p>
+
+<h2 id="stacks">Stacks</h2>
+<p>A stack is a group, set with the <code>stack</code> field in <code>service.json</code> or the <code>--stack</code> flag when you create a resource. It is not a Compose feature. A stack also affects the generated database name, the routes and the generated Compose project name.</p>
+<pre><code>flisk resource orders-api --type backend --stack shop
+flisk resource shop-web --type frontend --stack shop
+flisk stacks
+flisk up shop
+flisk up shop --dry-run</code></pre>
+<p><code>flisk stacks</code> lists the groups, <code>flisk resources</code> lists services, and <code>flisk stack &lt;name&gt; --resources ...</code> assigns resources to a stack. When you start a stack, the services you name must belong to it, but their dependencies may cross into other stacks. For a service that runs as a local process, <code>stack</code> is optional.</p>
+
+<h2 id="which-one-to-use">Which one to use</h2>
+<table>
+<thead><tr><th>Situation</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>A tool you need once a week (admin UI, mail catcher)</td><td>Profile</td></tr>
+<tr><td>A debug sidecar</td><td>Profile</td></tr>
+<tr><td>Shop services versus billing services in one repo</td><td>Stacks</td></tr>
+<tr><td>Work on one service and what it needs</td><td><code>flisk up --only &lt;service&gt;</code>, which also starts its dependencies</td></tr>
+</tbody>
+</table>
+<p>A worked example: a repo holds a shop and a billing system, and a mail-catcher you only need when you test emails. Put the shop services in a <code>shop</code> stack and the billing services in a <code>billing</code> stack. Give the mail-catcher a <code>mail</code> profile. On a normal day you run <code>flisk up shop</code> and the mail-catcher stays off. On the day you test emails you add <code>--profile mail</code>. The two features answer different questions, so you can use both in one project.</p>
+<p>Both approaches have the same weak point: they hide things. A teammate who runs <code>flisk up</code> and does not see the admin service may think it is broken. Write the profile names in your README next to the command that uses them.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Dependencies on a profiled service.</strong> If a default service depends on one that has a profile, plan for it. Check <code>flisk up --dry-run</code> to see what will start.</li>
+<li><strong>Name rules.</strong> A Compose profile with capital letters or underscores is not carried over by the import, so rename it.</li>
+<li><strong>Stacks are not isolation.</strong> Services in different stacks share the machine, the gateway and the database host. Two stacks that need the same port still conflict, see <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">fixing port conflicts</a>.</li>
+<li><strong>Moving a service between stacks</strong> changes its generated names. Check the data it uses before you do.</li>
+</ul>
+
+<p>For more on starting only what you need, read <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">start only the services you need</a>. If you are coming from Compose, <a href="/@odykyi/docker-compose-guide/import-docker-compose-file/">importing your Compose file</a> keeps the profiles you already have.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I start a Compose profile?</summary><p>Use docker compose --profile NAME up, or set COMPOSE_PROFILES=NAME. Services without profiles always start.</p></details><details><summary>How do I include a profile in Flisk?</summary><p>Run flisk up --profile NAME. Services with profiles are left out by default, and flisk up prints which ones it skipped. flisk up --only SERVICE starts a service regardless of its profile.</p></details><details><summary>What is a Flisk stack?</summary><p>A named group of services set with the stack field in service.json. flisk up NAME starts that group, and its dependencies may come from other stacks.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/"><span class="lbl">Guide</span><b>Docker Compose alternative for local development</b><span>Docker Compose is a good default. This article shows where it runs out of road for local development and what a generated setup looks like.</span></a><a href="/@odykyi/docker-compose-guide/import-docker-compose-file/"><span class="lbl">Guide</span><b>How to import a docker-compose.yml into Flisk</b><span>flisk import turns a Compose file into service.json files without touching the original. Here is what it reads, what it maps and what you must check by hand.</span></a><a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/"><span class="lbl">Guide</span><b>Compose depends_on and healthchecks: wait for the database</b><span>Your API crashes because the database is not ready yet. This is how to order startup properly in Compose and in service.json.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
