@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep a search index in sync with your database locally</title>
+<meta name="description" content="Keep Meilisearch, Typesense or OpenSearch matching Postgres: idempotent upserts, a full reindex command, change-time updates and how to detect drift in dev.">
+<meta name="keywords" content="sync database to search index, reindex search from postgres, meilisearch sync postgres, search index drift, idempotent reindex job">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep a search index in sync with your database locally">
+<meta property="og:description" content="Keep Meilisearch, Typesense or OpenSearch matching Postgres: idempotent upserts, a full reindex command, change-time updates and how to detect drift in dev.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep a search index in sync with your database locally","description":"Keep Meilisearch, Typesense or OpenSearch matching Postgres: idempotent upserts, a full reindex command, change-time updates and how to detect drift in dev.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/","keywords":"sync database to search index, reindex search from postgres, meilisearch sync postgres, search index drift, idempotent reindex job","wordCount":858,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"How to keep a search index in sync with your database locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why not update the index and the database in one step?","acceptedAnswer":{"@type":"Answer","text":"They are separate systems, so no single transaction covers both. Use idempotent upserts and a rebuild command so any mismatch can be repaired, and add an outbox if drift matters."}},{"@type":"Question","name":"How do I remove deleted rows from the index?","acceptedAnswer":{"@type":"Answer","text":"An upsert-only reindex cannot. Rebuild into a new index and swap it in, or send explicit delete calls from the same code path that deletes the row."}},{"@type":"Question","name":"How often should I reindex?","acceptedAnswer":{"@type":"Answer","text":"Locally, whenever the document shape or the data changes in a way the live updates do not cover. In production, run it as a scheduled or on-demand job with monitoring."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>How to keep a search index in sync with your database locally</h1><p class="dek">A search index is a copy. Treat it as rebuildable, write to it idempotently and give yourself one command that makes it right again.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#start-with-the-rebuild">Start with the rebuild</a></li><li><a href="#keeping-it-fresh">Keeping it fresh</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#detect-drift">Detect drift</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-this">When not to use this</a></li></ol></nav></aside>
+<article><p>Keep a search index in sync by treating it as a disposable copy of the database: write to it with idempotent upserts keyed by the row id, run a full reindex command that rebuilds it from scratch, and add change-time updates on top for freshness. If the index is wrong, you run the rebuild instead of debugging it. That works the same for Meilisearch, Typesense, OpenSearch and a vector store.</p>
+
+<h2 id="start-with-the-rebuild">Start with the rebuild</h2>
+<p>Write the reindex first, because every other approach depends on it. It reads rows in pages, converts each to a search document, and upserts them. Because the id is the key, you can run it twice and get the same result:</p>
+<pre><code>// scripts/reindex.mjs
+import pg from "pg";
+
+const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const MEILI = process.env.MEILI_URL;           // http://search:7700 inside the stack
+const PAGE = 500;
+
+let last = 0, total = 0;
+for (;;) {
+  const { rows } = await db.query(
+    "SELECT id, title, body, updated_at FROM articles WHERE id &gt; $1 ORDER BY id LIMIT $2",
+    [last, PAGE],
+  );
+  if (rows.length === 0) break;
+  const res = await fetch(`${MEILI}/indexes/articles/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(rows),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  last = rows[rows.length - 1].id;
+  total += rows.length;
+}
+console.log(`indexed ${total} rows`);
+await db.end();</code></pre>
+<p>Paging by <code>id &gt; $1</code> (keyset paging) stays fast and does not skip rows when data changes during the run, unlike <code>OFFSET</code>. Deleted rows are the gap: a reindex that only upserts will leave deleted rows in the index. For a true rebuild, create a new index, fill it, then swap it in (Typesense aliases and OpenSearch aliases exist for this, and Meilisearch has an index swap). Writes in Meilisearch are asynchronous, so a script that must be sure of the result waits on the returned task.</p>
+
+<h2 id="keeping-it-fresh">Keeping it fresh</h2>
+<p>There are three patterns, in rising order of effort:</p>
+<ul>
+<li><strong>Write in the same code path.</strong> After the database commit, update the index. Simple, but if the second step fails the two disagree, and nothing notices.</li>
+<li><strong>An outbox.</strong> In the same transaction as the change, insert a row into an <code>outbox</code> table. A worker reads unprocessed rows, updates the index and marks them done. A crash between the two steps just means the row is retried, which is safe because upserts are idempotent. This is the pattern to use when the index must not silently drift.</li>
+<li><strong>Change data capture.</strong> Stream the database's change log into the index. Capable, and far more than a development setup needs.</li>
+</ul>
+<p>For local work, the first pattern plus the rebuild command is usually enough. Add the outbox when you see drift you cannot explain.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>The index is a bring-your-own service (see <a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/">run Meilisearch locally</a>), and the reindex script is a one-off command, not a long-running service. Run it inside the stack with the environment its service has:</p>
+<pre><code>flisk run api -- node scripts/reindex.mjs</code></pre>
+<p><code>flisk run &lt;service&gt; -- &lt;command&gt;</code> runs the command in that service's container, which needs the stack to be running. The container already has <code>DATABASE_URL</code> and <code>MEILI_URL</code> because the service depends on the database and the search resource. See <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">run a one-off command in a service</a>. I did not execute <code>flisk run</code> while writing this article, so check the output on your version.</p>
+<p>If the index data is wrong beyond repair, or you want a clean start, stop the stack and remove the search volume with <code>flisk down --purge</code>, then bring it up and run the reindex. Remember that <code>--purge</code> removes all the project's volumes, the database included, so use it only when you also expect to reseed. For routine fixes, rebuild into a new index instead. For the seeding side, see <a href="/@odykyi/local-database-guide/seed-a-local-database/">seed a local database</a>.</p>
+<p>A migration that adds a searchable column should also trigger a reindex. Put the reindex after the migrator in your startup order, or document it in your README as the second command after seeding.</p>
+
+<h2 id="detect-drift">Detect drift</h2>
+<p>A cheap check compares counts. Add it to your test setup or run it by hand:</p>
+<pre><code>SELECT count(*) FROM articles;                       -- database
+curl -s $MEILI_URL/indexes/articles/stats            # numberOfDocuments</code></pre>
+<p>Counts do not catch stale content, so also compare a checksum or the highest <code>updated_at</code> of each side for a sample. If a search result points at a row that no longer exists, that is the deleted-row gap above.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not index secrets.</strong> Whatever you send is readable by anyone who can query the index. Build documents from an allow-list of fields.</li>
+<li><strong>Batch size.</strong> Very large batches hit request limits. A few hundred to a few thousand documents per call is a sensible start. Measure with your real data.</li>
+<li><strong>Asynchronous indexing.</strong> A test that writes and then searches immediately can fail. Wait for the task or poll until the document appears.</li>
+<li><strong>Schema drift.</strong> When a document shape changes, old documents keep the old shape until reindexed.</li>
+</ul>
+
+<h2 id="when-not-to-use-this">When not to use this</h2>
+<p>If the search lives in Postgres itself, there is nothing to sync. See <a href="/@odykyi/search-and-storage-local/postgres-full-text-search-before-a-search-engine/">Postgres full-text search</a>.</p>
+
+<p>Next, make sure your tests exercise the index with real data using <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why not update the index and the database in one step?</summary><p>They are separate systems, so no single transaction covers both. Use idempotent upserts and a rebuild command so any mismatch can be repaired, and add an outbox if drift matters.</p></details><details><summary>How do I remove deleted rows from the index?</summary><p>An upsert-only reindex cannot. Rebuild into a new index and swap it in, or send explicit delete calls from the same code path that deletes the row.</p></details><details><summary>How often should I reindex?</summary><p>Locally, whenever the document shape or the data changes in a way the live updates do not cover. In production, run it as a scheduled or on-demand job with monitoring.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/"><span class="lbl">Guide</span><b>How to run Meilisearch locally with Docker for development</b><span>One container, one volume, and two curl calls give you typo-tolerant search to build against.</span></a><a href="/@odykyi/search-and-storage-local/run-typesense-locally/"><span class="lbl">Guide</span><b>How to run Typesense locally with Docker and create a collection</b><span>Typesense insists on an API key and a data directory. Set both and you have a fast search server to develop against.</span></a><a href="/@odykyi/search-and-storage-local/postgres-full-text-search-before-a-search-engine/"><span class="lbl">Guide</span><b>Postgres full-text search: try it before adding a search engine</b><span>For many apps, search is one SQL query and one index. Find out where that stops before you add a second service.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Presigned upload URLs against a local MinIO: the host name trap</title>
+<meta name="description" content="Presigned S3 URLs fail locally because the signature includes the host. Sign with a browser-reachable endpoint, upload from the browser and debug failures.">
+<meta name="keywords" content="presigned url minio local, s3 presigned upload browser, presigned url signature does not match, minio presigned url docker, generate presigned put url">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Presigned upload URLs against a local MinIO: the host name trap">
+<meta property="og:description" content="Presigned S3 URLs fail locally because the signature includes the host. Sign with a browser-reachable endpoint, upload from the browser and debug failures.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Presigned upload URLs against a local MinIO: the host name trap","description":"Presigned S3 URLs fail locally because the signature includes the host. Sign with a browser-reachable endpoint, upload from the browser and debug failures.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/","keywords":"presigned url minio local, s3 presigned upload browser, presigned url signature does not match, minio presigned url docker, generate presigned put url","wordCount":841,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"Presigned upload URLs against a local MinIO: the host name trap","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my presigned URL say SignatureDoesNotMatch?","acceptedAnswer":{"@type":"Answer","text":"The signature covers the host and any signed headers. The usual causes are a URL signed for the Docker-internal host name but used from a browser, a Content-Type header that differs from the signed one, or a wrong clock."}},{"@type":"Question","name":"Can the signing client be separate from the normal client?","acceptedAnswer":{"@type":"Answer","text":"Yes. Signing is computed locally and does not contact the server, so a second client with the public endpoint can sign URLs even when the API container cannot reach that address."}},{"@type":"Question","name":"Is a presigned URL a secret?","acceptedAnswer":{"@type":"Answer","text":"Treat it like one until it expires. Anyone holding the URL can perform that one request. Keep expiry short."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>Presigned upload URLs against a local MinIO: the host name trap</h1><p class="dek">A presigned URL signed for the container name cannot be used by a browser. Sign it for the address the browser will call.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-presigned-urls-work">How presigned URLs work</a></li><li><a href="#the-fix-two-endpoints">The fix: two endpoints</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#upload-from-the-browser">Upload from the browser</a></li><li><a href="#debug-it-from-the-command-line">Debug it from the command line</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-presigned-urls">When not to use presigned URLs</a></li></ol></nav></aside>
+<article><p>A presigned upload URL fails against a local MinIO when it was signed for one host name and used with another. The signature covers the <code>Host</code> header, so a URL created with the Docker-internal endpoint <code>http://store:9000</code> returns <code>SignatureDoesNotMatch</code> or does not resolve at all in a browser. Sign it with a second S3 client whose endpoint is the address the browser actually calls, usually <code>http://127.0.0.1:9000</code>.</p>
+
+<h2 id="how-presigned-urls-work">How presigned URLs work</h2>
+<p>A presigned URL lets a client upload one object without holding your credentials. Your backend signs a request (method, bucket, key, expiry, and optionally headers such as <code>Content-Type</code>) and hands back a URL with the signature in the query string. The browser then sends a plain <code>PUT</code> to that URL with the file as the body.</p>
+<p>Because the host is part of what is signed, the server rebuilds the signature from the request it receives. Change the host after signing and the two no longer match. In production this is invisible, since your backend and the browser both use <code>bucket.s3.amazonaws.com</code>. Locally they see the same server under two names: your API container knows it as <code>store</code>, your browser as <code>127.0.0.1</code>.</p>
+
+<h2 id="the-fix-two-endpoints">The fix: two endpoints</h2>
+<p>Use the internal endpoint for server-side calls and a separate client, configured with the public endpoint, only for signing. Signing does not contact the server, so the signing client does not need to reach <code>127.0.0.1:9000</code> from inside the container.</p>
+<pre><code>import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
+const common = { region: "us-east-1", forcePathStyle: true };
+
+// server-side reads and writes: inside the stack
+export const s3 = new S3Client({ ...common, endpoint: process.env.AWS_ENDPOINT_URL_S3 });
+
+// signing only: the address the browser will use
+const signer = new S3Client({ ...common, endpoint: process.env.S3_PUBLIC_ENDPOINT });
+
+export function uploadUrl(key, contentType) {
+  return getSignedUrl(
+    signer,
+    new PutObjectCommand({ Bucket: "uploads", Key: key, ContentType: contentType }),
+    { expiresIn: 300 },
+  );
+}</code></pre>
+<p>In boto3 the same idea is a second client created with <code>endpoint_url</code> set to the public address, then <code>signer.generate_presigned_url("put_object", Params={"Bucket": "uploads", "Key": key, "ContentType": ct}, ExpiresIn=300)</code>.</p>
+<p>In production <code>S3_PUBLIC_ENDPOINT</code> is unset and both clients point at real S3, so the code collapses to one behaviour.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>With Flisk's MinIO resource (see <a href="/@odykyi/search-and-storage-local/run-minio-locally/">how to run MinIO locally</a>), two things are needed. First, the S3 port must be published to your machine, because by default only the console on 9001 is. In the store's <code>service.json</code>:</p>
+<pre><code>"extraPorts": [{ "port": 9001 }, { "port": 9000 }]</code></pre>
+<p>Flisk publishes each <code>extraPorts</code> entry on <code>127.0.0.1</code> only, so the S3 port is still not exposed to your network. Second, give the API the public address as plain configuration in its <code>service.json</code>, next to the dependency that supplies the internal one:</p>
+<pre><code>"dependsOn": ["store"],
+"env": { "S3_PUBLIC_ENDPOINT": "http://127.0.0.1:9000" }</code></pre>
+<p>Run <code>flisk config verify</code> after editing. If the host port 9000 is already taken on your machine, set <code>hostPort</code> in that <code>extraPorts</code> entry and use that port in the URL.</p>
+
+<h2 id="upload-from-the-browser">Upload from the browser</h2>
+<pre><code>const { url } = await fetch("/api/upload-url", { method: "POST", body: JSON.stringify({ name: file.name, type: file.type }) }).then(r => r.json());
+
+const res = await fetch(url, {
+  method: "PUT",
+  headers: { "Content-Type": file.type },   // must match what was signed
+  body: file,
+});
+if (!res.ok) throw new Error(await res.text());</code></pre>
+<p>If you signed <code>ContentType</code>, the browser must send exactly that header. A mismatch gives <code>SignatureDoesNotMatch</code>.</p>
+
+<h2 id="debug-it-from-the-command-line">Debug it from the command line</h2>
+<p>Take the URL your API returned and try it without a browser:</p>
+<pre><code>curl -i -X PUT -H "Content-Type: text/plain" --data-binary "hello" "PASTE_THE_URL_HERE"</code></pre>
+<p>A 200 means the signature and host are right and the problem is in browser code. An error body with <code>SignatureDoesNotMatch</code> points to the host, the headers or the clock. <code>AccessDenied</code> with an expiry message means the URL is older than <code>expiresIn</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>CORS.</strong> A browser upload from a page on another origin sends a preflight <code>OPTIONS</code>. If the console shows a CORS error, check the <code>OPTIONS</code> response with <code>curl -i -X OPTIONS</code> and the <code>Origin</code> header before touching your code. MinIO configures CORS for the whole server rather than per bucket, so bucket CORS rules from your AWS setup do not apply to it.</li>
+<li><strong>Clock skew.</strong> Signatures carry a timestamp. A container with a wrong clock produces expired or not-yet-valid URLs.</li>
+<li><strong>The browser cannot resolve a container name.</strong> If a URL contains <code>store</code> or another Docker name, it was signed with the wrong client.</li>
+<li><strong>Checksum headers.</strong> Newer SDK versions can sign checksum headers into the URL. If the browser does not send them, the upload fails. Use <code>requestChecksumCalculation: "WHEN_REQUIRED"</code> on the signing client.</li>
+</ul>
+
+<h2 id="when-not-to-use-presigned-urls">When not to use presigned URLs</h2>
+<p>For small files that your backend already receives, streaming them through the API is simpler and gives you validation before anything reaches storage. Presigned URLs earn their place with large files, or when you want uploads to bypass your servers.</p>
+
+<p>See the SDK settings in <a href="/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/">pointing the AWS SDK at a local S3 endpoint</a>, and test the full flow with <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my presigned URL say SignatureDoesNotMatch?</summary><p>The signature covers the host and any signed headers. The usual causes are a URL signed for the Docker-internal host name but used from a browser, a Content-Type header that differs from the signed one, or a wrong clock.</p></details><details><summary>Can the signing client be separate from the normal client?</summary><p>Yes. Signing is computed locally and does not contact the server, so a second client with the public endpoint can sign URLs even when the API container cannot reach that address.</p></details><details><summary>Is a presigned URL a secret?</summary><p>Treat it like one until it expires. Anyone holding the URL can perform that one request. Keep expiry short.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/run-minio-locally/"><span class="lbl">Guide</span><b>How to run MinIO locally as S3-compatible storage for dev</b><span>Your code talks to S3 in production. Locally you can point the same code at a MinIO container and keep everything on your machine.</span></a><a href="/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/"><span class="lbl">Guide</span><b>How to point the AWS SDK at a local S3 endpoint (Node, Python)</b><span>Four settings decide whether the SDK talks to your local server or fails with a DNS error. Here they are for Node and Python.</span></a><a href="/@odykyi/search-and-storage-local/test-s3-uploads-in-integration-tests/"><span class="lbl">Guide</span><b>How to test S3 uploads in integration tests with a real bucket</b><span>A mock tells you that you called PutObject. A local bucket tells you what actually arrived.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
