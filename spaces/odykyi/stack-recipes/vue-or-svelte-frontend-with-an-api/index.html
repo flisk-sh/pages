@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vue or Svelte frontend with a local API</title>
+<meta name="description" content="Connect a Vue or Svelte app to a backend in development: VITE_API_URL, CORS, a dev proxy, and how Flisk generates the API address for the frameworks it covers.">
+<meta name="keywords" content="vue vite api url, svelte vite backend local, vite env variable api url, vue dev server proxy, vue svelte local development with backend">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vue or Svelte frontend with a local API">
+<meta property="og:description" content="Connect a Vue or Svelte app to a backend in development: VITE_API_URL, CORS, a dev proxy, and how Flisk generates the API address for the frameworks it covers.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Vue or Svelte frontend with a local API","description":"Connect a Vue or Svelte app to a backend in development: VITE_API_URL, CORS, a dev proxy, and how Flisk generates the API address for the frameworks it covers.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/","keywords":"vue vite api url, svelte vite backend local, vite env variable api url, vue dev server proxy, vue svelte local development with backend","wordCount":732,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Vue or Svelte frontend with a local API","item":"https://pages.flisk.si/@odykyi/stack-recipes/vue-or-svelte-frontend-with-an-api/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is import.meta.env.VITE_API_URL undefined?","acceptedAnswer":{"@type":"Answer","text":"Vite only exposes variables that start with VITE_ and reads them when the dev server starts. Check the name, put the value in .env.development or the service env, and restart the dev server."}},{"@type":"Question","name":"Does Flisk support Vue and Svelte?","acceptedAnswer":{"@type":"Answer","text":"Yes, as Vite single page apps with --framework vue or --framework svelte. SvelteKit and Nuxt are not covered by these providers and use the bring-your-own type."}},{"@type":"Question","name":"Do I need CORS if I use a Vite proxy?","acceptedAnswer":{"@type":"Answer","text":"Not in development, because the browser only talks to the Vite origin. You still need it when the frontend calls the API origin directly or when the two are deployed on different hosts."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Vue or Svelte frontend with a local API</h1><p class="dek">A Vite frontend only needs to know where the API is. The hard parts are the variable name, the origin and the start order.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-a-vite-frontend-finds-its-api">How a Vite frontend finds its API</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#the-flisk-way-in-docker">The Flisk way in Docker</a></li><li><a href="#the-flisk-way-without-docker">The Flisk way without Docker</a></li><li><a href="#frameworks-flisk-does-not-scaffold">Frameworks Flisk does not scaffold</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A Vue or Svelte app built with Vite finds its API through an environment variable that starts with <code>VITE_</code>, such as <code>VITE_API_URL</code>, read as <code>import.meta.env.VITE_API_URL</code>. In development you either proxy API calls through the Vite dev server or allow the frontend origin on the API with CORS. Flisk generates the variable for you when it runs the frontend in Docker, and you set it yourself when you run the frontend as a local process.</p>
+
+<h2 id="how-a-vite-frontend-finds-its-api">How a Vite frontend finds its API</h2>
+<p>Vite exposes only variables whose names begin with <code>VITE_</code> to browser code, and it bakes them in when the dev server starts. That is why changing <code>VITE_API_URL</code> needs a restart of the dev server. The usual client code is the same in Vue and Svelte:</p>
+<pre><code>const API_URL = import.meta.env.VITE_API_URL ?? '';
+const res = await fetch(API_URL + '/health');</code></pre>
+<p>An empty fallback means relative URLs, which works when a Vite proxy forwards them. Without a proxy the browser calls the API origin directly, and the API must answer the CORS preflight for the frontend origin.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<p>Put the address in <code>.env.development</code> and start both servers:</p>
+<pre><code># web/.env.development
+VITE_API_URL=http://localhost:4000</code></pre>
+<p>Or use the proxy and keep the variable empty:</p>
+<pre><code>// vite.config.ts
+export default defineConfig({
+  plugins: [vue()],   // or svelte()
+  server: { proxy: { '/api': 'http://localhost:4000' } },
+});</code></pre>
+<p>The proxy avoids CORS in development and still needs a real CORS rule or a reverse proxy in production.</p>
+
+<h2 id="the-flisk-way-in-docker">The Flisk way in Docker</h2>
+<p>Flisk has providers for these frontend frameworks: react (the default), vue, svelte, preact, lit, solid, qwik, vanilla and tanstack-router. All are Vite single page apps. Create the API and the frontend, and name the API in <code>backendName</code>:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource api --stack app --yes
+flisk resource web --type frontend --framework vue --stack app --yes
+flisk up</code></pre>
+<p>Use <code>--framework svelte</code> for Svelte. The scaffolded <code>service.json</code> of the frontend has <code>dependsOn: ["api"]</code>, <code>backendName: "api"</code> and the features <code>api-client</code>, <code>env-config</code> and <code>api-index</code>. Flisk writes the API address into <code>.autogenerated/.env.frontend.autogenerated</code> as <code>VITE_API_URL</code> and generates a typed <code>env.ts</code> and <code>api-client.ts</code> next to it. The scaffolded <code>App.vue</code> reads <code>import.meta.env.VITE_API_URL</code> and calls <code>/health</code>.</p>
+<p>The scaffolded page shows three states for the API call, <em>checking</em>, <em>ok</em> and <em>unreachable</em>, and that is a good habit to copy: a frontend that starts before its API should say so on screen, not show a blank page. Wrap your own calls in the same way, with a visible loading state and a visible error.</p>
+<p>The frontend is served at <code>http://app.&lt;project&gt;.localhost/web</code> for a resource named <code>web</code>. The backend scaffold already allows <code>*.localhost</code> origins in CORS. After you change <code>dependsOn</code>, <code>backendName</code> or <code>apiPath</code>, run <code>flisk restart web</code> so the frontend picks up the new address.</p>
+<blockquote>The frontend's dev script uses a Vite config under <code>.autogenerated/</code>, which Flisk writes when <code>flisk up</code> loads the resource. Running <code>npm run dev</code> by hand before the first <code>flisk up</code> stops with an error that says exactly this.</blockquote>
+
+<h2 id="the-flisk-way-without-docker">The Flisk way without Docker</h2>
+<p>Any Vite app can run as a plain process. Write the manifest with the variable by hand:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "VITE_API_URL": "http://localhost:4000" }
+}</code></pre>
+<p>In this mode the frontend origin is <code>http://localhost:3000</code>, so the API's CORS rule must allow it, or you add the Vite proxy. Make Vite listen on <code>PORT</code> (<code>server.port: Number(process.env.PORT)</code> with <code>strictPort: true</code>) so Flisk's port and the dev server agree.</p>
+
+<h2 id="frameworks-flisk-does-not-scaffold">Frameworks Flisk does not scaffold</h2>
+<p>Nuxt, SvelteKit, Astro, Angular, Remix and TanStack Start are server frameworks or use their own toolchain, so they are not Vite providers. Use <code>--type bring-your-own</code> for them, with a Dockerfile, as described in <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">bring your own Dockerfile</a>. Next.js is a special case with its own provider, covered in <a href="/@odykyi/stack-recipes/nextjs-express-and-postgres/">Next.js, Express and Postgres</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A variable without the <code>VITE_</code> prefix.</strong> It is silently undefined in the browser.</li>
+<li><strong>A bring-your-own backend.</strong> If the API is not a Flisk scaffold, it must allow <code>http://app.&lt;project&gt;.localhost</code> itself.</li>
+<li><strong>A stale value.</strong> Vite reads variables at start. Restart the frontend after any change.</li>
+<li><strong>Trailing slashes.</strong> A frontend served under <code>/web</code> builds links with that base path, so do not hard-code absolute paths that skip it.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For the two-process version with React, read <a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/">run a frontend and an API together</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is import.meta.env.VITE_API_URL undefined?</summary><p>Vite only exposes variables that start with VITE_ and reads them when the dev server starts. Check the name, put the value in .env.development or the service env, and restart the dev server.</p></details><details><summary>Does Flisk support Vue and Svelte?</summary><p>Yes, as Vite single page apps with --framework vue or --framework svelte. SvelteKit and Nuxt are not covered by these providers and use the bring-your-own type.</p></details><details><summary>Do I need CORS if I use a Vite proxy?</summary><p>Not in development, because the browser only talks to the Vite origin. You still need it when the frontend calls the API origin directly or when the two are deployed on different hosts.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/bun-and-hono-api/"><span class="lbl">Guide</span><b>Bun and Hono API: local dev setup with live reload</b><span>Bun starts fast and has a built-in watcher, and Hono is a small router that fits it. This is the setup, with and without Flisk.</span></a><a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/"><span class="lbl">Guide</span><b>Express API and Vite frontend in one dev command</b><span>An Express API and a Vite app are two processes that must agree on ports and origins. Here is the plain way, and the one-command way.</span></a><a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/"><span class="lbl">Guide</span><b>Run an existing Dockerfile in a local dev stack</b><span>Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

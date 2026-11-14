@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Express API and Vite frontend in one dev command</title>
+<meta name="description" content="Start an Express API and a Vite frontend with one command: proxy or CORS setup, startup order, live reload, and what Flisk does in local and Docker modes.">
+<meta name="keywords" content="express vite proxy, run express and vite together, express api vite frontend local, vite proxy to express backend, one command start frontend and backend">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/express-api-and-vite-frontend/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Express API and Vite frontend in one dev command">
+<meta property="og:description" content="Start an Express API and a Vite frontend with one command: proxy or CORS setup, startup order, live reload, and what Flisk does in local and Docker modes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/express-api-and-vite-frontend/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Express API and Vite frontend in one dev command","description":"Start an Express API and a Vite frontend with one command: proxy or CORS setup, startup order, live reload, and what Flisk does in local and Docker modes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/express-api-and-vite-frontend/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/express-api-and-vite-frontend/","keywords":"express vite proxy, run express and vite together, express api vite frontend local, vite proxy to express backend, one command start frontend and backend","wordCount":718,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Express API and Vite frontend in one dev command","item":"https://pages.flisk.si/@odykyi/stack-recipes/express-api-and-vite-frontend/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I proxy API calls from Vite to Express?","acceptedAnswer":{"@type":"Answer","text":"Add server.proxy in vite.config.ts with the path prefix as the key and the Express URL as the target. The frontend then calls relative URLs like /api/items and Vite forwards them."}},{"@type":"Question","name":"Do I need CORS when I use the Vite proxy?","acceptedAnswer":{"@type":"Answer","text":"Not for requests that go through the proxy, because the browser only talks to the Vite origin. You do need CORS if the frontend calls the API origin directly or the apps are deployed on different hosts."}},{"@type":"Question","name":"How does Flisk know to start Express before Vite?","acceptedAnswer":{"@type":"Answer","text":"The frontend service lists the API in dependsOn. Flisk starts services in that order and waits for the API health check before it starts the dependent service."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Express API and Vite frontend in one dev command</h1><p class="dek">An Express API and a Vite app are two processes that must agree on ports and origins. Here is the plain way, and the one-command way.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-problem-two-processes-and-one-browser">The problem: two processes and one browser</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#the-flisk-way-as-local-processes">The Flisk way, as local processes</a></li><li><a href="#only-the-api-or-only-the-frontend">Only the API, or only the frontend</a></li><li><a href="#when-you-want-real-urls-the-docker-route">When you want real URLs: the Docker route</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>The usual way to run an Express API and a Vite frontend together is two processes plus a proxy rule: Vite forwards <code>/api</code> requests to Express, so the browser sees one origin. You can start both with <code>concurrently</code> or an npm script, and Flisk can do the same from a <code>service.json</code> per service, with the API started before the frontend.</p>
+
+<h2 id="the-problem-two-processes-and-one-browser">The problem: two processes and one browser</h2>
+<p>Express might listen on port 3001 and Vite on 5173. Each starts on its own, logs to its own terminal, and fails in its own way. Three things usually go wrong: the frontend starts before the API is ready and shows a connection error, the frontend calls a hard-coded URL that differs between machines, or the browser blocks the call because of CORS.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<p>Put the Vite proxy in <code>vite.config.ts</code> and call relative URLs from the frontend code.</p>
+<pre><code>import { defineConfig } from 'vite';
+
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': { target: 'http://localhost:3001', changeOrigin: true },
+    },
+  },
+});</code></pre>
+<p>Then run both from the repository root with a single script:</p>
+<pre><code>npm install -D concurrently
+# package.json
+"scripts": {
+  "dev": "concurrently -n api,web \"npm --prefix api run dev\" \"npm --prefix web run dev\""
+}</code></pre>
+<p>This is a good answer for two services. It does not wait for the API to be healthy, and it needs everyone to know the port in two places.</p>
+
+<h2 id="the-flisk-way-as-local-processes">The Flisk way, as local processes</h2>
+<p>Flisk can scaffold both services so that each one has a <code>command</code> and needs no Docker:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource api --framework express --local --stack app --yes
+flisk resource web --type frontend --local --stack app --yes
+flisk up</code></pre>
+<p>The Express scaffold gets <code>command: npm run dev</code>, a <code>/health</code> route and a <code>healthCheckPath</code>. The React frontend gets a plain Vite config that proxies <code>/health</code> and <code>/api</code> to the API's local port. Flisk starts the services in <code>dependsOn</code> order, waits up to 60 seconds for each to answer, and restarts a crashed process with a growing delay (1, 2, 4 and 8 seconds).</p>
+<p>The frontend manifest names the API in <code>dependsOn</code>, which is what orders the start:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "VITE_API_URL": "http://localhost:4000" }
+}</code></pre>
+<blockquote>The Express scaffold runs its dev script with Bun (<code>bun run --watch src/index.ts</code>), so Bun must be installed even for the local route. If you do not use Bun, write the <code>command</code> yourself, for example <code>node --watch src/index.js</code>, and keep the same manifest fields.</blockquote>
+
+<h2 id="only-the-api-or-only-the-frontend">Only the API, or only the frontend</h2>
+<p>Because every service is its own entry, you can start part of the stack:</p>
+<pre><code>flisk up --only api
+flisk up --dry-run</code></pre>
+<p><code>--only</code> starts one service (and what it depends on), and <code>--dry-run</code> prints what would run without starting it. Stop everything with <code>flisk down</code>.</p>
+
+<h2 id="when-you-want-real-urls-the-docker-route">When you want real URLs: the Docker route</h2>
+<p>The local route gives you <code>http://localhost:&lt;port&gt;</code> URLs. If you prefer names, the Docker route runs the same services in containers behind Traefik. A frontend named <code>web</code> is served at <code>http://app.&lt;project&gt;.localhost/web</code>, and an API named <code>orders-api</code> at <code>http://api.&lt;project&gt;.localhost/api/orders</code>, with the <code>/api/orders</code> prefix removed before the request reaches Express. Browsers resolve <code>*.localhost</code> without any <code>/etc/hosts</code> entry. In that mode the frontend receives the API address in <code>VITE_API_URL</code> from a generated file, so the code does not hard-code it. See <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of ports</a> for how the routing works.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two sources for the API port.</strong> The Vite proxy target is written when the service is scaffolded. If you change the API's <code>port</code> later, update the proxy target too.</li>
+<li><strong>The proxy only forwards the prefixes you list.</strong> The scaffold forwards <code>/health</code> and <code>/api</code>. Add other prefixes if your routes live elsewhere.</li>
+<li><strong>Express must bind a reachable host.</strong> Local processes are fine on <code>localhost</code>. Inside a container the server must listen on <code>0.0.0.0</code>.</li>
+<li><strong>Do not rely on start order for readiness.</strong> The frontend waiting for the API hides a race on a cold start, but your code should still handle a failed first request.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>When the API needs a database, move to <a href="/@odykyi/stack-recipes/nextjs-express-and-postgres/">Next.js, Express and Postgres</a>, where migrations run in their own service instead of the API start script.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I proxy API calls from Vite to Express?</summary><p>Add server.proxy in vite.config.ts with the path prefix as the key and the Express URL as the target. The frontend then calls relative URLs like /api/items and Vite forwards them.</p></details><details><summary>Do I need CORS when I use the Vite proxy?</summary><p>Not for requests that go through the proxy, because the browser only talks to the Vite origin. You do need CORS if the frontend calls the API origin directly or the apps are deployed on different hosts.</p></details><details><summary>How does Flisk know to start Express before Vite?</summary><p>The frontend service lists the API in dependsOn. Flisk starts services in that order and waits for the API health check before it starts the dependent service.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/fastapi-and-react-locally/"><span class="lbl">Guide</span><b>Run a FastAPI backend and React frontend locally</b><span>Two dev servers, two ports and one browser rule called CORS. Here is how to wire a FastAPI backend and a React frontend so one command starts both.</span></a><a href="/@odykyi/stack-recipes/bun-and-hono-api/"><span class="lbl">Guide</span><b>Bun and Hono API: local dev setup with live reload</b><span>Bun starts fast and has a built-in watcher, and Hono is a small router that fits it. This is the setup, with and without Flisk.</span></a><a href="/@odykyi/stack-recipes/nestjs-local-dev/"><span class="lbl">Guide</span><b>NestJS local development: watch mode and CORS</b><span>NestJS adds modules and decorators on top of Express. Here is how to run it in watch mode, expose a health check and allow a local frontend.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
