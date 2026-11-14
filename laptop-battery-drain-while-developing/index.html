@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why your laptop battery drains while developing and what to stop</title>
+<meta name="description" content="Find what drains a laptop battery during development: containers, polling watchers, indexers and browsers. Measure with Activity Monitor and powermetrics.">
+<meta name="keywords" content="laptop battery drain docker, mac battery drain development, activity monitor energy impact, docker desktop battery">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/laptop-battery-drain-while-developing/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why your laptop battery drains while developing and what to stop">
+<meta property="og:description" content="Find what drains a laptop battery during development: containers, polling watchers, indexers and browsers. Measure with Activity Monitor and powermetrics.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/laptop-battery-drain-while-developing/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why your laptop battery drains while developing and what to stop","description":"Find what drains a laptop battery during development: containers, polling watchers, indexers and browsers. Measure with Activity Monitor and powermetrics.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/laptop-battery-drain-while-developing/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/laptop-battery-drain-while-developing/","keywords":"laptop battery drain docker, mac battery drain development, activity monitor energy impact, docker desktop battery","wordCount":791,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"Why your laptop battery drains while developing and what to stop","item":"https://pages.flisk.si/@odykyi/laptop-resources/laptop-battery-drain-while-developing/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Docker drain the battery on a Mac?","acceptedAnswer":{"@type":"Answer","text":"The Linux VM behind Docker uses CPU even when containers are idle, and more when many run. Stopping containers, or the VM itself, is the most effective change."}},{"@type":"Question","name":"How do I see what keeps my Mac awake?","acceptedAnswer":{"@type":"Answer","text":"Run pmset -g assertions. It lists the programs that currently prevent sleep."}},{"@type":"Question","name":"Can I see energy use per process from the terminal?","acceptedAnswer":{"@type":"Answer","text":"On macOS run sudo powermetrics --samplers tasks --show-process-energy -i 5000 -n 1. On Linux use powertop."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>Why your laptop battery drains while developing and what to stop</h1><p class="dek">A dev stack keeps the CPU awake even when you are reading. A few changes make a workday on battery possible.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#measure-before-you-change-things">Measure before you change things</a></li><li><a href="#the-usual-causes-in-order">The usual causes, in order</a></li><li><a href="#plan-your-day-on-battery">Plan your day on battery</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Battery drain while developing comes from work that never lets the CPU sleep: a container VM, watchers that poll, language servers, indexers and browser tabs. Find the top energy users in Activity Monitor, stop the stack when you are away from the desk, and replace polling with file events. The biggest win is usually to shut down what you are not using.</p>
+
+<h2 id="measure-before-you-change-things">Measure before you change things</h2>
+<p>On a Mac open Activity Monitor and choose the <strong>Energy</strong> tab. Sort by <strong>Energy Impact</strong>, or by 12 hr Power for a longer view. Processes that are busy in the background but not in front of you are the targets. From a terminal:</p>
+<pre><code>pmset -g batt
+pmset -g assertions
+sudo powermetrics --samplers tasks --show-process-energy -i 5000 -n 1</code></pre>
+<ul>
+<li><code>pmset -g batt</code> shows charge and whether you are on battery.</li>
+<li><code>pmset -g assertions</code> lists programs that prevent the Mac from sleeping, so you can see what keeps it awake.</li>
+<li><code>powermetrics</code> needs <code>sudo</code> and prints a per process energy estimate for the sampling window.</li>
+</ul>
+<p>On Linux, <code>powertop</code> shows wake-ups and estimated power per process, and <code>upower -i /org/freedesktop/UPower/devices/battery_BAT0</code> shows battery state. The device path can differ by machine.</p>
+
+<h2 id="the-usual-causes-in-order">The usual causes, in order</h2>
+<ol>
+<li><strong>The container VM.</strong> Docker Desktop, Colima and Podman run a Linux VM that uses CPU even with idle containers, and more with many running. Stop containers you do not need, or stop the VM when you leave the desk: <code>colima stop</code> for Colima. Docker Desktop has a Resource Saver mode that pauses the VM when no containers run.</li>
+<li><strong>Polling file watchers.</strong> A watcher that scans files on a timer wakes the CPU all day. Use native file events and turn polling off (see <a href="/@odykyi/laptop-resources/dev-server-stuck-at-100-percent-cpu/">dev server at 100% CPU</a>).</li>
+<li><strong>Dev servers left in the background.</strong> A forgotten Vite or Next process and its watcher run until you quit them.</li>
+<li><strong>Language servers and indexers.</strong> The editor's TypeScript server, a code search indexer or Spotlight right after a big checkout. They settle down after some minutes; if they do not, see <a href="/@odykyi/laptop-resources/vscode-and-tsserver-memory-in-big-repos/">VS Code and TypeScript server memory</a>.</li>
+<li><strong>Browser tabs.</strong> Pages with animation, live reload sockets and video are heavy. The dev page you reload all day is one of them.</li>
+<li><strong>Databases and brokers with busy jobs.</strong> A cron container or a queue worker that wakes every second adds up.</li>
+</ol>
+
+<h2 id="plan-your-day-on-battery">Plan your day on battery</h2>
+<ul>
+<li>Run only the services you need for the task. A frontend change may need the API but not the worker, the mail catcher and the metrics stack.</li>
+<li>Prefer plain local processes for code you edit, and keep the container VM stopped when you work on something that does not need a database.</li>
+<li>Raise polling intervals for anything that must poll, and move scheduled jobs from every second to every minute in development.</li>
+<li>Lower screen brightness. It often beats any software tuning.</li>
+<li>Plug in before a long build or test run. A sustained load on battery is slow on many laptops anyway because the system throttles.</li>
+</ul>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk helps with the "run less" part. In a project where every service has a <code>command</code> in its <code>service.json</code>, <code>flisk up</code> starts them as plain local processes with no Docker, no Tilt and no virtual machine. To work on one piece, <code>flisk up --only web</code> starts <code>web</code> and what it depends on. A service with <code>"profiles": ["admin"]</code> is left out until you ask for it with <code>flisk up --profile admin</code>, so a heavy service such as a dashboard or a metrics stack is off by default. When you leave, <code>flisk down</code> stops every service of the project, dependents first, and <code>flisk status</code> afterwards confirms that nothing is still running.</p>
+<pre><code>flisk up --only web
+# ... work ...
+flisk down
+flisk status</code></pre>
+<p>For the case where Docker is needed only for a database, Flisk can start the database image with <code>docker run</code> next to local processes; the VM is still needed then. See <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a> for the exact conditions. Flisk does not manage your laptop's power settings and makes no claim about how much battery it saves: measure your own stack with the tools above.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Do not judge by a single reading. Energy Impact spikes during builds; look at the 12 hr Power column or sample at idle.</li>
+<li>Killing the Docker app does not always stop the VM. Check <code>pmset -g assertions</code> and the process list after you quit it.</li>
+<li><code>caffeinate</code> and some dev tools prevent sleep on purpose. Make sure a leftover one is not keeping the lid-closed Mac awake in your bag.</li>
+</ul>
+<p>The other part of keeping a laptop calm is memory. <a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">Finding what uses your RAM</a> is the place to continue, and <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">starting only the services you need</a> goes deeper on the "run less" habit.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Docker drain the battery on a Mac?</summary><p>The Linux VM behind Docker uses CPU even when containers are idle, and more when many run. Stopping containers, or the VM itself, is the most effective change.</p></details><details><summary>How do I see what keeps my Mac awake?</summary><p>Run pmset -g assertions. It lists the programs that currently prevent sleep.</p></details><details><summary>Can I see energy use per process from the terminal?</summary><p>On macOS run sudo powermetrics --samplers tasks --show-process-energy -i 5000 -n 1. On Linux use powertop.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a><a href="/@odykyi/laptop-resources/dev-server-stuck-at-100-percent-cpu/"><span class="lbl">Guide</span><b>Why your dev server sits at 100% CPU and how to find the cause</b><span>A dev server that burns a core while you are not touching it is almost always in a loop. The job is to find which loop.</span></a><a href="/@odykyi/laptop-resources/free-disk-space-from-dev-caches/"><span class="lbl">Guide</span><b>Free disk space on a dev laptop: caches, node_modules, builds</b><span>Dev disks fill with things that can be rebuilt. The skill is knowing which ones are safe to delete and finding the big ones fast.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

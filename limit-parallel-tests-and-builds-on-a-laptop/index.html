@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Limit parallel tests and builds so your laptop stays usable</title>
+<meta name="description" content="Cap workers for Jest, pytest-xdist, cargo, make and Go so tests and builds do not freeze your laptop, and use nice to keep the desktop responsive.">
+<meta name="keywords" content="jest maxworkers, cargo build jobs limit, limit cpu usage of build, laptop freezes during tests">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Limit parallel tests and builds so your laptop stays usable">
+<meta property="og:description" content="Cap workers for Jest, pytest-xdist, cargo, make and Go so tests and builds do not freeze your laptop, and use nice to keep the desktop responsive.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Limit parallel tests and builds so your laptop stays usable","description":"Cap workers for Jest, pytest-xdist, cargo, make and Go so tests and builds do not freeze your laptop, and use nice to keep the desktop responsive.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/","keywords":"jest maxworkers, cargo build jobs limit, limit cpu usage of build, laptop freezes during tests","wordCount":653,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"Limit parallel tests and builds so your laptop stays usable","item":"https://pages.flisk.si/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many Jest workers should I use on a laptop?","acceptedAnswer":{"@type":"Answer","text":"Start with half your cores, for example --maxWorkers=50%, and lower it if memory runs short. Tests that wait on a database gain little from more workers."}},{"@type":"Question","name":"Is make -j dangerous?","acceptedAnswer":{"@type":"Answer","text":"Plain make -j with no number has no limit on parallel jobs and can freeze a machine on a large build. Give it a number such as make -j4."}},{"@type":"Question","name":"Does nice reduce memory use?","acceptedAnswer":{"@type":"Answer","text":"No. It only lowers CPU priority. Cap the worker count to reduce memory."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>Limit parallel tests and builds so your laptop stays usable</h1><p class="dek">Test runners and compilers default to one worker per core. That is fast, and it leaves nothing for your editor, browser and database.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-defaults-hurt-on-a-laptop">Why defaults hurt on a laptop</a></li><li><a href="#per-tool-settings">Per tool settings</a></li><li><a href="#lower-the-priority-instead">Lower the priority instead</a></li><li><a href="#test-runs-against-a-stack">Test runs against a stack</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Most test runners and build tools start one worker per CPU core, which makes the machine unusable while they run. Cap the worker count to half your cores (Jest <code>--maxWorkers=50%</code>, pytest-xdist <code>-n 2</code>, cargo <code>-j 4</code>), and start the job with <code>nice</code> so the desktop stays responsive.</p>
+
+<h2 id="why-defaults-hurt-on-a-laptop">Why defaults hurt on a laptop</h2>
+<p>A build server is dedicated, so using every core is correct there. On a laptop the same job competes with your editor, a browser, a database and the other services of your stack. Memory is the bigger risk: each worker is a full process, so 12 Jest workers can hold several gigabytes, and the machine starts swapping. Fewer workers often finish nearly as fast, because tests spend time waiting for the database or disk, and fast cores have fewer slow neighbours.</p>
+<p>First find how many cores you have:</p>
+<pre><code># macOS
+sysctl -n hw.ncpu
+# Linux
+nproc</code></pre>
+
+<h2 id="per-tool-settings">Per tool settings</h2>
+<table>
+<thead><tr><th>Tool</th><th>How to limit</th></tr></thead>
+<tbody>
+<tr><td>Jest</td><td><code>jest --maxWorkers=50%</code> or <code>-w 2</code>. <code>--runInBand</code> (<code>-i</code>) runs tests in one process, useful when debugging.</td></tr>
+<tr><td>pytest</td><td>With the pytest-xdist plugin, <code>pytest -n 2</code> sets two workers. Without the plugin there is no parallelism.</td></tr>
+<tr><td>Cargo</td><td><code>cargo build -j 4</code>, or set <code>CARGO_BUILD_JOBS=4</code>, or <code>build.jobs</code> in <code>.cargo/config.toml</code>.</td></tr>
+<tr><td>Go</td><td><code>go build -p 4</code> and <code>go test -p 4</code> limit parallel packages. <code>GOMAXPROCS=4</code> limits threads running Go code.</td></tr>
+<tr><td>make</td><td><code>make -j4</code>. Plain <code>make -j</code> with no number starts as many jobs as it can, which is the classic way to freeze a machine.</td></tr>
+<tr><td>Vitest, webpack, esbuild and others</td><td>Each has a worker or thread option. Check its docs for your version; names changed between major versions.</td></tr>
+</tbody>
+</table>
+<p>Put the setting in the project config rather than the command line when the team shares it. Jest has <code>maxWorkers</code> in its config, Cargo has <code>.cargo/config.toml</code>, and pytest has <code>addopts</code> in <code>pytest.ini</code> or <code>pyproject.toml</code>.</p>
+
+<h2 id="lower-the-priority-instead">Lower the priority instead</h2>
+<p>If you do not want to change the tool, change how the operating system treats the process. <code>nice</code> makes a job yield to others:</p>
+<pre><code>nice -n 10 npm test</code></pre>
+<p>A higher number means lower priority. This does not reduce memory use, only CPU competition, so combine it with a worker cap when memory is the issue. On macOS a background quality of service can be requested with <code>taskpolicy -b</code> in front of the command, which also lowers disk priority.</p>
+
+<h2 id="test-runs-against-a-stack">Test runs against a stack</h2>
+<p>Integration tests that call a running stack add load of their own: the services, the database and the test workers all share your cores. Run the tests with a low worker count, and start only the services the tests need. With Flisk, a one-off command can use the environment a service has in the stack:</p>
+<pre><code>flisk run api -- npx jest --maxWorkers=2</code></pre>
+<p><code>flisk run &lt;service&gt; &lt;command...&gt;</code> runs the command with that service's environment (inside its container, or on the host for a local process), and the exit code is the command's, which suits scripts and CI. Put <code>--</code> before a command that has flags of its own, as above. The full setup is in <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Fewer workers can expose shared state between tests, or hide it. If results change with the worker count, tests share a database row, a port or a file. Fix the tests; do not rely on the number.</li>
+<li>Do not set workers to 1 permanently to fix flaky tests. It hides the cause and makes the suite slower for everyone.</li>
+<li>Watch mode runs on every save. Limit workers there first, since it runs the most often.</li>
+<li>Docker builds have their own parallelism inside the VM. Cap the VM, not just the command.</li>
+</ul>
+<p>To see what is left after limiting, check <a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">what is using your RAM</a>. If a container is the heavy part, give it a limit as shown in <a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/">memory and CPU limits on a local container</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many Jest workers should I use on a laptop?</summary><p>Start with half your cores, for example --maxWorkers=50%, and lower it if memory runs short. Tests that wait on a database gain little from more workers.</p></details><details><summary>Is make -j dangerous?</summary><p>Plain make -j with no number has no limit on parallel jobs and can freeze a machine on a large build. Give it a number such as make -j4.</p></details><details><summary>Does nice reduce memory use?</summary><p>No. It only lowers CPU priority. Cap the worker count to reduce memory.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a><a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/"><span class="lbl">Guide</span><b>How to set memory and CPU limits on a local Docker container</b><span>A container with no limit can take the whole Docker VM. A limit turns a slow leak into a clear, local failure.</span></a><a href="/@odykyi/laptop-resources/dev-server-stuck-at-100-percent-cpu/"><span class="lbl">Guide</span><b>Why your dev server sits at 100% CPU and how to find the cause</b><span>A dev server that burns a core while you are not touching it is almost always in a loop. The job is to find which loop.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to find what is using your RAM while developing</title>
+<meta name="description" content="Find which processes eat your laptop&#39;s memory with Activity Monitor, top, ps and docker stats, and read memory pressure and swap correctly before you act.">
+<meta name="keywords" content="what is using my ram mac, find process using most memory, macos memory pressure, dev laptop out of memory">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to find what is using your RAM while developing">
+<meta property="og:description" content="Find which processes eat your laptop&#39;s memory with Activity Monitor, top, ps and docker stats, and read memory pressure and swap correctly before you act.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to find what is using your RAM while developing","description":"Find which processes eat your laptop's memory with Activity Monitor, top, ps and docker stats, and read memory pressure and swap correctly before you act.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/","keywords":"what is using my ram mac, find process using most memory, macos memory pressure, dev laptop out of memory","wordCount":793,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"How to find what is using your RAM while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is it bad if my Mac shows almost no free memory?","acceptedAnswer":{"@type":"Answer","text":"Not by itself. macOS uses spare RAM as a file cache and releases it on demand. Look at the memory pressure graph and at swap used instead."}},{"@type":"Question","name":"Which command shows the biggest memory users on macOS?","acceptedAnswer":{"@type":"Answer","text":"Run top -o mem -l 1 -n 15 -stats pid,command,mem, or sort the Memory tab of Activity Monitor."}},{"@type":"Question","name":"Why does one container not show up in Activity Monitor?","acceptedAnswer":{"@type":"Answer","text":"Containers run inside one virtual machine, so the host sees the VM as a single process. Use docker stats to see each container."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>How to find what is using your RAM while developing</h1><p class="dek">Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#read-the-numbers-before-you-hunt">Read the numbers before you hunt</a></li><li><a href="#list-the-biggest-processes">List the biggest processes</a></li><li><a href="#containers-are-one-big-process-from-the-outside">Containers are one big process from the outside</a></li><li><a href="#cut-the-list-down">Cut the list down</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To find what is using your RAM, sort processes by resident memory, then check memory pressure and swap to see whether the total is actually a problem. On a Mac use Activity Monitor or <code>top -o mem</code>; on Linux use <code>ps</code> sorted by RSS; for containers use <code>docker stats</code>. A full memory bar alone means little, because the system uses spare RAM for caches on purpose.</p>
+
+<h2 id="read-the-numbers-before-you-hunt">Read the numbers before you hunt</h2>
+<p>Operating systems fill unused RAM with file caches. That memory is handed back the moment a program asks for it, so "used" looks high on a healthy machine. Three signals matter more:</p>
+<ul>
+<li><strong>Memory pressure</strong> on macOS. The graph in Activity Monitor stays green when the system copes, turns yellow when it works hard to free pages and red when it cannot keep up.</li>
+<li><strong>Swap used.</strong> A few hundred MB of swap is normal. Several GB that keeps growing while you work means programs are being pushed out to disk and everything gets slower.</li>
+<li><strong>Compressed memory</strong> on macOS. A large compressed figure means the system is already squeezing pages to avoid swapping.</li>
+</ul>
+<p>On the command line, macOS gives you these:</p>
+<pre><code>memory_pressure
+vm_stat
+sysctl hw.memsize</code></pre>
+<p><code>memory_pressure</code> prints the free percentage and the current pressure level, <code>vm_stat</code> shows page counts and <code>hw.memsize</code> is your installed RAM in bytes. On Linux, <code>free -h</code> shows the same idea: look at the "available" column, not "free".</p>
+
+<h2 id="list-the-biggest-processes">List the biggest processes</h2>
+<p>Sort by resident set size (RSS), the physical memory a process holds right now. On macOS:</p>
+<pre><code>top -o mem -l 1 -n 15 -stats pid,command,mem
+ps -A -o pid,rss,command -m | head -15</code></pre>
+<p>On Linux:</p>
+<pre><code>ps aux --sort=-rss | head -15</code></pre>
+<p>The RSS column is in kilobytes. Expect these usual suspects on a developer laptop: browsers with many tabs, the editor and its language servers, one Node or Python process per service, the Docker or Colima virtual machine, and database servers.</p>
+<p>Two traps. First, several processes can share pages, so adding up RSS overstates the total a little. Second, one program often shows up as many rows (a browser has one process per tab, an editor has several helpers). Group by program name when you read the list, or use the grouped view in Activity Monitor.</p>
+
+<h2 id="containers-are-one-big-process-from-the-outside">Containers are one big process from the outside</h2>
+<p>With Docker Desktop, Colima or Podman on a Mac, every container lives inside one virtual machine, and the host sees a single large process for all of them. The VM has a fixed memory size you chose in its settings. To see which container uses what inside it, ask the engine:</p>
+<pre><code>docker stats --no-stream</code></pre>
+<p>This prints one row per running container with its current memory use and limit. A container with no limit can grow until the VM is full. If the VM itself is too big for your machine, the settings pages of your runtime are where you shrink it. The Colima side is covered in <a href="/@odykyi/team-dev-environments/mac-local-dev-with-colima/">Docker on a Mac with Colima</a>.</p>
+
+<h2 id="cut-the-list-down">Cut the list down</h2>
+<p>Once you know the top five, the usual fixes are:</p>
+<ol>
+<li>Quit what you do not use. A second browser profile or a forgotten IDE window can hold gigabytes.</li>
+<li>Stop services you are not working on. A service that is not running costs nothing.</li>
+<li>Run code you edit all day as a plain process, and keep only the awkward parts in containers, so the VM can be small.</li>
+<li>Put a memory limit on containers so a leak stops at a known size instead of eating the VM.</li>
+</ol>
+<p>For the third point, Flisk runs any service that has a <code>command</code> in its <code>service.json</code> as a local process, with no Docker involved. A project of such services starts with <code>flisk up</code> and <code>flisk status</code> lists each one as ready, restarting or not running, so you can tell what is alive before you reach for <code>top</code>. For the second point, a service with <code>"profiles": ["admin"]</code> is left out of <code>flisk up</code> unless you ask for it with <code>flisk up --profile admin</code>, which keeps heavy extras off by default.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Do not kill a process because its number looks big. Check that memory pressure is actually yellow or red and swap is growing first.</li>
+<li>A Node process that hits its heap limit crashes with an out of memory error; that is a different problem from the machine running low, and the fix is not more RAM.</li>
+<li>Measure while the machine is slow, not afterwards. Memory often looks fine once the stuck program has been killed.</li>
+</ul>
+<p>Next, decide which of the heavy items you can drop for good. The article on <a href="/@odykyi/team-dev-environments/many-services-on-one-laptop/">running many services on one laptop</a> shows a way to budget memory per service, and <a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/">setting memory and CPU limits on a container</a> covers the cap.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is it bad if my Mac shows almost no free memory?</summary><p>Not by itself. macOS uses spare RAM as a file cache and releases it on demand. Look at the memory pressure graph and at swap used instead.</p></details><details><summary>Which command shows the biggest memory users on macOS?</summary><p>Run top -o mem -l 1 -n 15 -stats pid,command,mem, or sort the Memory tab of Activity Monitor.</p></details><details><summary>Why does one container not show up in Activity Monitor?</summary><p>Containers run inside one virtual machine, so the host sees the VM as a single process. Use docker stats to see each container.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/"><span class="lbl">Guide</span><b>How to set memory and CPU limits on a local Docker container</b><span>A container with no limit can take the whole Docker VM. A limit turns a slow leak into a clear, local failure.</span></a><a href="/@odykyi/laptop-resources/one-postgres-for-several-local-services/"><span class="lbl">Guide</span><b>Run one Postgres server for several local services to save RAM</b><span>Each Postgres container carries its own processes and caches. One server with several databases costs much less on a small laptop.</span></a><a href="/@odykyi/laptop-resources/laptop-battery-drain-while-developing/"><span class="lbl">Guide</span><b>Why your laptop battery drains while developing and what to stop</b><span>A dev stack keeps the CPU awake even when you are reading. A few changes make a workday on battery possible.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

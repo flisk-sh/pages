@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Free disk space on a dev laptop: caches, node_modules, builds</title>
+<meta name="description" content="Find the folders that fill a developer laptop (node_modules, package caches, build output, Xcode) and clean them safely with du, git clean -n and tool commands.">
+<meta name="keywords" content="free disk space developer mac, delete node_modules everywhere, clear npm cache, cargo target folder too big">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/free-disk-space-from-dev-caches/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Free disk space on a dev laptop: caches, node_modules, builds">
+<meta property="og:description" content="Find the folders that fill a developer laptop (node_modules, package caches, build output, Xcode) and clean them safely with du, git clean -n and tool commands.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/free-disk-space-from-dev-caches/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Free disk space on a dev laptop: caches, node_modules, builds","description":"Find the folders that fill a developer laptop (node_modules, package caches, build output, Xcode) and clean them safely with du, git clean -n and tool commands.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/free-disk-space-from-dev-caches/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/free-disk-space-from-dev-caches/","keywords":"free disk space developer mac, delete node_modules everywhere, clear npm cache, cargo target folder too big","wordCount":701,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"Free disk space on a dev laptop: caches, node_modules, builds","item":"https://pages.flisk.si/@odykyi/laptop-resources/free-disk-space-from-dev-caches/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is it safe to delete node_modules?","acceptedAnswer":{"@type":"Answer","text":"Yes, it is rebuilt by your package manager from the lockfile. Make sure you have a lockfile committed and do not delete it while a dev server runs."}},{"@type":"Question","name":"What does git clean -ndX do?","acceptedAnswer":{"@type":"Answer","text":"It lists, without deleting, the ignored files and folders in the project. Check the list for .env files before you run the real command without -n."}},{"@type":"Question","name":"Does flisk down delete my database?","acceptedAnswer":{"@type":"Answer","text":"No. flisk down keeps named volumes. Only flisk down --purge also deletes the project's Docker volumes."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>Free disk space on a dev laptop: caches, node_modules, builds</h1><p class="dek">Dev disks fill with things that can be rebuilt. The skill is knowing which ones are safe to delete and finding the big ones fast.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#find-the-big-folders">Find the big folders</a></li><li><a href="#project-folders-you-can-rebuild">Project folders you can rebuild</a></li><li><a href="#package-manager-and-tool-caches">Package manager and tool caches</a></li><li><a href="#macos-developer-folders">macOS developer folders</a></li><li><a href="#containers-and-flisk">Containers and Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To free disk space on a developer laptop, find the biggest folders with <code>du</code>, then delete what can be rebuilt: <code>node_modules</code> in old projects, build output (<code>target</code>, <code>dist</code>, <code>.next</code>), package manager caches and Xcode build data. Never delete the source of truth: your code, <code>.env</code> files you cannot regenerate, and database volumes.</p>
+
+<h2 id="find-the-big-folders">Find the big folders</h2>
+<pre><code>du -sh ~/* 2&gt;/dev/null | sort -h | tail -15
+du -sh ~/Library/* 2&gt;/dev/null | sort -h | tail -15      # macOS
+du -sh ~/.[!.]* 2&gt;/dev/null | sort -h | tail -15         # dotfolders: caches live here</code></pre>
+<p>Start at your projects folder and go down one level at a time. A small tool called <code>ncdu</code> does the same interactively if you install it. Expect the winners to be: project <code>node_modules</code>, Rust <code>target</code> folders, the Docker or Colima disk, simulators and package caches.</p>
+
+<h2 id="project-folders-you-can-rebuild">Project folders you can rebuild</h2>
+<ul>
+<li><strong>node_modules</strong>: delete it in projects you are not working on, and reinstall when you come back. Each can be hundreds of MB. <code>npx npkill</code> scans a folder tree and lets you pick which ones to remove.</li>
+<li><strong>Rust target</strong>: <code>cargo clean</code> inside a project removes its <code>target</code> folder, often several GB. It makes the next build slow, so do it for projects you have not touched in a while.</li>
+<li><strong>Build output</strong>: <code>dist</code>, <code>build</code>, <code>.next</code>, <code>.turbo</code>, <code>__pycache__</code>, <code>.venv</code>. All regenerated by the next build or install.</li>
+</ul>
+<p>To see exactly what Git ignores in a project before you delete it, run a dry run first:</p>
+<pre><code>git clean -ndX</code></pre>
+<p><code>-X</code> selects only ignored files, <code>-d</code> includes folders and <code>-n</code> only lists them. Remove the <code>n</code> to delete. Careful: ignored files include <code>.env</code> and local config, which you may not be able to recreate. Read the list before you run the real command.</p>
+
+<h2 id="package-manager-and-tool-caches">Package manager and tool caches</h2>
+<table>
+<thead><tr><th>Tool</th><th>Command</th></tr></thead>
+<tbody>
+<tr><td>npm</td><td><code>npm cache clean --force</code> (cache in <code>~/.npm</code>)</td></tr>
+<tr><td>pnpm</td><td><code>pnpm store prune</code> removes packages no project uses</td></tr>
+<tr><td>Yarn</td><td><code>yarn cache clean</code></td></tr>
+<tr><td>Bun</td><td><code>bun pm cache rm</code></td></tr>
+<tr><td>pip and uv</td><td><code>pip cache purge</code>, <code>uv cache clean</code></td></tr>
+<tr><td>Go</td><td><code>go clean -cache -modcache</code> (the next build downloads modules again)</td></tr>
+<tr><td>Cargo</td><td><code>~/.cargo/registry</code> and <code>~/.cargo/git</code> hold downloaded crates; they are re-downloaded when needed</td></tr>
+<tr><td>Homebrew</td><td><code>brew cleanup</code></td></tr>
+</tbody>
+</table>
+<p>Caches exist to save time, so clean them when you need space, not on a schedule. If you use a monorepo store such as pnpm's, one store is shared by all projects and deleting it breaks the hard links of installed projects until you reinstall.</p>
+
+<h2 id="macos-developer-folders">macOS developer folders</h2>
+<ul>
+<li><code>~/Library/Developer/Xcode/DerivedData</code> holds build products and is safe to delete; Xcode rebuilds it.</li>
+<li><code>xcrun simctl delete unavailable</code> removes simulators for runtimes you no longer have.</li>
+<li>Old iOS device support files and archives under <code>~/Library/Developer</code> can be large; remove the ones you do not need.</li>
+</ul>
+
+<h2 id="containers-and-flisk">Containers and Flisk</h2>
+<p>The Docker disk is its own topic, covered in <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a>. For a Flisk project, a few facts help you pick what is safe. Services that run as local processes keep their logs under <code>.flisk/native/logs/</code>, a folder that ignores itself in Git, so it is safe to delete when the stack is down. <code>flisk down</code> stops everything and keeps named volumes. <code>flisk down --purge</code> also deletes the project's Docker volumes (database data), networks and images, so use it only when you want a fresh database. <code>flisk down --prune-cache</code> prunes Docker build cache, which is shared by all projects on the machine; the default age filter is 24h. Run <code>flisk down --dry-run</code> first to see what would stop. More cleanup is in <a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/">stop and clean up a local stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Check free space after deleting. On macOS, space freed from Time Machine local snapshots or the Trash can take a while to show.</li>
+<li>Do not delete caches while a build or install runs.</li>
+<li>Do not clean the Docker disk from the host side by deleting the VM image file. Use the runtime's own prune commands.</li>
+<li>Keep one note of anything you deleted that took an hour to rebuild, such as a large model download, and do not delete it twice.</li>
+</ul>
+<p>When memory, not disk, is what hurts, go to <a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">finding what uses your RAM</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is it safe to delete node_modules?</summary><p>Yes, it is rebuilt by your package manager from the lockfile. Make sure you have a lockfile committed and do not delete it while a dev server runs.</p></details><details><summary>What does git clean -ndX do?</summary><p>It lists, without deleting, the ignored files and folders in the project. Check the list for .env files before you run the real command without -n.</p></details><details><summary>Does flisk down delete my database?</summary><p>No. flisk down keeps named volumes. Only flisk down --purge also deletes the project&#39;s Docker volumes.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a><a href="/@odykyi/laptop-resources/laptop-battery-drain-while-developing/"><span class="lbl">Guide</span><b>Why your laptop battery drains while developing and what to stop</b><span>A dev stack keeps the CPU awake even when you are reading. A few changes make a workday on battery possible.</span></a><a href="/@odykyi/laptop-resources/too-many-open-files-file-watcher-limits/"><span class="lbl">Guide</span><b>Fix EMFILE and ENOSPC &quot;too many open files&quot; in dev watchers</b><span>Two different limits produce similar errors. Which one you hit depends on the operating system and the watcher.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
