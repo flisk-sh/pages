@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JWT expired or not yet valid in local dev: check clock skew</title>
+<meta name="description" content="A fresh token rejected as expired or not active yet usually means two clocks disagree, often a sleeping Docker VM. How to measure the gap and fix it.">
+<meta name="keywords" content="jwt expired local development, jwt not active clock skew, jwt issued in the future, docker clock drift jwt, jwt clockTolerance leeway">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="JWT expired or not yet valid in local dev: check clock skew">
+<meta property="og:description" content="A fresh token rejected as expired or not active yet usually means two clocks disagree, often a sleeping Docker VM. How to measure the gap and fix it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"JWT expired or not yet valid in local dev: check clock skew","description":"A fresh token rejected as expired or not active yet usually means two clocks disagree, often a sleeping Docker VM. How to measure the gap and fix it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/","keywords":"jwt expired local development, jwt not active clock skew, jwt issued in the future, docker clock drift jwt, jwt clockTolerance leeway","wordCount":763,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"JWT expired or not yet valid in local dev: check clock skew","item":"https://pages.flisk.si/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is my JWT expired the moment I create it?","acceptedAnswer":{"@type":"Answer","text":"The verifier's clock is ahead of the issuer's, or exp was built in milliseconds instead of seconds. Compare both clocks and the exp value."}},{"@type":"Question","name":"How much clock tolerance should I allow?","acceptedAnswer":{"@type":"Answer","text":"A few seconds, for example 5. A larger value hides real problems and weakens short-lived tokens."}},{"@type":"Question","name":"Can Docker containers have a different time than my Mac?","acceptedAnswer":{"@type":"Answer","text":"Yes. Containers use the clock of the Linux VM, which can fall behind after the laptop sleeps. Restarting the VM resyncs it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>JWT expired or not yet valid in local dev: check clock skew</h1><p class="dek">The token was issued a second ago and the verifier calls it expired. The signature is fine; the clocks are not.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-checks-compare">What the checks compare</a></li><li><a href="#measure-the-gap">Measure the gap</a></li><li><a href="#why-a-virtual-machine-drifts">Why a virtual machine drifts</a></li><li><a href="#add-a-small-tolerance-anyway">Add a small tolerance anyway</a></li><li><a href="#bugs-that-look-like-drift">Bugs that look like drift</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li></ol></nav></aside>
+<article><p>If a token you just issued is rejected as "expired", "not active" or "issued in the future", compare the clocks of the issuer and the verifier. A container or virtual machine whose clock fell behind, usually after your laptop slept, is the most common cause in local development. Fix the clock first, and add a small tolerance second.</p>
+
+<h2 id="what-the-checks-compare">What the checks compare</h2>
+<p>A JWT carries timestamps in seconds since 1970 (not milliseconds): <code>iat</code> is when it was issued, <code>nbf</code> is the earliest time it is valid, and <code>exp</code> is when it expires. The verifier compares them with its own clock. If the issuer's clock is ahead of the verifier's, a new token looks like it comes from the future. If the verifier's clock is ahead, a token looks expired early. The error names differ by library:</p>
+<table>
+<thead><tr><th>Library</th><th>Expired</th><th>Too early</th></tr></thead>
+<tbody>
+<tr><td>jsonwebtoken (Node)</td><td><code>jwt expired</code></td><td><code>jwt not active</code></td></tr>
+<tr><td>jose (Node)</td><td><code>"exp" claim timestamp check failed</code></td><td><code>"nbf" claim timestamp check failed</code></td></tr>
+<tr><td>PyJWT</td><td><code>ExpiredSignatureError</code></td><td><code>ImmatureSignatureError</code></td></tr>
+<tr><td>golang-jwt</td><td><code>token is expired</code></td><td><code>token is not valid yet</code></td></tr>
+</tbody>
+</table>
+
+<h2 id="measure-the-gap">Measure the gap</h2>
+<p>Decode your token's payload (a JWT is three base64url parts separated by dots, and the middle one is JSON) and read <code>iat</code> and <code>exp</code>. Then ask each machine for the time:</p>
+<pre><code># on the host
+date -u +%s
+
+# inside a container
+docker run --rm alpine date -u +%s
+
+# the payload of a token in $TOKEN (needs jq)
+echo "$TOKEN" | cut -d. -f2 | base64 -d 2&gt;/dev/null | jq '{iat, nbf, exp}'</code></pre>
+<p>The middle part is base64url without padding, so <code>base64 -d</code> can fail on some tokens; if it does, paste the token into your language's JWT debugger or decode it with a short script. If the container's time differs from the host's by more than a few seconds, you found it.</p>
+
+<h2 id="why-a-virtual-machine-drifts">Why a virtual machine drifts</h2>
+<p>On macOS and Windows, containers run inside a Linux VM that keeps its own clock. When the laptop sleeps or hibernates, the VM's clock can stop and resume late, and until it resyncs every container is minutes or hours behind. This is a known behaviour of Docker Desktop, Colima and WSL2. The remedies:</p>
+<ul>
+<li><strong>Restart the VM.</strong> Restarting Docker Desktop, or <code>colima restart</code>, resets the clock. The <a href="/@odykyi/team-dev-environments/mac-local-dev-with-colima/">Colima setup article</a> covers the VM itself.</li>
+<li><strong>WSL2.</strong> Run <code>sudo hwclock -s</code> inside the distro to resync it from the Windows clock, or <code>wsl --shutdown</code> and start again.</li>
+<li><strong>Linux.</strong> Containers share the host kernel clock, so drift between host and container cannot happen. Look at the issuer's code instead.</li>
+</ul>
+
+<h2 id="add-a-small-tolerance-anyway">Add a small tolerance anyway</h2>
+<p>Production systems allow a few seconds of skew between machines. Do the same in verification:</p>
+<pre><code>// jsonwebtoken (seconds)
+jwt.verify(token, secret, { algorithms: ["HS256"], clockTolerance: 5 });
+
+// jose
+await jwtVerify(token, key, { clockTolerance: "5s" });
+
+# PyJWT
+jwt.decode(token, key, algorithms=["HS256"], leeway=5)</code></pre>
+<p>Keep the tolerance to seconds. A tolerance of an hour hides a real problem and makes a short-lived token pointless. Never solve a drift problem by issuing tokens with a one-year <code>exp</code>.</p>
+
+<h2 id="bugs-that-look-like-drift">Bugs that look like drift</h2>
+<ul>
+<li><strong>Milliseconds instead of seconds.</strong> <code>Date.now()</code> returns milliseconds. An <code>exp</code> of <code>Date.now() + 3600</code> expires in 3.6 seconds, and <code>Date.now() / 1000</code> is not an integer. Use <code>Math.floor(Date.now() / 1000)</code>.</li>
+<li><strong>Time zones.</strong> Epoch seconds have no time zone. If you build <code>exp</code> from a local date string, you have introduced one. Build it from the epoch.</li>
+<li><strong>A very short lifetime in tests.</strong> A 30 second <code>exp</code> plus a debugger breakpoint gives you an expired token. Raise it in development.</li>
+<li><strong>Cached tokens.</strong> A test that reuses a token saved in a fixture will expire on the day the fixture ages out. Mint tokens inside the test.</li>
+</ul>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk runs your services but does not manage their clocks. It does give you one command to compare them: <code>flisk run &lt;service&gt; -- date -u +%s</code> runs the command with that service's environment, inside its container when the service is a container, or on the host when it is a local process. Compare the output between the issuer and the verifier. In a Docker stack, if the container's time is far from the host's, restart the VM as above, then <code>flisk down</code> and <code>flisk up</code>. A local-process stack uses the host clock, so all of its services agree by construction. If the clocks agree and verification still fails, the cause is the secret, not the time. Read <a href="/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/">how to share a JWT secret between local services</a>.</p>
+<p>Next in this space is running a real identity provider locally, so that your tokens come from something that behaves like production.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is my JWT expired the moment I create it?</summary><p>The verifier&#39;s clock is ahead of the issuer&#39;s, or exp was built in milliseconds instead of seconds. Compare both clocks and the exp value.</p></details><details><summary>How much clock tolerance should I allow?</summary><p>A few seconds, for example 5. A larger value hides real problems and weakens short-lived tokens.</p></details><details><summary>Can Docker containers have a different time than my Mac?</summary><p>Yes. Containers use the clock of the Linux VM, which can fall behind after the laptop sleeps. Restarting the VM resyncs it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/"><span class="lbl">Guide</span><b>How to share a JWT secret between local services safely</b><span>A token signed by the auth service must verify in every other service. The easy way to break that is two different secrets.</span></a><a href="/@odykyi/auth-local-dev/keycloak-for-local-development/"><span class="lbl">Guide</span><b>How to run Keycloak for local development with a realm import</b><span>A real identity provider on your laptop, seeded the same way every time, so nobody clicks through the admin console to get a test user.</span></a><a href="/@odykyi/auth-local-dev/localhost-apps-share-cookies/"><span class="lbl">Guide</span><b>Why two apps on localhost log each other out (shared cookies)</b><span>You log in to one project, open another on a different port, and the first one forgets you. Nothing is wrong with either app.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

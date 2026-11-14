@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set up a GitHub OAuth app for local development</title>
+<meta name="description" content="Create a separate GitHub OAuth app for localhost, set the callback URL once, and keep the client secret in an ignored .env file. Steps, scopes and pitfalls.">
+<meta name="keywords" content="github oauth app localhost, github oauth callback url local, github login local development, create github oauth app, github client secret env">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/github-oauth-app-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set up a GitHub OAuth app for local development">
+<meta property="og:description" content="Create a separate GitHub OAuth app for localhost, set the callback URL once, and keep the client secret in an ignored .env file. Steps, scopes and pitfalls.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/github-oauth-app-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set up a GitHub OAuth app for local development","description":"Create a separate GitHub OAuth app for localhost, set the callback URL once, and keep the client secret in an ignored .env file. Steps, scopes and pitfalls.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/github-oauth-app-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/github-oauth-app-for-local-development/","keywords":"github oauth app localhost, github oauth callback url local, github login local development, create github oauth app, github client secret env","wordCount":744,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"How to set up a GitHub OAuth app for local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/github-oauth-app-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can one GitHub OAuth app serve localhost and production?","acceptedAnswer":{"@type":"Answer","text":"An OAuth app has one callback URL, so you would have to edit it each time. A separate development app is simpler and safer."}},{"@type":"Question","name":"Is the GitHub client ID a secret?","acceptedAnswer":{"@type":"Answer","text":"No, it appears in the authorize URL. The client secret is private and belongs in an ignored env file."}},{"@type":"Question","name":"Why does GitHub return a bad_verification_code error?","acceptedAnswer":{"@type":"Answer","text":"A code can be used once and expires quickly. Retrying the same callback URL or reusing an old code produces it; start the login again."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>How to set up a GitHub OAuth app for local development</h1><p class="dek">One OAuth app has one callback URL. The clean answer for local work is a second app that only ever points at your machine.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#create-the-app">Create the app</a></li><li><a href="#keep-the-credentials-out-of-git">Keep the credentials out of git</a></li><li><a href="#ask-for-the-scopes-you-need">Ask for the scopes you need</a></li><li><a href="#exchange-the-code-on-the-server">Exchange the code on the server</a></li><li><a href="#wire-it-into-a-flisk-project">Wire it into a Flisk project</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Create a second GitHub OAuth app that exists only for development. Set its homepage URL and callback URL to your local address, copy the client ID into your config, and keep the client secret in a gitignored <code>.env</code> file. Do not reuse the production app: an OAuth app accepts one callback URL, so sharing it means changing the setting every time you switch.</p>
+
+<h2 id="create-the-app">Create the app</h2>
+<ol>
+<li>On GitHub open Settings, Developer settings, OAuth Apps, then New OAuth App. For an organisation, use the organisation's settings so the app does not belong to one person's account.</li>
+<li>Name it so nobody mistakes it for the real one, for example <code>myapp (local dev)</code>.</li>
+<li>Homepage URL: <code>http://localhost:3000</code>. It is informational, but fill it in.</li>
+<li>Authorization callback URL: the exact path your library handles, for example <code>http://localhost:3000/api/auth/callback/github</code> for Auth.js.</li>
+<li>Register the application, then use Generate a new client secret. GitHub shows the secret once. Copy it straight into your local env file.</li>
+</ol>
+<p>GitHub's rule is that the host and port of the <code>redirect_uri</code> your app sends must match the registered callback URL, and its path must be inside the registered path. Port 3000 registered and port 5173 sent fails. If it does, the article on <a href="/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/">redirect_uri_mismatch on localhost</a> shows how to compare the two.</p>
+
+<h2 id="keep-the-credentials-out-of-git">Keep the credentials out of git</h2>
+<p>The client ID is not secret and can sit in an example file. The client secret is. Put it in <code>.env</code>, make sure <code>.env</code> is ignored (see <a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">gitignoring env files safely</a>), and commit a <code>.env.example</code> with placeholders:</p>
+<pre><code># .env.example
+GITHUB_CLIENT_ID=your-dev-app-client-id
+GITHUB_CLIENT_SECRET=paste-it-here</code></pre>
+<p>If you ever paste the secret into a commit by accident, treat it as leaked: generate a new one in the app settings and delete the old one. <a href="/@odykyi/env-and-secrets-local/committed-a-secret-to-git/">The checklist for a committed secret</a> applies here too.</p>
+
+<h2 id="ask-for-the-scopes-you-need">Ask for the scopes you need</h2>
+<p>By default an OAuth app reads public profile information. To get the user's primary email address, which many apps use as the account key, request the <code>user:email</code> scope. A user can also hide their email, so handle a missing address instead of assuming one. Request <code>read:user</code> only when you need the full profile. Fewer scopes mean fewer consent screens while you test.</p>
+
+<h2 id="exchange-the-code-on-the-server">Exchange the code on the server</h2>
+<p>The flow is the plain authorization code flow. Your app sends the browser to <code>https://github.com/login/oauth/authorize</code> with <code>client_id</code>, <code>redirect_uri</code>, <code>scope</code> and a random <code>state</code>. GitHub redirects back with <code>code</code> and the same <code>state</code>. Your server checks the state, then posts the code and the client secret to <code>https://github.com/login/oauth/access_token</code> and gets a token. The secret must only ever be used on the server. Never read it from a variable that a frontend bundler would inline, such as one starting with <code>VITE_</code> or <code>NEXT_PUBLIC_</code>.</p>
+
+<h2 id="wire-it-into-a-flisk-project">Wire it into a Flisk project</h2>
+<p>With services that run as local processes, the <code>env</code> map in <code>service.json</code> can read values from the project <code>.env</code> or your shell with <code>${NAME}</code>, so the manifest holds names and the secret stays in the ignored file:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 3000,
+  "env": {
+    "GITHUB_CLIENT_ID": "${GITHUB_CLIENT_ID}",
+    "GITHUB_CLIENT_SECRET": "${GITHUB_CLIENT_SECRET}",
+    "APP_BASE_URL": "http://localhost:3000"
+  }
+}</code></pre>
+<p>Run <code>flisk config verify</code> to check the manifest. If a variable is not set in <code>.env</code> or the shell, <code>flisk up</code> warns that an unset variable expanded to an empty value, which is the first thing to look at when the GitHub page says the client is invalid. In a Docker stack, list the names under <code>secrets</code> instead; Flisk injects them from the project <code>.env</code>, and Docker Compose refuses to start a service whose required secret is missing. See <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars in local development</a> for the three kinds of variable.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Changing the callback to test something.</strong> Do not edit the production app's callback. A second app removes the temptation.</li>
+<li><strong>Teammates.</strong> Each developer can share one dev app, since every developer's callback is <code>localhost:3000</code>, or create their own. Share the client ID freely; share the secret through your normal secret channel, not chat history.</li>
+<li><strong>A different local port.</strong> If your team uses several ports, pin each service's <code>port</code> so the callback never changes.</li>
+<li><strong>Using a GitHub App instead.</strong> GitHub Apps are a different product from OAuth apps and let you list more than one callback URL. They also use different settings, so pick one model and follow its documentation.</li>
+</ul>
+<p>The same dev-app idea carries to Google, with more settings to get right. That is the next article.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can one GitHub OAuth app serve localhost and production?</summary><p>An OAuth app has one callback URL, so you would have to edit it each time. A separate development app is simpler and safer.</p></details><details><summary>Is the GitHub client ID a secret?</summary><p>No, it appears in the authorize URL. The client secret is private and belongs in an ignored env file.</p></details><details><summary>Why does GitHub return a bad_verification_code error?</summary><p>A code can be used once and expires quickly. Retrying the same callback URL or reusing an old code produces it; start the login again.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/"><span class="lbl">Guide</span><b>Fix OAuth redirect_uri_mismatch on localhost</b><span>The error page rarely shows the two values it compared. You can read the one your app sent straight from the address bar.</span></a><a href="/@odykyi/auth-local-dev/google-sign-in-on-localhost/"><span class="lbl">Guide</span><b>Google sign-in on localhost: origins, redirect URIs, test users</b><span>Google is stricter than most providers about host names, and its consent screen has a testing mode that surprises people on day eight.</span></a><a href="/@odykyi/auth-local-dev/authjs-local-setup-secret-and-url/"><span class="lbl">Guide</span><b>Auth.js on localhost: AUTH_SECRET, AUTH_URL and the callback</b><span>Most Auth.js problems on localhost come down to three values: a secret, the app&#39;s own URL, and the exact callback path.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

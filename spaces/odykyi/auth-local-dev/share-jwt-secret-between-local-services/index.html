@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to share a JWT secret between local services safely</title>
+<meta name="description" content="One service signs the token, the others verify it. Use one random secret per project, inject it as an env var, pin the algorithm, and never commit the value.">
+<meta name="keywords" content="share jwt secret between services, jwt secret local development, hs256 shared secret microservices, jwt invalid signature local, generate jwt secret">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to share a JWT secret between local services safely">
+<meta property="og:description" content="One service signs the token, the others verify it. Use one random secret per project, inject it as an env var, pin the algorithm, and never commit the value.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to share a JWT secret between local services safely","description":"One service signs the token, the others verify it. Use one random secret per project, inject it as an env var, pin the algorithm, and never commit the value.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/","keywords":"share jwt secret between services, jwt secret local development, hs256 shared secret microservices, jwt invalid signature local, generate jwt secret","wordCount":844,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"How to share a JWT secret between local services safely","item":"https://pages.flisk.si/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long should a local JWT secret be?","acceptedAnswer":{"@type":"Answer","text":"At least 32 random bytes for HS256, for example 64 hex characters from openssl rand -hex 32."}},{"@type":"Question","name":"Can every service use a different JWT secret?","acceptedAnswer":{"@type":"Answer","text":"Only the service that verifies a token needs the secret that signed it. If several services verify the same token, they need the same secret or the public key."}},{"@type":"Question","name":"Should I put the JWT secret in service.json?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk ignores a jwtSecret field and warns about it. Keep the value in the ignored .env file."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>How to share a JWT secret between local services safely</h1><p class="dek">A token signed by the auth service must verify in every other service. The easy way to break that is two different secrets.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#symmetric-or-asymmetric">Symmetric or asymmetric</a></li><li><a href="#generate-and-store-it-once">Generate and store it once</a></li><li><a href="#the-flisk-way-docker-and-tilt">The Flisk way: Docker and Tilt</a></li><li><a href="#the-flisk-way-local-processes">The Flisk way: local processes</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Generate one random secret for the project, store it outside git, and inject the same value into every service that signs or verifies tokens as an environment variable. Pin the algorithm in the verify call. If a token says "invalid signature" in only one service, that service has a different secret.</p>
+
+<h2 id="symmetric-or-asymmetric">Symmetric or asymmetric</h2>
+<p>With HS256 the same secret signs and verifies, so every service that can verify a token can also forge one. That is acceptable on a laptop and in a small system. When more services or other teams verify tokens, prefer RS256 or ES256: only the auth service holds the private key, and the others fetch the public key from a JWKS URL. The rest of this article is about the shared-secret case, because that is where local setups go wrong.</p>
+<ul>
+<li>Use at least 32 random bytes for HS256. A short word such as <code>secret</code> or <code>changeme</code> makes tokens easy to guess offline.</li>
+<li>Pass the allowed algorithms to the verifier, for example <code>jwt.verify(token, secret, { algorithms: ["HS256"] })</code> in <code>jsonwebtoken</code>. Never accept whatever algorithm the token header names.</li>
+<li>Set <code>exp</code> and check it. See the <a href="/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/">clock skew article</a> for what goes wrong when machines disagree on the time.</li>
+</ul>
+
+<h2 id="generate-and-store-it-once">Generate and store it once</h2>
+<pre><code>openssl rand -hex 32</code></pre>
+<p>That prints 64 hex characters. Put the value in an ignored <code>.env</code> file, add a placeholder to <code>.env.example</code>, and read it in code in one place:</p>
+<pre><code>const secret = process.env.JWT_SECRET;
+if (!secret || secret.length &lt; 32) {
+  throw new Error("JWT_SECRET is missing or shorter than 32 characters");
+}</code></pre>
+<p>Fail at startup. A service that silently falls back to a default secret verifies nothing useful, and a hard-coded fallback ends up in every checkout. The articles on <a href="/@odykyi/env-and-secrets-local/generate-random-local-secrets/">generating random local secrets</a> and <a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">gitignoring env files</a> cover the surrounding habits.</p>
+
+<h2 id="the-flisk-way-docker-and-tilt">The Flisk way: Docker and Tilt</h2>
+<p>In a Docker stack, a scaffolded backend defaults to <code>AUTH_MODE=local-jwt</code>. Flisk keeps one <code>JWT_SECRET</code> in the project <code>.env</code>, generated per project (64 hex characters) and never shared between projects. <code>flisk up</code> adds it to an older <code>.env</code> that lacks one, and never changes a value already there. Compose injects the same value into every service of the stack, so a token signed by one backend verifies in the others without any extra work. If the key is missing, Compose stops with a message that says so.</p>
+<p>Two rules from Flisk's own docs:</p>
+<ul>
+<li>A <code>jwtSecret</code> field in <code>service.json</code> is ignored, and <code>flisk doctor</code> warns about it. A secret must not be committed, so set <code>JWT_SECRET</code> in <code>.env</code>.</li>
+<li>A service that depends on an <code>identity</code> resource, or sets <code>"authMode": "identity-service"</code>, runs in identity-service mode instead: it gets <code>IDENTITY_RESOURCE_URL</code> and no <code>JWT_SECRET</code>. Set <code>identityServiceUrl</code> to the real address, because the default guess is <code>http://identity-service:3000</code>.</li>
+</ul>
+<p>For a run with different settings, <code>flisk up --env-file .env.integration</code> replaces the project <code>.env</code> for that run, and the file must still contain <code>TILT_ENV</code>, <code>DB_PASSWORD</code> and <code>JWT_SECRET</code>.</p>
+
+<h2 id="the-flisk-way-local-processes">The Flisk way: local processes</h2>
+<p>For services that run through a <code>command</code>, declare the key under <code>secrets.generate</code>. On <code>flisk up</code>, each name missing from the project <code>.env</code> is appended once with random bytes, and never changed afterwards, so the value is stable across restarts. Then map it into each service with <code>${NAME}</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "auth",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "secrets": { "generate": { "SHARED_JWT_KEY": "hex:32" } },
+  "env": { "JWT_SECRET": "${SHARED_JWT_KEY}" }
+}</code></pre>
+<p>Every other service that verifies tokens repeats the <code>env</code> line, with the same <code>${SHARED_JWT_KEY}</code>, and has no <code>generate</code> block of its own; the first service creates the value, and all of them read it from the project <code>.env</code>. Use a generated name that differs from the variable the code reads: <code>flisk config verify</code> rejects a manifest whose <code>env</code> sets a variable that <code>secrets.generate</code> also creates, because the fixed value would replace the generated one. Flisk prints the names it generated, never the values, and keeps <code>.env</code> out of git. Back that file up if tokens must outlive a deleted checkout; a deleted <code>.env</code> gets a new key.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Different secrets in different shells.</strong> For a local-process <code>${NAME}</code>, your shell is checked first and the project <code>.env</code> second, so an old exported variable can hide the file. When verification fails in one service, print a short hash of the secret in each service at startup and compare the hashes. Never print the secret.</li>
+<li><strong>Whitespace.</strong> A trailing newline copied into <code>.env</code> changes the secret. Check for it first when two services "have the same secret" but disagree.</li>
+<li><strong>Rotating.</strong> Changing the secret invalidates every token. In development that is fine; clear the cookie or log in again.</li>
+<li><strong>Encoding.</strong> Some libraries treat the secret as a string, others as base64. Use the same library on both sides, or confirm how each decodes it.</li>
+<li><strong>Do not reuse a production secret.</strong> A local secret should be worthless anywhere else.</li>
+</ul>
+<p>Once tokens verify everywhere, the next failure is time: a token that is already expired the moment it is issued. That is the next article.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long should a local JWT secret be?</summary><p>At least 32 random bytes for HS256, for example 64 hex characters from openssl rand -hex 32.</p></details><details><summary>Can every service use a different JWT secret?</summary><p>Only the service that verifies a token needs the secret that signed it. If several services verify the same token, they need the same secret or the public key.</p></details><details><summary>Should I put the JWT secret in service.json?</summary><p>No. Flisk ignores a jwtSecret field and warns about it. Keep the value in the ignored .env file.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/"><span class="lbl">Guide</span><b>JWT expired or not yet valid in local dev: check clock skew</b><span>The token was issued a second ago and the verifier calls it expired. The signature is fine; the clocks are not.</span></a><a href="/@odykyi/auth-local-dev/localhost-apps-share-cookies/"><span class="lbl">Guide</span><b>Why two apps on localhost log each other out (shared cookies)</b><span>You log in to one project, open another on a different port, and the first one forgets you. Nothing is wrong with either app.</span></a><a href="/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/"><span class="lbl">Guide</span><b>How to use a mock OIDC provider for local tests and CI</b><span>A throwaway identity provider that hands out valid tokens for any user name you type, so tests stop depending on a real one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

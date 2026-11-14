@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why two apps on localhost log each other out (shared cookies)</title>
+<meta name="description" content="Cookies ignore the port, so every app on localhost shares one cookie jar. Give each app its own session cookie name, or its own host name, to stop collisions.">
+<meta name="keywords" content="localhost cookies shared between ports, session cookie overwritten localhost, logged out when running two apps localhost, cookies different ports same host, session cookie name collision">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/localhost-apps-share-cookies/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why two apps on localhost log each other out (shared cookies)">
+<meta property="og:description" content="Cookies ignore the port, so every app on localhost shares one cookie jar. Give each app its own session cookie name, or its own host name, to stop collisions.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/localhost-apps-share-cookies/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why two apps on localhost log each other out (shared cookies)","description":"Cookies ignore the port, so every app on localhost shares one cookie jar. Give each app its own session cookie name, or its own host name, to stop collisions.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/localhost-apps-share-cookies/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/localhost-apps-share-cookies/","keywords":"localhost cookies shared between ports, session cookie overwritten localhost, logged out when running two apps localhost, cookies different ports same host, session cookie name collision","wordCount":826,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"Why two apps on localhost log each other out (shared cookies)","item":"https://pages.flisk.si/@odykyi/auth-local-dev/localhost-apps-share-cookies/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do cookies include the port number?","acceptedAnswer":{"@type":"Answer","text":"No. Cookies are scoped by host and path. Two apps on different ports of the same host share cookies."}},{"@type":"Question","name":"Do localhost and 127.0.0.1 share cookies?","acceptedAnswer":{"@type":"Answer","text":"No. They are different hosts, so each has its own cookie jar."}},{"@type":"Question","name":"Is localhost:3000 same-site with localhost:4000?","acceptedAnswer":{"@type":"Answer","text":"Yes. Site matching ignores the port, so a SameSite=Lax cookie is sent, but the request is still cross-origin for CORS."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>Why two apps on localhost log each other out (shared cookies)</h1><p class="dek">You log in to one project, open another on a different port, and the first one forgets you. Nothing is wrong with either app.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-is-happening">What is happening</a></li><li><a href="#confirm-it-in-five-minutes">Confirm it in five minutes</a></li><li><a href="#fixes-from-simplest">Fixes, from simplest</a></li><li><a href="#a-related-surprise-same-site-is-not-same-origin">A related surprise: same-site is not same-origin</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Browsers scope cookies by host, not by port. <code>http://localhost:3000</code> and <code>http://localhost:4000</code> read and write the same cookies, so two apps that both name their session cookie <code>session</code> overwrite each other. Give every app a unique cookie name, or serve each app from its own host name.</p>
+
+<h2 id="what-is-happening">What is happening</h2>
+<p>The cookie standard (RFC 6265) defines a cookie's scope by domain and path. It says nothing about ports, and browsers follow that. App A on port 3000 sets <code>session=abc</code>. App B on port 4000 sets <code>session=xyz</code> for the same host, which replaces it. A moment later app A sends <code>xyz</code>, fails to find that session in its store, and shows the login page. You did nothing wrong, and no log line explains it.</p>
+<p>Typical triggers are older projects that are still running in another terminal, a second checkout of the same repo on another port, or a tutorial app and your real app that both use a framework default such as <code>connect.sid</code>, <code>session</code> or <code>next-auth.session-token</code>.</p>
+
+<h2 id="confirm-it-in-five-minutes">Confirm it in five minutes</h2>
+<ol>
+<li>Open devtools, Application tab (Storage in Firefox), Cookies, and pick the localhost entry.</li>
+<li>Log in to app A and note the cookie names, values and expiry.</li>
+<li>Open app B on another port and log in. Look at the same list.</li>
+<li>If a cookie with the same name changed its value or expiry, you have a collision. If two apps show the same name on one row, that is the proof.</li>
+</ol>
+<p>Also look at the number and size of cookies. Every cookie for the host travels with every request to every port. A stack of old session cookies can push the header past the server's limit, and you get "400 Request Header Or Cookie Too Large". Clearing the cookies for localhost fixes that for the moment, but only unique names stop it from returning.</p>
+
+<h2 id="fixes-from-simplest">Fixes, from simplest</h2>
+<ul>
+<li><strong>Unique cookie name per app.</strong> Most session libraries take a name option: <code>name</code> in express-session, <code>SESSION_COOKIE_NAME</code> in Flask, <code>SESSION_COOKIE_NAME</code> in Django. Use the project name, for example <code>shop_session</code>. Read it from an environment variable so a second copy of the same app can set another one.</li>
+<li><strong>Different host names.</strong> <code>localhost</code> and <code>127.0.0.1</code> are different hosts, so they have separate jars. Any name that ends in <code>.localhost</code> works in current Chrome, Firefox and curl without a hosts file, and <code>app.shop.localhost</code> and <code>app.crm.localhost</code> do not share cookies.</li>
+<li><strong>One origin per project behind a proxy</strong>, as described in <a href="/@odykyi/local-routing-and-https/path-prefix-or-subdomain-routing/">path prefix or subdomain routing</a>. Each project has its own host name, so projects stay separate, and inside one project the app and API can share a first-party cookie.</li>
+</ul>
+<p>Avoid the idea that a <code>Path</code> or the <code>__Host-</code> prefix fixes this. <code>Path</code> only narrows by URL path, and apps usually live at <code>/</code>. The <code>__Host-</code> prefix requires <code>Secure</code>, <code>Path=/</code> and no <code>Domain</code>, and it still ignores the port.</p>
+
+<h2 id="a-related-surprise-same-site-is-not-same-origin">A related surprise: same-site is not same-origin</h2>
+<p>Because ports do not count for site matching, a request from <code>localhost:3000</code> to <code>localhost:4000</code> is cross-origin but same-site. A <code>SameSite=Lax</code> cookie does travel on it. You still need <code>credentials: "include"</code> on the fetch and a CORS response with the exact origin and <code>Access-Control-Allow-Credentials: true</code>; the CORS article linked from the <a href="/@odykyi/local-routing-and-https/cors-between-localhost-subdomains/">subdomain CORS fix</a> covers it. The reverse also bites: a cookie your API sets for <code>localhost</code> reaches every other app on localhost, including one you would rather it did not.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk does not manage cookies, but its two run modes change which problem you have.</p>
+<ul>
+<li><strong>Local processes.</strong> Every service answers on <code>http://localhost:&lt;port&gt;</code>, so every service shares one cookie jar, and so does anything else running on your machine. Set a distinct name per service in <code>env</code> and read it in code:</li>
+</ul>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "env": { "SESSION_COOKIE_NAME": "shop_session" }
+}</code></pre>
+<ul>
+<li><strong>Docker and Tilt.</strong> Frontends are on <code>app.&lt;project&gt;.localhost</code> and backends on <code>api.&lt;project&gt;.localhost</code>, so two Flisk projects get different hosts and different cookie jars. Within one project the app and the API are different hosts, so a cookie the API sets is not sent to the app host unless you set it up on purpose.</li>
+</ul>
+<p>In local-process mode Flisk also refuses to start a service whose port is already in use and names the process that holds it, which helps you find a forgotten old copy of an app that is still setting cookies.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Clearing "all cookies" in the browser logs you out of real sites. Clear only the localhost entries from devtools.</li>
+<li>A cookie name change logs everyone out once. That is fine in development, and a deliberate rollout step in production.</li>
+<li>Remember the collision when a bug report says "random logouts". Ask which other localhost ports are running before reading any auth code.</li>
+</ul>
+<p>If the cookie is set but never sent, the cause is likely CORS credentials or SameSite instead. <a href="/@odykyi/local-routing-and-https/secure-cookies-on-localhost/">The Secure cookies article</a> is the next place to look.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do cookies include the port number?</summary><p>No. Cookies are scoped by host and path. Two apps on different ports of the same host share cookies.</p></details><details><summary>Do localhost and 127.0.0.1 share cookies?</summary><p>No. They are different hosts, so each has its own cookie jar.</p></details><details><summary>Is localhost:3000 same-site with localhost:4000?</summary><p>Yes. Site matching ignores the port, so a SameSite=Lax cookie is sent, but the request is still cross-origin for CORS.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/"><span class="lbl">Guide</span><b>How to share a JWT secret between local services safely</b><span>A token signed by the auth service must verify in every other service. The easy way to break that is two different secrets.</span></a><a href="/@odykyi/auth-local-dev/authjs-local-setup-secret-and-url/"><span class="lbl">Guide</span><b>Auth.js on localhost: AUTH_SECRET, AUTH_URL and the callback</b><span>Most Auth.js problems on localhost come down to three values: a secret, the app&#39;s own URL, and the exact callback path.</span></a><a href="/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/"><span class="lbl">Guide</span><b>Fix OAuth redirect_uri_mismatch on localhost</b><span>The error page rarely shows the two values it compared. You can read the one your app sent straight from the address bar.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

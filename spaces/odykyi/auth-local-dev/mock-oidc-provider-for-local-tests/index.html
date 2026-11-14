@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use a mock OIDC provider for local tests and CI</title>
+<meta name="description" content="Run mock-oauth2-server on localhost:8080 so sign-in tests get real signed tokens without Google or Keycloak. Set the issuer, login flow and claims.">
+<meta name="keywords" content="mock oidc server, mock-oauth2-server docker, oidc testing localhost, fake identity provider tests, jwt test tokens">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use a mock OIDC provider for local tests and CI">
+<meta property="og:description" content="Run mock-oauth2-server on localhost:8080 so sign-in tests get real signed tokens without Google or Keycloak. Set the issuer, login flow and claims.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use a mock OIDC provider for local tests and CI","description":"Run mock-oauth2-server on localhost:8080 so sign-in tests get real signed tokens without Google or Keycloak. Set the issuer, login flow and claims.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/","keywords":"mock oidc server, mock-oauth2-server docker, oidc testing localhost, fake identity provider tests, jwt test tokens","wordCount":749,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Authentication in local development","item":"https://pages.flisk.si/@odykyi/auth-local-dev/"},{"@type":"ListItem","position":3,"name":"How to use a mock OIDC provider for local tests and CI","item":"https://pages.flisk.si/@odykyi/auth-local-dev/mock-oidc-provider-for-local-tests/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is a mock OIDC server?","acceptedAnswer":{"@type":"Answer","text":"A small server that implements the OpenID Connect endpoints and signs tokens with its own keys, so an app can run a full sign-in flow in tests without a real identity provider."}},{"@type":"Question","name":"What issuer URL does mock-oauth2-server use?","acceptedAnswer":{"@type":"Answer","text":"http://localhost:8080/\u003cname>, where the first path segment is the issuer name. The server creates that issuer on the first request."}},{"@type":"Question","name":"Does the mock server check client id and secret?","acceptedAnswer":{"@type":"Answer","text":"No. Any client id and secret work, so do not use it to test client authentication."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/auth-local-dev/">Authentication in local development</a></div>
+<section class="hero"><div><div class="lbl">Authentication in local development</div><h1>How to use a mock OIDC provider for local tests and CI</h1><p class="dek">A throwaway identity provider that hands out valid tokens for any user name you type, so tests stop depending on a real one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#start-it">Start it</a></li><li><a href="#point-your-app-at-it">Point your app at it</a></li><li><a href="#run-it-with-flisk">Run it with Flisk</a></li><li><a href="#use-it-in-automated-tests">Use it in automated tests</a></li><li><a href="#common-failures">Common failures</a></li></ol></nav></aside>
+<article><p>Run <code>mock-oauth2-server</code>, a small container that behaves like an OpenID Connect provider and signs tokens with its own keys. Your app uses its issuer URL, <code>http://localhost:8080/default</code>, exactly like a real one. The login page accepts any username, and you choose the claims in the token. No account, no network, nothing to clean up.</p>
+
+<h2 id="start-it">Start it</h2>
+<p>The project is published as <code>ghcr.io/navikt/mock-oauth2-server</code>. Pick a release tag from its GitHub releases page rather than <code>latest</code>, so a test run next month uses the same server as today. The tag below is an example; check that it exists before you rely on it:</p>
+<pre><code>docker run --rm -p 127.0.0.1:8080:8080 \
+  ghcr.io/navikt/mock-oauth2-server:2.1.10</code></pre>
+<p>The server creates an issuer on demand for the first path segment of any request. So <code>default</code> is not special: <code>/default</code>, <code>/staging</code> and <code>/anything</code> are three separate issuers with their own keys. Open the discovery document to see the endpoints:</p>
+<pre><code>curl http://localhost:8080/default/.well-known/openid-configuration</code></pre>
+<p>The <code>issuer</code> field is <code>http://localhost:8080/default</code>. Its <code>authorization_endpoint</code>, <code>token_endpoint</code> and <code>jwks_uri</code> are under the same path.</p>
+
+<h2 id="point-your-app-at-it">Point your app at it</h2>
+<p>Any OIDC client library needs three values: the issuer (or its discovery URL), a client id, and a client secret if the client is confidential. This server does not check the client id or secret, so any value works. Register this redirect in your app, and nothing in the mock server needs to match it first:</p>
+<pre><code>OIDC_ISSUER=http://localhost:8080/default
+OIDC_CLIENT_ID=local-app
+OIDC_CLIENT_SECRET=anything
+OIDC_REDIRECT_URI=http://localhost:3000/auth/callback</code></pre>
+<p>Start the sign-in flow in the browser. The server shows a form: type any username, and in the claims box a JSON object such as <code>{"email":"alice@example.test","groups":["admin"]}</code>. Submit, and the browser returns to your callback with a code. Your app exchanges it at the token endpoint for an ID token and an access token. The <code>sub</code> claim is the username you typed.</p>
+
+<h2 id="run-it-with-flisk">Run it with Flisk</h2>
+<p>Put the image in a <code>service.json</code> without a <code>command</code>, and <code>flisk up</code> starts it with <code>docker run</code> next to your local processes. Docker has to be running for this one service.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "oidc",
+  "appType": "bring-your-own",
+  "stack": "auth",
+  "image": "ghcr.io/navikt/mock-oauth2-server:2.1.10",
+  "port": 8080
+}</code></pre>
+<p>Make the app depend on it and pass the issuer through <code>env</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "stack": "auth",
+  "command": "npm run dev -- --port 3000",
+  "port": 3000,
+  "dependsOn": ["oidc"],
+  "env": { "OIDC_ISSUER": "http://localhost:8080/default" }
+}</code></pre>
+<p>Check the files with <code>flisk config verify</code>, and see the start order with <code>flisk up --dry-run</code>. The image's own port is published on <code>127.0.0.1</code> at the same number, which is why the issuer is <code>localhost:8080</code> for your browser and for your local processes.</p>
+
+<h2 id="use-it-in-automated-tests">Use it in automated tests</h2>
+<ul>
+<li><strong>Keep the issuer stable.</strong> Tokens contain <code>iss</code>, and your API compares it with its configured issuer string. One typo in the scheme, port or trailing path is enough to reject every token.</li>
+<li><strong>Test the failures too.</strong> Request a token for a user without the expected group and check that your API answers 403. A mock that always succeeds only proves the happy path.</li>
+<li><strong>Do not reuse it for production.</strong> It trusts everyone by design.</li>
+<li><strong>Short expiry for expiry tests.</strong> The server can be configured with a JSON file for token lifetime and claims; see its README for the exact setting, and the <a href="/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/">clock skew article</a> for what your API should do on <code>exp</code>.</li>
+</ul>
+<h2 id="common-failures">Common failures</h2>
+<ul>
+<li><strong>Issuer differs by one character.</strong> <code>http://localhost:8080/default/</code> with a trailing slash is not the same string as <code>http://localhost:8080/default</code>. Copy the <code>issuer</code> value from the discovery document instead of typing it.</li>
+<li><strong>The API runs in a container.</strong> From inside another container, <code>localhost</code> is that container itself, so it cannot fetch the keys. If the API is a local process this does not apply; otherwise the issuer your API reaches must also be the issuer that ends up in the token, and that is hard to arrange for two different host names.</li>
+<li><strong>Keys change on restart.</strong> The server generates its signing keys when it starts. An API that cached the key set from the previous run rejects new tokens until it fetches the keys again, so restart both together or let the API refresh on an unknown key id.</li>
+<li><strong>Browser blocks the redirect.</strong> If the callback never loads, check that your app is actually listening on the port in the redirect URI. The <a href="/@odykyi/auth-local-dev/oauth-redirect-uri-mismatch-localhost/">redirect URI article</a> covers the usual mistakes.</li>
+</ul>
+<p>For a login flow with real users, roles and a console, use <a href="/@odykyi/auth-local-dev/keycloak-for-local-development/">Keycloak</a>. For tests, the mock is faster to start and has nothing to seed.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is a mock OIDC server?</summary><p>A small server that implements the OpenID Connect endpoints and signs tokens with its own keys, so an app can run a full sign-in flow in tests without a real identity provider.</p></details><details><summary>What issuer URL does mock-oauth2-server use?</summary><p>http://localhost:8080/&lt;name&gt;, where the first path segment is the issuer name. The server creates that issuer on the first request.</p></details><details><summary>Does the mock server check client id and secret?</summary><p>No. Any client id and secret work, so do not use it to test client authentication.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Authentication in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/auth-local-dev/keycloak-for-local-development/"><span class="lbl">Guide</span><b>How to run Keycloak for local development with a realm import</b><span>A real identity provider on your laptop, seeded the same way every time, so nobody clicks through the admin console to get a test user.</span></a><a href="/@odykyi/auth-local-dev/jwt-expired-or-not-yet-valid-clock-skew/"><span class="lbl">Guide</span><b>JWT expired or not yet valid in local dev: check clock skew</b><span>The token was issued a second ago and the verifier calls it expired. The signature is fine; the clocks are not.</span></a><a href="/@odykyi/auth-local-dev/share-jwt-secret-between-local-services/"><span class="lbl">Guide</span><b>How to share a JWT secret between local services safely</b><span>A token signed by the auth service must verify in every other service. The easy way to break that is two different secrets.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
