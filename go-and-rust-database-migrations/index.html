@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Database migrations for Go and Rust: goose and sqlx locally</title>
+<meta name="description" content="Run schema migrations for a Go or Rust service against local Postgres with goose or sqlx: file layout, commands, offline sqlx builds and a one-shot job in Flisk.">
+<meta name="keywords" content="goose migrations go, sqlx migrate rust, go postgres migrations local, sqlx offline mode, run migrations before api starts">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Database migrations for Go and Rust: goose and sqlx locally">
+<meta property="og:description" content="Run schema migrations for a Go or Rust service against local Postgres with goose or sqlx: file layout, commands, offline sqlx builds and a one-shot job in Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Database migrations for Go and Rust: goose and sqlx locally","description":"Run schema migrations for a Go or Rust service against local Postgres with goose or sqlx: file layout, commands, offline sqlx builds and a one-shot job in Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/","keywords":"goose migrations go, sqlx migrate rust, go postgres migrations local, sqlx offline mode, run migrations before api starts","wordCount":794,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"Database migrations for Go and Rust: goose and sqlx locally","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/go-and-rust-database-migrations/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should migrations run when the API starts?","acceptedAnswer":{"@type":"Answer","text":"Prefer a separate step that finishes before the API starts. It fails fast, it does not race between replicas, and it is easy to rerun by itself."}},{"@type":"Question","name":"Why does my sqlx build fail in Docker?","acceptedAnswer":{"@type":"Answer","text":"The query macros need a database at compile time. Run cargo sqlx prepare, commit the .sqlx folder, and build with SQLX_OFFLINE=true."}},{"@type":"Question","name":"Does Flisk have a goose or sqlx migrator type?","acceptedAnswer":{"@type":"Answer","text":"The documented migrator type names Prisma, Drizzle, Atlas and dbmate. For goose or sqlx use a bring-your-own job with the restart policy set to no."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>Database migrations for Go and Rust: goose and sqlx locally</h1><p class="dek">Go and Rust each have a good migration tool. The part that goes wrong is when the migrations run, and who runs them.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#goose-for-go">Goose for Go</a></li><li><a href="#sqlx-for-rust">sqlx for Rust</a></li><li><a href="#run-migrations-as-their-own-step-with-flisk">Run migrations as their own step with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>For Go, use goose: SQL files with up and down sections, run by the <code>goose</code> command. For Rust, use sqlx: numbered SQL files, run by <code>sqlx migrate run</code> or embedded in the binary with the <code>sqlx::migrate</code> macro. In both cases run migrations as a separate step before the API starts, not from the API's own start script, so a failed migration stops the start and a slow one does not look like a hung server.</p>
+
+<h2 id="goose-for-go">Goose for Go</h2>
+<pre><code>go install github.com/pressly/goose/v3/cmd/goose@latest
+mkdir migrations
+goose -dir migrations create create_orders sql</code></pre>
+<p>That writes a file such as <code>migrations/20261114120000_create_orders.sql</code>. Fill in both directions:</p>
+<pre><code>-- +goose Up
+CREATE TABLE orders (
+  id bigserial PRIMARY KEY,
+  total_cents integer NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- +goose Down
+DROP TABLE orders;</code></pre>
+<p>Run it against the local database:</p>
+<pre><code>export DATABASE_URL='postgres://app:app@localhost:5432/app?sslmode=disable'
+goose -dir migrations postgres "$DATABASE_URL" up
+goose -dir migrations postgres "$DATABASE_URL" status
+goose -dir migrations postgres "$DATABASE_URL" down   # reverts one</code></pre>
+<p>Recent goose versions also read <code>GOOSE_DRIVER</code>, <code>GOOSE_DBSTRING</code> and <code>GOOSE_MIGRATION_DIR</code> from the environment, so the command can shrink to <code>goose up</code>. You can also embed the SQL files with <code>go:embed</code> and call goose as a library at startup. That is handy for tests, and for production you still want a separate job.</p>
+
+<h2 id="sqlx-for-rust">sqlx for Rust</h2>
+<pre><code>cargo install sqlx-cli --no-default-features --features rustls,postgres
+export DATABASE_URL='postgres://app:app@localhost:5432/app'
+sqlx database create
+sqlx migrate add -r create_orders   # -r makes an up and a down file
+sqlx migrate run
+sqlx migrate info</code></pre>
+<p>Edit the generated <code>.up.sql</code> and <code>.down.sql</code> files, then run them. sqlx records applied migrations in a <code>_sqlx_migrations</code> table, along with a checksum, so editing a file that has already run is an error. Write a new migration instead.</p>
+<p>The <code>query</code> macros check your SQL against a live database at compile time, which means the build needs <code>DATABASE_URL</code>. For builds without a database, such as a Docker build or CI, run <code>cargo sqlx prepare</code> while the database is up, commit the <code>.sqlx</code> folder it writes, and build with <code>SQLX_OFFLINE=true</code>. Forgetting this is the usual reason a Rust image build fails with a connection error.</p>
+
+<h2 id="run-migrations-as-their-own-step-with-flisk">Run migrations as their own step with Flisk</h2>
+<p>Flisk's own rule for new examples is that migrations run in an explicit one-shot resource, not from an API start script. Its documented <code>migrator</code> type covers Prisma, Drizzle, Atlas and dbmate. goose and sqlx are not on that list, so the honest way to run them on the Docker route is a bring-your-own job with the restart policy turned off:</p>
+<pre><code>flisk resource migrate --type bring-your-own --stack app --dockerfile ./Dockerfile --restart no --yes</code></pre>
+<p>The Flisk docs state that a service listing such a job in <code>dependsOn</code> starts only after the job exited 0, and that a failed job stops the services after it. They show it working with a dbmate image; the repository's <code>examples/byo-jobs</code> folder is the runnable version. For goose, the Dockerfile is a small image that has the <code>goose</code> binary and your <code>migrations</code> folder:</p>
+<pre><code>FROM golang:1.23-bookworm AS tool
+RUN CGO_ENABLED=0 go install github.com/pressly/goose/v3/cmd/goose@latest
+
+FROM debian:bookworm-slim
+COPY --from=tool /go/bin/goose /usr/local/bin/goose
+COPY migrations /migrations
+ENTRYPOINT ["/bin/sh", "-c", "goose -dir /migrations postgres \"$DATABASE_URL\" up"]</code></pre>
+<p>Give the job the database address in its <code>env</code> block, for example <code>"env": { "DATABASE_URL": "${DATABASE_URL}" }</code>, which Flisk expands from the project <code>.env</code>, and add <code>"dependsOn": ["postgres"]</code> so Postgres is up first. The <code>.env</code> that <code>flisk project</code> writes has a <code>DATABASE_URL</code> that points at the host <code>postgres</code> on the Docker network. Then make the API wait with <code>"dependsOn": ["migrate"]</code>. A sqlx job has the same shape, with <code>sqlx-cli</code> in the image and <code>sqlx migrate run</code> as the command. This is the pattern in <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">run database migrations in local dev with a migrator</a>, adapted to the Go and Rust tools.</p>
+<p>If you run your services as local processes and only Postgres in Docker, a local process reaches the database at <code>localhost</code>, not by service name, and you run <code>goose</code> or <code>sqlx</code> from your own shell against that address.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Migrating from the API start.</strong> Two replicas race, and a failure looks like a crash loop. Use a job and a dependency.</li>
+<li><strong>Editing an applied migration.</strong> sqlx rejects it by checksum, and goose will not rerun it. Add a new one.</li>
+<li><strong>A job that restarts forever.</strong> A container that exits 0 with an <code>unless-stopped</code> policy starts again. Set the restart policy to <code>no</code>.</li>
+<li><strong>Different databases.</strong> Check that the migrate step and the API read the same <code>DATABASE_URL</code>. See <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars locally</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>When a Rust service shares data with a Python API, the same migration job serves both: see <a href="/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/">a Rust service next to a Python API</a>. For several Go modules that share a schema package, read <a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/">Go workspaces for several services</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should migrations run when the API starts?</summary><p>Prefer a separate step that finishes before the API starts. It fails fast, it does not race between replicas, and it is easy to rerun by itself.</p></details><details><summary>Why does my sqlx build fail in Docker?</summary><p>The query macros need a database at compile time. Run cargo sqlx prepare, commit the .sqlx folder, and build with SQLX_OFFLINE=true.</p></details><details><summary>Does Flisk have a goose or sqlx migrator type?</summary><p>The documented migrator type names Prisma, Drizzle, Atlas and dbmate. For goose or sqlx use a bring-your-own job with the restart policy set to no.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/rust-service-next-to-a-python-api/"><span class="lbl">Guide</span><b>How to run a Rust service next to a Python API locally</b><span>Python is quick to change and Rust is quick to run. Putting a hot path in Rust and keeping the rest in Python works, once the two processes find each other.</span></a><a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/"><span class="lbl">Guide</span><b>Go workspaces (go.work) for a repo with several services</b><span>One module per service keeps builds small. A workspace file lets those modules see each other&#39;s local code while you edit, with nothing to undo before you commit.</span></a><a href="/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/"><span class="lbl">Guide</span><b>How to cross-compile a Go service for Linux containers</b><span>Go cross-compiles with two environment variables. The real questions are cgo, which architecture your servers use, and how to keep the image small.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to cross-compile a Go service for Linux containers</title>
+<meta name="description" content="Build a Go binary for linux/amd64 or linux/arm64 from a Mac: GOOS and GOARCH, CGO_ENABLED=0, a multi-stage Dockerfile and a multi-platform image.">
+<meta name="keywords" content="go cross compile, GOOS GOARCH linux, go docker multi stage, go build for arm64, CGO_ENABLED=0">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to cross-compile a Go service for Linux containers">
+<meta property="og:description" content="Build a Go binary for linux/amd64 or linux/arm64 from a Mac: GOOS and GOARCH, CGO_ENABLED=0, a multi-stage Dockerfile and a multi-platform image.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to cross-compile a Go service for Linux containers","description":"Build a Go binary for linux/amd64 or linux/arm64 from a Mac: GOOS and GOARCH, CGO_ENABLED=0, a multi-stage Dockerfile and a multi-platform image.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/","keywords":"go cross compile, GOOS GOARCH linux, go docker multi stage, go build for arm64, CGO_ENABLED=0","wordCount":727,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to cross-compile a Go service for Linux containers","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What GOARCH should I use on an Apple Silicon Mac?","acceptedAnswer":{"@type":"Answer","text":"Use arm64 for containers you run locally, since Docker runs linux/arm64 natively there. Use amd64 for servers or runners that are x86-64."}},{"@type":"Question","name":"Why does my Go cross build fail with a cgo error?","acceptedAnswer":{"@type":"Answer","text":"Something in your dependencies needs cgo, and there is no C compiler for the target. Switch to a pure Go package, or build inside a container for the target."}},{"@type":"Question","name":"Does Flisk cross-compile Go for other platforms?","acceptedAnswer":{"@type":"Answer","text":"No. The image it generates builds for the machine you run on. For another platform use your own Dockerfile as a bring-your-own resource."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>How to cross-compile a Go service for Linux containers</h1><p class="dek">Go cross-compiles with two environment variables. The real questions are cgo, which architecture your servers use, and how to keep the image small.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-one-line-cross-build">The one-line cross build</a></li><li><a href="#why-cgo-is-the-catch">Why cgo is the catch</a></li><li><a href="#a-multi-stage-dockerfile-that-cross-compiles">A multi-stage Dockerfile that cross-compiles</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Set <code>GOOS=linux</code> and <code>GOARCH</code> to the target architecture, turn cgo off with <code>CGO_ENABLED=0</code>, and run <code>go build</code>. You get a static Linux binary from your Mac with no extra toolchain. Then copy that binary into a small image, or build it inside the image with a multi-stage Dockerfile so that nobody depends on a developer's laptop.</p>
+
+<h2 id="the-one-line-cross-build">The one-line cross build</h2>
+<pre><code>CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bin/app .
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o bin/app-amd64 .
+file bin/app</code></pre>
+<p><code>-trimpath</code> removes local paths from the binary, and <code>-s -w</code> drops the symbol table and debug data, which shrinks the file and also stops a debugger from reading it (see <a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/">debugging Go with Delve</a>). Do not use those flags for a binary you want to debug.</p>
+<p>Which <code>GOARCH</code>? On an Apple Silicon Mac, Docker runs <code>linux/arm64</code> containers natively, so <code>arm64</code> runs fast for local work. Many servers and CI runners are <code>amd64</code>. If you build for one and run on the other, the container fails with an "exec format error" or runs through slow emulation.</p>
+
+<h2 id="why-cgo-is-the-catch">Why cgo is the catch</h2>
+<p>Cross-compilation only stays this simple while the program is pure Go. With <code>CGO_ENABLED=1</code> the build needs a C compiler for the target. Common triggers are the <code>mattn/go-sqlite3</code> driver, some image libraries, and the <code>net</code> or <code>os/user</code> packages when they fall back to the system resolver. For SQLite there is a pure Go alternative, <code>modernc.org/sqlite</code>. Setting <code>CGO_ENABLED=0</code> makes the build fail loudly if something needs cgo, which is better than discovering it at runtime.</p>
+
+<h2 id="a-multi-stage-dockerfile-that-cross-compiles">A multi-stage Dockerfile that cross-compiles</h2>
+<p>Run the compiler on the build machine's own architecture, and only target the other one. That avoids emulation during the build.</p>
+<pre><code>FROM --platform=$BUILDPLATFORM golang:1.23-bookworm AS build
+ARG TARGETOS
+ARG TARGETARCH
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags="-s -w" -o /out/app .
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/app /app
+USER nonroot
+ENTRYPOINT ["/app"]</code></pre>
+<p>Copying <code>go.mod</code> and <code>go.sum</code> before the source means a code change does not download modules again. The final image has no shell and no package manager, which is a small, safe base for a static binary. If your program makes TLS calls you need CA certificates; the distroless static image includes them, and a bare <code>scratch</code> image does not.</p>
+<p>Build for both architectures in one command with Buildx:</p>
+<pre><code>docker buildx build --platform linux/amd64,linux/arm64 -t registry.example.com/orders:dev --push .</code></pre>
+<p>Pushing is needed because the local image store only holds one platform unless the containerd image store is enabled. For a local test, build one platform and use <code>--load</code>.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>For a Go service created by <code>flisk resource orders --language go</code>, Flisk generates the image itself. According to the Flisk docs it is a <code>golang:1.23</code> build stage using <code>CGO_ENABLED=0 go build</code>, a test stage that runs <code>go test ./...</code>, and a small <code>debian:bookworm-slim</code> production stage with a health check. It builds for the machine you run on, which is what you want for local development, and it does not target other platforms. If you need a specific platform or a distroless final image, write your own Dockerfile and register it:</p>
+<pre><code>flisk resource orders --type bring-your-own --stack app --dockerfile ./Dockerfile --yes</code></pre>
+<p>That route is the one in <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">run an existing Dockerfile in a local dev stack</a>. A bring-your-own container has no live reload, because Flisk does not generate its image. Use the Go provider for the edit loop and your own Dockerfile for checking the image you will ship.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Exec format error.</strong> The binary and the container architecture disagree. Check with <code>docker image inspect --format '{{.Architecture}}' &lt;image&gt;</code>.</li>
+<li><strong>Time zone data.</strong> A static image may lack <code>tzdata</code>. Import <code>time/tzdata</code> in your program if you load time zones by name.</li>
+<li><strong>Different Go versions.</strong> The Go in your Dockerfile and the one in <code>go.mod</code> can disagree. Recent Go versions can download a matching toolchain when <code>GOTOOLCHAIN</code> allows it.</li>
+<li><strong>Debug flags in the image.</strong> Keep the stripped build for the production image and a debuggable build for development.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>The Rust side of the same problem is harder, because linking for another target needs a linker: <a href="/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/">cross-compile a Rust service for a Linux container</a>. For the Go repo layout around these builds, see <a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/">Go workspaces for several services</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What GOARCH should I use on an Apple Silicon Mac?</summary><p>Use arm64 for containers you run locally, since Docker runs linux/arm64 natively there. Use amd64 for servers or runners that are x86-64.</p></details><details><summary>Why does my Go cross build fail with a cgo error?</summary><p>Something in your dependencies needs cgo, and there is no C compiler for the target. Switch to a pure Go package, or build inside a container for the target.</p></details><details><summary>Does Flisk cross-compile Go for other platforms?</summary><p>No. The image it generates builds for the machine you run on. For another platform use your own Dockerfile as a bring-your-own resource.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/"><span class="lbl">Guide</span><b>How to cross-compile a Rust service for a Linux container</b><span>Rust needs a linker for the target, so unlike Go it is not two environment variables. There are three honest routes, and one is a plain Docker build.</span></a><a href="/@odykyi/go-and-rust-dev-setup/go-workspaces-for-several-services/"><span class="lbl">Guide</span><b>Go workspaces (go.work) for a repo with several services</b><span>One module per service keeps builds small. A workspace file lets those modules see each other&#39;s local code while you edit, with nothing to undo before you commit.</span></a><a href="/@odykyi/go-and-rust-dev-setup/debug-go-with-delve-locally/"><span class="lbl">Guide</span><b>How to debug a Go service with Delve while it runs locally</b><span>A print statement gets you far, but a breakpoint in a handler is quicker once the bug depends on state. Delve is the Go debugger, and it needs a binary that still has its debug data.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to speed up Cargo builds in local development</title>
+<meta name="description" content="Cut Rust compile times in development: cargo check, a leaner dev profile, sccache, a faster linker and one shared target folder, plus Docker cache mounts.">
+<meta name="keywords" content="cargo build slow, speed up rust compile, sccache, rust dev profile, cargo watch slow">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to speed up Cargo builds in local development">
+<meta property="og:description" content="Cut Rust compile times in development: cargo check, a leaner dev profile, sccache, a faster linker and one shared target folder, plus Docker cache mounts.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to speed up Cargo builds in local development","description":"Cut Rust compile times in development: cargo check, a leaner dev profile, sccache, a faster linker and one shared target folder, plus Docker cache mounts.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/","keywords":"cargo build slow, speed up rust compile, sccache, rust dev profile, cargo watch slow","wordCount":781,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to speed up Cargo builds in local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is cargo check faster than cargo build?","acceptedAnswer":{"@type":"Answer","text":"Yes. It skips code generation, so it finishes sooner. It still reports type and borrow errors, which is what you need while editing."}},{"@type":"Question","name":"Does sccache speed up incremental builds?","acceptedAnswer":{"@type":"Answer","text":"Mostly not. It helps with dependencies and clean builds. Incremental compilation of your own crate is turned off while sccache wraps rustc."}},{"@type":"Question","name":"Does Flisk cache Rust builds?","acceptedAnswer":{"@type":"Answer","text":"In Docker mode the generated Dockerfile uses BuildKit cache mounts for the cargo registry and target directory. In local mode it just runs your command, so Cargo's own cache applies."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>How to speed up Cargo builds in local development</h1><p class="dek">A cold Rust build is slow for good reasons. Most of the daily wait is avoidable if you stop rebuilding what has not changed.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#measure-first">Measure first</a></li><li><a href="#change-how-you-build-while-editing">Change how you build while editing</a></li><li><a href="#cache-compiled-work">Cache compiled work</a></li><li><a href="#speed-up-the-link-step">Speed up the link step</a></li><li><a href="#share-one-target-folder-with-care">Share one target folder, with care</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>The fastest wins are using <code>cargo check</code> while you type, keeping debug builds out of release mode, and caching compiled dependencies so that only your own crate is rebuilt. After that, a shared compiler cache and a faster linker help on larger projects. Start by finding out where the time goes, because the cure for slow compiling differs from the cure for slow linking.</p>
+
+<h2 id="measure-first">Measure first</h2>
+<p>Run a clean build with timings and open the report it writes:</p>
+<pre><code>cargo clean
+cargo build --timings</code></pre>
+<p>The report shows which crates took longest and how much ran in parallel. If one dependency dominates, look at its feature flags. If your own crate dominates, the steps below matter more. For a second build after a one-line change, the time is mostly your crate plus the link step, so that is the number to watch for the edit loop.</p>
+
+<h2 id="change-how-you-build-while-editing">Change how you build while editing</h2>
+<ul>
+<li><strong>Use <code>cargo check</code>.</strong> It type-checks without generating machine code, so it returns much sooner than <code>cargo build</code>. Run it in a second terminal, or let rust-analyzer do it. Build or run only when you need the program.</li>
+<li><strong>Stay in the dev profile.</strong> <code>--release</code> turns on optimisation and costs far more time per build. Use it for benchmarks, not for the edit loop.</li>
+<li><strong>Write less debug information.</strong> In <code>Cargo.toml</code>:</li>
+</ul>
+<pre><code>[profile.dev]
+debug = "line-tables-only"   # keeps readable backtraces, drops variable info
+
+[profile.dev.package."*"]
+opt-level = 1                # optimise dependencies, keep your crate fast to build</code></pre>
+<p>The second block is a trade: it makes the first build of dependencies slower, and it can make a heavy dependency (a parser, an image decoder) run quicker while you test. Remove it if you do not need it. Note that <code>line-tables-only</code> removes the variable view in a debugger, so switch it back when you are stepping through code, as described in <a href="/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/">debugging Rust with LLDB</a>.</p>
+
+<h2 id="cache-compiled-work">Cache compiled work</h2>
+<p>sccache caches the output of <code>rustc</code>, so a dependency you compiled in another project or branch is reused.</p>
+<pre><code>cargo install sccache --locked
+export RUSTC_WRAPPER=sccache
+cargo build
+sccache --show-stats</code></pre>
+<p>It does not cache the final link, and incremental compilation of your own crate is switched off while it wraps <code>rustc</code>, so it pays off for dependency-heavy projects and for CI, and less for a single crate that you edit all day.</p>
+
+<h2 id="speed-up-the-link-step">Speed up the link step</h2>
+<p>For small edits the linker is often the longest part. On Linux, <code>mold</code> or <code>lld</code> is much quicker than the default GNU linker. With mold installed, a <code>.cargo/config.toml</code> in the project is enough:</p>
+<pre><code>[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]</code></pre>
+<p>On a Mac the system linker is already acceptable for most projects, so measure before you change it.</p>
+
+<h2 id="share-one-target-folder-with-care">Share one target folder, with care</h2>
+<p>Each Cargo project builds into its own <code>target</code> folder. If you keep several services in one repo, put them in one Cargo workspace so that they share a <code>target</code> and a lock file, and a dependency compiles once. Separate projects can share a folder through <code>CARGO_TARGET_DIR</code>, but Cargo takes a lock on it, and a second build waits with the message "Blocking waiting for file lock". Two services building at once then queue instead of running in parallel.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk does not compile your code faster. It decides when and how the build runs. With the local scaffold the command is <code>cargo run</code> and there is no Docker:</p>
+<pre><code>flisk resource billing --language rust --local --stack app --yes
+flisk up --only billing</code></pre>
+<p>Set environment variables for the process in the <code>env</code> field of <code>service.json</code>, for example <code>"env": { "RUSTC_WRAPPER": "sccache" }</code>, and make sure the tool is installed, because Flisk refuses to start a service whose program is missing from the machine. On the Docker route, the generated Dockerfile uses BuildKit cache mounts for the cargo registry and the <code>target</code> directory, so changing a source file recompiles the crate and not every dependency, as the Flisk Rust notes describe. That Docker route does not reload on save; Tilt rebuilds the image. The full comparison is in <a href="/@odykyi/stack-recipes/rust-api-local-dev/">Rust API local dev</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Changing <code>RUSTFLAGS</code> or the toolchain.</strong> Either one invalidates cached builds, and the next build is cold. Pin both in the repo.</li>
+<li><strong>Pruning Docker build cache.</strong> It also removes cache mounts. If builds suddenly turn cold, check <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a> for what you pruned.</li>
+<li><strong>A huge <code>target</code> folder.</strong> It grows with every toolchain and profile. <code>cargo clean</code> reclaims it, at the price of a cold build.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Faster builds help most when saves trigger them automatically: see <a href="/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/">reload on save for Go</a> for the watcher habit, and <a href="/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/">cross-compiling Rust for a Linux container</a> when the build has to leave your Mac.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is cargo check faster than cargo build?</summary><p>Yes. It skips code generation, so it finishes sooner. It still reports type and borrow errors, which is what you need while editing.</p></details><details><summary>Does sccache speed up incremental builds?</summary><p>Mostly not. It helps with dependencies and clean builds. Incremental compilation of your own crate is turned off while sccache wraps rustc.</p></details><details><summary>Does Flisk cache Rust builds?</summary><p>In Docker mode the generated Dockerfile uses BuildKit cache mounts for the cargo registry and target directory. In local mode it just runs your command, so Cargo&#39;s own cache applies.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/"><span class="lbl">Guide</span><b>How to debug a Rust service with LLDB and VS Code</b><span>The Rust compiler catches a lot before you run anything. For the bugs that remain, a debugger and good logs cover most of what you need.</span></a><a href="/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/"><span class="lbl">Guide</span><b>How to cross-compile a Rust service for a Linux container</b><span>Rust needs a linker for the target, so unlike Go it is not two environment variables. There are three honest routes, and one is a plain Docker build.</span></a><a href="/@odykyi/go-and-rust-dev-setup/reload-go-on-save-air-reflex-watchexec/"><span class="lbl">Guide</span><b>Air vs reflex vs watchexec: reload a Go app on save</b><span>Go has no built-in watcher. Three small tools fill the gap, and they differ in one detail that decides whether your API is down while it compiles.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to cross-compile a Rust service for a Linux container</title>
+<meta name="description" content="Build a Rust binary for Linux from a Mac: add a musl target, pick a linker (cargo-zigbuild, cross or a Docker build), and copy the result into a small image.">
+<meta name="keywords" content="rust cross compile linux, cargo zigbuild, rust musl target, cross rs, rust docker multi stage">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to cross-compile a Rust service for a Linux container">
+<meta property="og:description" content="Build a Rust binary for Linux from a Mac: add a musl target, pick a linker (cargo-zigbuild, cross or a Docker build), and copy the result into a small image.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to cross-compile a Rust service for a Linux container","description":"Build a Rust binary for Linux from a Mac: add a musl target, pick a linker (cargo-zigbuild, cross or a Docker build), and copy the result into a small image.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/","keywords":"rust cross compile linux, cargo zigbuild, rust musl target, cross rs, rust docker multi stage","wordCount":718,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Go and Rust local development","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to cross-compile a Rust service for a Linux container","item":"https://pages.flisk.si/@odykyi/go-and-rust-dev-setup/cross-compile-rust-for-linux-containers/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use musl or glibc for a Rust container?","acceptedAnswer":{"@type":"Answer","text":"Use musl for a static binary that runs in scratch or distroless images, and glibc when a dependency needs it or allocation speed matters. Test the choice with your own workload."}},{"@type":"Question","name":"Can I cross-compile Rust from a Mac to Linux without Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. Add a Linux target with rustup and use cargo-zigbuild, which uses Zig as the linker."}},{"@type":"Question","name":"Does Flisk build Rust for other platforms?","acceptedAnswer":{"@type":"Answer","text":"No. The generated image builds for the host architecture. Use your own Dockerfile as a bring-your-own resource when you need another target."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/go-and-rust-dev-setup/">Go and Rust local development</a></div>
+<section class="hero"><div><div class="lbl">Go and Rust local development</div><h1>How to cross-compile a Rust service for a Linux container</h1><p class="dek">Rust needs a linker for the target, so unlike Go it is not two environment variables. There are three honest routes, and one is a plain Docker build.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-rust-is-harder-than-go">Why Rust is harder than Go</a></li><li><a href="#route-1-build-in-a-container">Route 1: build in a container</a></li><li><a href="#route-2-cargo-zigbuild">Route 2: cargo-zigbuild</a></li><li><a href="#route-3-cross">Route 3: cross</a></li><li><a href="#what-flisk-does-here">What Flisk does here</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>The simplest reliable way to get a Linux binary from a Mac is to build inside a Linux container, with a multi-stage Dockerfile. If you want a native cross build on your machine, add a target with <code>rustup</code> and use <code>cargo-zigbuild</code> as the linker, or <code>cross</code>, which runs the build in a container for you. Pick one route per project and keep it in the repo, so that a teammate gets the same binary.</p>
+
+<h2 id="why-rust-is-harder-than-go">Why Rust is harder than Go</h2>
+<p><code>rustc</code> can emit code for another target, but the final link step needs a linker and C libraries for that target. Go bundles its own linker and standard library, so two variables are enough. In Rust you choose among targets such as:</p>
+<ul>
+<li><code>x86_64-unknown-linux-gnu</code> and <code>aarch64-unknown-linux-gnu</code>: dynamic, link against glibc.</li>
+<li><code>x86_64-unknown-linux-musl</code> and <code>aarch64-unknown-linux-musl</code>: static, link against musl, so the binary runs on any Linux image, including <code>scratch</code>.</li>
+</ul>
+<p>musl is convenient for tiny images, but two things bite. The default memory allocator in musl is slower under heavy allocation than glibc's, and crates that wrap C libraries (OpenSSL is the usual one) may not build. Choose <code>rustls</code> in place of OpenSSL for HTTP clients and databases, and you avoid most trouble.</p>
+
+<h2 id="route-1-build-in-a-container">Route 1: build in a container</h2>
+<p>This needs no local cross toolchain, and it is the same on every machine.</p>
+<pre><code>FROM rust:1-slim-bookworm AS build
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+COPY src ./src
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release &amp;&amp; cp target/release/app /out-app
+
+FROM debian:bookworm-slim
+COPY --from=build /out-app /usr/local/bin/app
+USER 10001
+ENTRYPOINT ["app"]</code></pre>
+<p>The binary is copied out of the cache-mounted <code>target</code> folder in the same step, because a cache mount is not part of the image. On an Apple Silicon Mac this produces a <code>linux/arm64</code> image; add <code>--platform linux/amd64</code> to build for x86-64 under emulation, which is slow for Rust but works. For multi-platform pushes use <code>docker buildx build --platform linux/amd64,linux/arm64</code>.</p>
+
+<h2 id="route-2-cargo-zigbuild">Route 2: cargo-zigbuild</h2>
+<p>This uses the Zig compiler as the linker, so you can target Linux from macOS without Docker.</p>
+<pre><code>rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
+brew install zig
+cargo install cargo-zigbuild --locked
+cargo zigbuild --release --target x86_64-unknown-linux-musl
+ls target/x86_64-unknown-linux-musl/release/</code></pre>
+<p>Copy the binary into a <code>scratch</code> or distroless image. For glibc targets, <code>cargo zigbuild</code> accepts a glibc version suffix on the target, such as <code>x86_64-unknown-linux-gnu.2.28</code>, to keep the binary compatible with older distributions.</p>
+
+<h2 id="route-3-cross">Route 3: cross</h2>
+<p><code>cross</code> is a drop-in for <code>cargo</code> that runs the build in a prepared container image.</p>
+<pre><code>cargo install cross --locked
+cross build --release --target aarch64-unknown-linux-gnu</code></pre>
+<p>It needs a working Docker or Podman, and it is the least setup if you already run containers. It is slower than a native build, and crates with a build script that needs host tools can need extra configuration.</p>
+
+<h2 id="what-flisk-does-here">What Flisk does here</h2>
+<p>For a Rust resource made by <code>flisk resource billing --language rust</code>, Flisk writes a <code>Cargo.toml</code> whose binary is named <code>app</code> (the comment in the file says the image copies the release binary by that name), and it generates the image: a <code>rust:1-slim-bookworm</code> build stage with BuildKit cache mounts, a <code>test</code> stage running <code>cargo test</code>, and a <code>debian:bookworm-slim</code> production stage with a health check. It builds for the host architecture and does not cross-compile. If you keep a Dockerfile like Route 1 with an explicit platform or a musl target, register it as a bring-your-own resource, as shown in <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">run an existing Dockerfile in a local dev stack</a>:</p>
+<pre><code>flisk resource billing --type bring-your-own --stack app --dockerfile ./Dockerfile --yes</code></pre>
+<p>Keep the binary name <code>app</code> if you reuse the generated layout, and make the container listen on <code>0.0.0.0</code> and on <code>PORT</code>. The local-process scaffold binds <code>localhost</code>, which works for a process and not for a container.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Linker not found.</strong> The error mentions <code>cc</code> or <code>x86_64-linux-gnu-gcc</code>. You added a target but no linker. Use one of the routes above.</li>
+<li><strong>OpenSSL on musl.</strong> Prefer rustls features of your HTTP and database crates.</li>
+<li><strong>Everything rebuilds.</strong> A different target gets its own folder under <code>target</code>, so the first cross build is cold. Cache it in CI.</li>
+<li><strong>Huge images.</strong> Do not ship the build stage. Copy only the binary into the last stage.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Keep local builds quick with <a href="/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/">speed up Cargo builds in development</a>, and compare the Go route in <a href="/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/">cross-compile a Go service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use musl or glibc for a Rust container?</summary><p>Use musl for a static binary that runs in scratch or distroless images, and glibc when a dependency needs it or allocation speed matters. Test the choice with your own workload.</p></details><details><summary>Can I cross-compile Rust from a Mac to Linux without Docker?</summary><p>Yes. Add a Linux target with rustup and use cargo-zigbuild, which uses Zig as the linker.</p></details><details><summary>Does Flisk build Rust for other platforms?</summary><p>No. The generated image builds for the host architecture. Use your own Dockerfile as a bring-your-own resource when you need another target.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Go and Rust local development</span></div>
+<div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/speed-up-cargo-builds-in-dev/"><span class="lbl">Guide</span><b>How to speed up Cargo builds in local development</b><span>A cold Rust build is slow for good reasons. Most of the daily wait is avoidable if you stop rebuilding what has not changed.</span></a><a href="/@odykyi/go-and-rust-dev-setup/cross-compile-go-for-linux-containers/"><span class="lbl">Guide</span><b>How to cross-compile a Go service for Linux containers</b><span>Go cross-compiles with two environment variables. The real questions are cgo, which architecture your servers use, and how to keep the image small.</span></a><a href="/@odykyi/go-and-rust-dev-setup/debug-rust-service-with-lldb/"><span class="lbl">Guide</span><b>How to debug a Rust service with LLDB and VS Code</b><span>The Rust compiler catches a lot before you run anything. For the bugs that remain, a debugger and good logs cover most of what you need.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
