@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Which services to run natively on a Mac and which in Docker</title>
+<meta name="description" content="Run fast-changing app code as native processes and keep databases, odd dependencies and production-like images in Docker. A rule, with a service.json example.">
+<meta name="keywords" content="run node natively instead of docker mac, docker vs native development mac, local processes and docker database, docker apple silicon gpu">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Which services to run natively on a Mac and which in Docker">
+<meta property="og:description" content="Run fast-changing app code as native processes and keep databases, odd dependencies and production-like images in Docker. A rule, with a service.json example.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Which services to run natively on a Mac and which in Docker","description":"Run fast-changing app code as native processes and keep databases, odd dependencies and production-like images in Docker. A rule, with a service.json example.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/","keywords":"run node natively instead of docker mac, docker vs native development mac, local processes and docker database, docker apple silicon gpu","wordCount":708,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker on Mac: speed and resources","item":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/"},{"@type":"ListItem","position":3,"name":"Which services to run natively on a Mac and which in Docker","item":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is it better to run Node natively than in Docker on a Mac?","acceptedAnswer":{"@type":"Answer","text":"For code you edit constantly, usually yes: reload is immediate and there is no file sharing cost. Keep databases and Linux specific dependencies in containers."}},{"@type":"Question","name":"Can Docker use the Mac GPU?","acceptedAnswer":{"@type":"Answer","text":"No. Containers on macOS cannot reach the Apple GPU through Metal. Run model servers such as Ollama as native processes to use it."}},{"@type":"Question","name":"Can Flisk run some services natively and a database in Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. Services with a command run as local processes, and a service with only an image, such as Postgres, runs with docker run. A service built from a Dockerfile cannot be in the same project."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-on-mac-performance/">Docker on Mac: speed and resources</a></div>
+<section class="hero"><div><div class="lbl">Docker on Mac: speed and resources</div><h1>Which services to run natively on a Mac and which in Docker</h1><p class="dek">On a Mac, containers cost memory, file sharing time and emulation. You do not need to pay for them on every service.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-rule-for-deciding">A rule for deciding</a></li><li><a href="#the-mixed-setup-in-flisk">The mixed setup in Flisk</a></li><li><a href="#limits-you-must-know">Limits you must know</a></li><li><a href="#model-servers-on-a-mac">Model servers on a Mac</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run the code you edit all day as a native process on your Mac, and keep in Docker the things that are awkward to install, need a specific Linux environment or have to match production. A typical split is a Node, Python or Go API and its frontend native, with Postgres or Redis in a container. This avoids the file sharing, memory and emulation costs where they hurt most.</p>
+
+<h2 id="a-rule-for-deciding">A rule for deciding</h2>
+<table>
+<thead><tr><th>Question</th><th>If yes</th></tr></thead>
+<tbody>
+<tr><td>Do I edit this code many times an hour?</td><td>Native. Reload is instant and no files cross the VM boundary.</td></tr>
+<tr><td>Is it a database, cache or broker with an official image?</td><td>Docker. One command, a clean upgrade path, and the data lives in a volume.</td></tr>
+<tr><td>Does it need system libraries that are painful to install on macOS?</td><td>Docker.</td></tr>
+<tr><td>Does it need the exact Linux image I deploy?</td><td>Docker, at least before release.</td></tr>
+<tr><td>Does it need the Apple GPU?</td><td>Native. Containers on macOS cannot use it.</td></tr>
+<tr><td>Is it amd64 only?</td><td>Docker under emulation, or look for another build.</td></tr>
+</tbody>
+</table>
+<p>Nothing in this table is a Flisk rule. It follows from how Docker works on a Mac. The Docker VM holds memory, shared files are slower than local ones and foreign architectures are emulated. Reasons and numbers for each are in the other articles of this set, for example <a href="/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/">bind mounts</a> and <a href="/@odykyi/docker-on-mac-performance/why-docker-uses-so-much-memory-on-mac/">memory</a>.</p>
+
+<h2 id="the-mixed-setup-in-flisk">The mixed setup in Flisk</h2>
+<p>Flisk supports exactly this split. A service with a <code>command</code> runs as a local process, with <code>PORT</code> set to its <code>port</code>. A bring-your-own service with only an <code>image</code>, such as a database, starts with <code>docker run</code> and is published on 127.0.0.1. First the API:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "npm run dev",
+  "toolchain": "node@22",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["postgres"],
+  "env": { "DATABASE_URL": "postgres://app:${POSTGRES_PASSWORD}@localhost:5432/app" }
+}</code></pre>
+<p>Then the database, as a ready made image with a named volume and a healthcheck that runs inside the container:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "postgres",
+  "appType": "bring-your-own",
+  "image": "postgres:17",
+  "port": 5432,
+  "env": { "POSTGRES_USER": "app", "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}", "POSTGRES_DB": "app" },
+  "healthCheck": { "command": ["pg_isready", "-U", "app"] },
+  "volumes": [{ "source": "postgres", "target": "/var/lib/postgresql/data", "name": "myapp_postgres" }]
+}</code></pre>
+<p><code>toolchain</code> makes <code>flisk doctor</code> and <code>flisk up</code> compare your installed Node with <code>node@22</code> and refuse to start on a mismatch. Flisk installs nothing for you. Check the plan, then start:</p>
+<pre><code>flisk up --dry-run
+flisk up
+flisk status</code></pre>
+<p><code>flisk down</code> stops the processes and removes the database container, and the named volume is kept. Wait for the database with <code>dependsOn</code> as in <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a>. The full local process mode is explained in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run local services without Docker</a>.</p>
+
+<h2 id="limits-you-must-know">Limits you must know</h2>
+<ul>
+<li><strong>No Dockerfile builds in this mode.</strong> A project that has services with <code>command</code> cannot also contain services built from a Dockerfile. Flisk stops with a <code>MIXED_RUNTIME</code> error. A ready made <code>image</code> is allowed. If one service must be built from a Dockerfile, use the Docker and Tilt path for the whole project.</li>
+<li><strong>No gateway.</strong> Native services use <code>localhost:port</code> URLs, not <code>*.localhost</code> names through Traefik.</li>
+<li><strong>Your machine's versions apply.</strong> There is no isolation. Pin them with <code>toolchain</code> and in the repo.</li>
+</ul>
+
+<h2 id="model-servers-on-a-mac">Model servers on a Mac</h2>
+<p>Flisk's documentation states that Docker on macOS cannot reach the Apple GPU (Metal). To use the GPU, run the model server as a native process instead, for example a service whose <code>command</code> is <code>ollama serve</code>, and let the other services call it on its port. A container in a stack reaches it like any other service.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Works natively, fails in production.</strong> A different OS and different library versions can hide bugs. Test the production image before release, or in CI.</li>
+<li><strong>Different data between teammates.</strong> If the database is native on one machine and a container on another, results differ. Pick one way and write it in the README.</li>
+<li><strong>Forgetting the database volume.</strong> Name it, so the data survives <code>flisk down</code> and a rebuilt container.</li>
+</ul>
+
+<p>For a first look without writing anything, run <code>npx @flisk-sh/flisk demo</code>. When Docker is not running, it falls back to a two service app as local processes. The sibling article on stopping Flisk projects, <a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/">stop and clean up a local stack</a>, covers what to do when you are finished.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is it better to run Node natively than in Docker on a Mac?</summary><p>For code you edit constantly, usually yes: reload is immediate and there is no file sharing cost. Keep databases and Linux specific dependencies in containers.</p></details><details><summary>Can Docker use the Mac GPU?</summary><p>No. Containers on macOS cannot reach the Apple GPU through Metal. Run model servers such as Ollama as native processes to use it.</p></details><details><summary>Can Flisk run some services natively and a database in Docker?</summary><p>Yes. Services with a command run as local processes, and a service with only an image, such as Postgres, runs with docker run. A service built from a Dockerfile cannot be in the same project.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker on Mac: speed and resources</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/"><span class="lbl">Guide</span><b>Why Docker bind mounts are slow on Mac and how to speed them up</b><span>A project that runs in a second on Linux can crawl on a Mac. The cause is the file sharing layer, and you can usually avoid most of its cost.</span></a><a href="/@odykyi/docker-on-mac-performance/why-docker-uses-so-much-memory-on-mac/"><span class="lbl">Guide</span><b>Why Docker uses so much memory on a Mac and how to see it</b><span>The number in Activity Monitor is the VM, not your containers. Reading the right number tells you whether to cut services or just resize the VM.</span></a><a href="/@odykyi/docker-on-mac-performance/amd64-images-slow-on-apple-silicon/"><span class="lbl">Guide</span><b>Why amd64 Docker images are slow on Apple Silicon, and what to do</b><span>Emulation works, but every instruction is translated. Know when you are paying for it and how to reduce it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
