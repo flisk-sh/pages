@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to share one database between a worker and an API</title>
+<meta name="description" content="Point a background worker and an API at the same Postgres database locally: one connection string, one migration owner, and a safe jobs table pattern.">
+<meta name="keywords" content="worker and api share database, shared postgres local development, database url worker, skip locked job queue, migrations owner worker api">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to share one database between a worker and an API">
+<meta property="og:description" content="Point a background worker and an API at the same Postgres database locally: one connection string, one migration owner, and a safe jobs table pattern.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to share one database between a worker and an API","description":"Point a background worker and an API at the same Postgres database locally: one connection string, one migration owner, and a safe jobs table pattern.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/","keywords":"worker and api share database, shared postgres local development, database url worker, skip locked job queue, migrations owner worker api","wordCount":793,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to share one database between a worker and an API","item":"https://pages.flisk.si/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can a worker and an API use the same Postgres database?","acceptedAnswer":{"@type":"Answer","text":"Yes. Give both the same connection string, run migrations in one separate step, and make sure the worker claims rows so two copies cannot take the same one."}},{"@type":"Question","name":"How do I stop two workers from picking the same job?","acceptedAnswer":{"@type":"Answer","text":"Claim the row in one statement with SELECT ... FOR UPDATE SKIP LOCKED inside an UPDATE, then mark it running. Locked rows are skipped, so each worker gets a different job."}},{"@type":"Question","name":"Why does my worker never see the jobs my API creates?","acceptedAnswer":{"@type":"Answer","text":"Check that both processes use the same database name and host. Print DATABASE_URL in each one. A different database name or a missing commit are the usual causes."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to share one database between a worker and an API</h1><p class="dek">Two processes, one database. The setup is simple. The mistakes are about who owns the schema and who picks up which row.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-sharing-means">What sharing means</a></li><li><a href="#without-flisk">Without Flisk</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A worker and an API can share one database if they get the same connection string and only one of them, or better a separate migration step, changes the schema. Give both the same <code>DATABASE_URL</code>, run migrations once before either starts, and make sure the worker claims rows in a way that two copies cannot both take the same job.</p>
+
+<h2 id="what-sharing-means">What sharing means</h2>
+<p>Sharing a database does not mean sharing code. The API and the worker are separate processes that happen to read and write the same tables. Three things make that safe:</p>
+<ul>
+<li><strong>One address.</strong> If the API uses <code>postgres://localhost:5432/app</code> and the worker uses a different database name by accident, the worker polls an empty table and nothing ever happens. This is the most common cause of "the job is never processed" in a new setup.</li>
+<li><strong>One schema owner.</strong> If both processes run migrations at start, they race. Put migrations in one step that runs first.</li>
+<li><strong>Clear claims.</strong> When several workers can read the same queue table, you need a way to say "this row is mine".</li>
+</ul>
+
+<h2 id="without-flisk">Without Flisk</h2>
+<p>In Compose you put the same variable in both services, usually through a shared <code>.env</code> file, and add <code>depends_on</code> with a health check on the database. Remember the two addresses: inside the Compose network the host is the service name (<code>postgres</code>), and from your laptop it is <code>localhost</code>. A worker you run by hand on the host needs the second one.</p>
+<p>A table that acts as a job queue is common and works well at small scale. The claim query uses <code>FOR UPDATE SKIP LOCKED</code>, so two workers never block on or take the same row:</p>
+<pre><code>WITH next AS (
+  SELECT id FROM jobs
+  WHERE status = 'pending'
+  ORDER BY id
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE jobs SET status = 'running', started_at = now()
+FROM next WHERE jobs.id = next.id
+RETURNING jobs.*;</code></pre>
+<p>Run it as a single statement, and set the status to <code>done</code> or <code>failed</code> afterwards. A job stuck in <code>running</code> after a crash needs a timeout that puts it back, which is something to test deliberately.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Create the database as a resource, then name it in <code>dependsOn</code> of both services:</p>
+<pre><code>flisk resource ordersdb --type database --stack shop --yes</code></pre>
+<p>This writes a small <code>service.json</code> with <code>appType: "database"</code> and <code>framework: "postgres"</code>, the shared Flisk Postgres. The command prints "Add ordersdb to dependsOn in the services that use the database" as its next step. In the API and in the worker:</p>
+<pre><code>"dependsOn": ["ordersdb"]</code></pre>
+<p>Per the Flisk docs, services that depend on a database receive <code>DATABASE_URL</code> in their environment, and a stack gets its own database inside the shared Postgres, so every service in the same stack sees the same data. I confirmed the resource and config with <code>flisk config verify</code>, but I did not start the stack, so to see the exact value your worker received, run this once it is up:</p>
+<pre><code>flisk run orders-worker -- printenv DATABASE_URL
+flisk run orders-api -- printenv DATABASE_URL</code></pre>
+<p>If the two lines differ, you found your bug before writing any code. For the general rules on connection strings, see <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars locally</a>.</p>
+
+<h3>Keep migrations out of both</h3>
+<p>The Flisk rule for new services is to run migrations in an explicit <code>migrator</code> resource, not in an API start script or entrypoint. Both the API and the worker then depend on the migrator, and neither one touches the schema at boot. <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">Database migrations in local dev</a> shows the setup. Starting order follows <code>dependsOn</code>, so the database comes up first, the migrator second, and the API and worker last.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Connection limits.</strong> Each process opens its own pool. Postgres allows 100 connections by default, so a pool of 20 in each of several services adds up. Keep local pool sizes small.</li>
+<li><strong>The worker sees uncommitted data as missing.</strong> If the API inserts a job and then commits, a worker polling in between finds nothing. That is normal. If you publish a message in the same request, publish after the commit, not before.</li>
+<li><strong>Two workers, one row.</strong> Without <code>SKIP LOCKED</code> or an equivalent claim, a second worker repeats jobs. Test it by starting two copies deliberately.</li>
+<li><strong>Do not share tables with a service you do not own.</strong> If a third service reads your worker's tables directly, schema changes become a coordination problem. Give it its own database, as described in <a href="/@odykyi/local-database-guide/one-database-per-service/">one database per service</a>.</li>
+<li><strong>When a real queue is better.</strong> If jobs need delays, retries with backoff or fan-out, a broker such as <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS</a> fits better than a table.</li>
+</ul>
+
+<p>With the shared database in place, the next question is how the API hands work to the worker. <a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/">Run a background worker locally</a> covers that wiring.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can a worker and an API use the same Postgres database?</summary><p>Yes. Give both the same connection string, run migrations in one separate step, and make sure the worker claims rows so two copies cannot take the same one.</p></details><details><summary>How do I stop two workers from picking the same job?</summary><p>Claim the row in one statement with SELECT ... FOR UPDATE SKIP LOCKED inside an UPDATE, then mark it running. Locked rows are skipped, so each worker gets a different job.</p></details><details><summary>Why does my worker never see the jobs my API creates?</summary><p>Check that both processes use the same database name and host. Print DATABASE_URL in each one. A different database name or a missing commit are the usual causes.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/"><span class="lbl">Guide</span><b>How to run a one-off command inside a running service</b><span>You want to run one script with the same variables the service sees, without copying them into your shell by hand.</span></a><a href="/@odykyi/workers-and-queues/debug-a-stuck-job/"><span class="lbl">Guide</span><b>How to debug a background job that never finishes</b><span>A stuck job is silent. Work through the same short list each time and you will find the cause faster than by guessing.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

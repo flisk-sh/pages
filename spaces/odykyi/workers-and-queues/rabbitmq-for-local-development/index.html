@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run RabbitMQ for local development with a management UI</title>
+<meta name="description" content="Run RabbitMQ on your laptop with the management UI, a durable queue and a dead-letter exchange: the Docker command, Flisk&#39;s queue resource and a Node consumer.">
+<meta name="keywords" content="rabbitmq local development, rabbitmq docker management ui, rabbitmq dead letter exchange, run rabbitmq locally, amqplib node consumer">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/rabbitmq-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run RabbitMQ for local development with a management UI">
+<meta property="og:description" content="Run RabbitMQ on your laptop with the management UI, a durable queue and a dead-letter exchange: the Docker command, Flisk&#39;s queue resource and a Node consumer.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/rabbitmq-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run RabbitMQ for local development with a management UI","description":"Run RabbitMQ on your laptop with the management UI, a durable queue and a dead-letter exchange: the Docker command, Flisk's queue resource and a Node consumer.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/rabbitmq-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/rabbitmq-for-local-development/","keywords":"rabbitmq local development, rabbitmq docker management ui, rabbitmq dead letter exchange, run rabbitmq locally, amqplib node consumer","wordCount":822,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to run RabbitMQ for local development with a management UI","item":"https://pages.flisk.si/@odykyi/workers-and-queues/rabbitmq-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the RabbitMQ management UI address locally?","acceptedAnswer":{"@type":"Answer","text":"With the rabbitmq management image and port 15672 published, it is http://127.0.0.1:15672. The default login is guest and guest, which is meant for local use only."}},{"@type":"Question","name":"How do I see failed messages in RabbitMQ?","acceptedAnswer":{"@type":"Answer","text":"Give the queue a dead-letter exchange, bind a queue to it, and reject failed messages without requeue. Then open that queue in the management UI and use Get messages."}},{"@type":"Question","name":"Does flisk down delete my RabbitMQ queues?","acceptedAnswer":{"@type":"Answer","text":"No. The queue resource keeps its data in a named volume, and flisk down keeps named volumes. Delete the queue in the UI or remove the volume for a clean start."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to run RabbitMQ for local development with a management UI</h1><p class="dek">RabbitMQ is a good fit when you need routing rules, per-message TTLs or dead-letter exchanges. Here is how to run it locally and look inside it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#rabbitmq-or-nats">RabbitMQ or NATS</a></li><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#publishing-and-connecting">Publishing and connecting</a></li><li><a href="#a-queue-with-a-dead-letter-exchange">A queue with a dead-letter exchange</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>The quickest local RabbitMQ is the <code>rabbitmq:4-management</code> image with ports 5672 (clients) and 15672 (the management UI) published to your machine. Flisk writes an equivalent definition for you with <code>flisk resource broker --type queue --framework rabbitmq</code>, so the broker starts with the rest of your stack and its URL reaches the services that depend on it.</p>
+
+<h2 id="rabbitmq-or-nats">RabbitMQ or NATS</h2>
+<p>Both move messages between services. Pick by the features you need, not by habit.</p>
+<ul>
+<li><strong>RabbitMQ</strong> has exchanges and routing keys, per-queue and per-message TTL, dead-letter exchanges, priorities, and a management UI that shows every queue. It speaks AMQP, and clients exist for every language.</li>
+<li><strong>NATS with JetStream</strong> is smaller and simpler to run, with subjects instead of exchanges. See <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>.</li>
+</ul>
+<p>If your production system already uses RabbitMQ, use it locally too. Differences between brokers are where integration bugs hide.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<pre><code>docker run --rm --name rabbit \
+  -p 127.0.0.1:5672:5672 -p 127.0.0.1:15672:15672 \
+  -v rabbit-data:/var/lib/rabbitmq \
+  rabbitmq:4-management</code></pre>
+<p>Open <code>http://127.0.0.1:15672</code> and sign in with <code>guest</code> and <code>guest</code>. The guest account is a built-in default meant for local use. RabbitMQ restricts it to loopback connections in a normal install, and the Flisk resource below relaxes that restriction so other containers can connect. Never copy that setting to a server.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<pre><code>flisk resource broker --type queue --framework rabbitmq --stack shop --yes</code></pre>
+<p>The generated <code>service.json</code> (CLI 1.4.57) includes these fields:</p>
+<pre><code>{
+  "appName": "broker",
+  "appType": "bring-your-own",
+  "framework": "rabbitmq",
+  "port": 5672,
+  "image": "rabbitmq:4.1-management-alpine",
+  "exposeViaProxy": false,
+  "healthCheck": { "command": ["rabbitmq-diagnostics", "-q", "ping"] },
+  "extraPorts": [{ "port": 15672 }],
+  "volumes": [{ "source": "broker-data", "target": "/var/lib/rabbitmq" }],
+  "provides": { "AMQP_URL": "amqp://guest:guest@broker:5672" }
+}</code></pre>
+<p>It also sets two parameters, a node name and an Erlang argument that lets <code>guest</code> connect from other containers. The management UI is published on <code>http://127.0.0.1:15672</code>, with <code>guest</code> and <code>guest</code>. Flisk binds extra ports to 127.0.0.1, so the UI is not open to your network.</p>
+<p>The health check uses <code>rabbitmq-diagnostics -q ping</code>, so services that depend on the broker wait until it answers. Add it to a consumer:</p>
+<pre><code>"dependsOn": ["broker"]</code></pre>
+<p>That consumer then gets <code>AMQP_URL</code> as an environment variable. Run <code>flisk config verify</code> after editing, and <code>flisk up shop</code> to start. The named volume <code>broker-data</code> keeps queues between runs, so <code>flisk down</code> does not clear them.</p>
+
+<h2 id="publishing-and-connecting">Publishing and connecting</h2><p>Services in the stack read <code>AMQP_URL</code> and use it as is. The host in that URL, <code>broker</code>, is the service name, so it resolves only for other services in the stack. A tool on your own machine needs <code>127.0.0.1</code> and a published port 5672. The resource publishes the management port for you, and I did not test publishing 5672 as well, so check that the port answers, or use the plain Docker command above for ad hoc experiments.</p><p>When you publish from Node, mark messages persistent, or a broker restart loses them even from a durable queue:</p><pre><code>ch.sendToQueue("jobs", Buffer.from(JSON.stringify(job)), { persistent: true });</code></pre><p>Both parts are needed: a durable queue keeps the queue definition, and a persistent message keeps the contents.</p><h2 id="a-queue-with-a-dead-letter-exchange">A queue with a dead-letter exchange</h2>
+<p>Using the <code>amqplib</code> package in Node, declare the failure path before the main queue, so rejected messages have somewhere to go:</p>
+<pre><code>import amqp from "amqplib";
+
+const conn = await amqp.connect(process.env.AMQP_URL);
+const ch = await conn.createChannel();
+
+await ch.assertExchange("jobs.dead", "fanout", { durable: true });
+await ch.assertQueue("jobs.dead.q", { durable: true });
+await ch.bindQueue("jobs.dead.q", "jobs.dead", "");
+
+await ch.assertQueue("jobs", {
+  durable: true,
+  deadLetterExchange: "jobs.dead",
+});
+
+ch.consume("jobs", (msg) =&gt; {
+  try {
+    handle(JSON.parse(msg.content.toString()));
+    ch.ack(msg);
+  } catch (err) {
+    ch.nack(msg, false, false);   // do not requeue: send to the dead exchange
+  }
+});</code></pre>
+<p>The third argument <code>false</code> in <code>nack</code> means "do not requeue", and with a dead-letter exchange set on the queue, RabbitMQ then routes the message to <code>jobs.dead</code>. Open the management UI, find <code>jobs.dead.q</code>, and use "Get messages" to read what failed. That inspection is the main thing the UI adds over a bare client.</p>
+<p>To delay a retry, a common pattern is a second queue with <code>messageTtl</code> set and the main exchange as its dead-letter target, so messages wait and then come back. For more on testing the failure paths, see <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">queue consumer retries locally</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Changing a queue's arguments.</strong> A queue declared with one set of arguments cannot be redeclared with another. RabbitMQ answers with a "PRECONDITION_FAILED" error. Delete the queue in the UI, or remove the volume, then restart.</li>
+<li><strong>Unacknowledged messages stay hidden.</strong> A message delivered but not acknowledged shows as "unacked" and returns only when the channel closes.</li>
+<li><strong>Prefetch.</strong> Without a prefetch limit, one consumer takes the whole backlog. Set <code>ch.prefetch(1)</code> to see a fair spread.</li>
+<li><strong>Default credentials.</strong> <code>guest</code> and <code>guest</code> are for your laptop only.</li>
+<li><strong>Too much for the job.</strong> If you only need to hand one task to one worker, a database table or NATS is lighter.</li>
+</ul>
+
+<p>The broker is only half of it. <a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/">Run a background worker locally</a> shows how to run the consumer beside it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the RabbitMQ management UI address locally?</summary><p>With the rabbitmq management image and port 15672 published, it is http://127.0.0.1:15672. The default login is guest and guest, which is meant for local use only.</p></details><details><summary>How do I see failed messages in RabbitMQ?</summary><p>Give the queue a dead-letter exchange, bind a queue to it, and reject failed messages without requeue. Then open that queue in the management UI and use Get messages.</p></details><details><summary>Does flisk down delete my RabbitMQ queues?</summary><p>No. The queue resource keeps its data in a named volume, and flisk down keeps named volumes. Delete the queue in the UI or remove the volume for a clean start.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/nats-for-local-development/"><span class="lbl">Guide</span><b>How to run NATS with JetStream for local development</b><span>One NATS container, JetStream turned on, and a connection string every service can read. Here is the plain way and the Flisk way.</span></a><a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/"><span class="lbl">Guide</span><b>How to test queue consumer retries and dead letters locally</b><span>A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</span></a><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

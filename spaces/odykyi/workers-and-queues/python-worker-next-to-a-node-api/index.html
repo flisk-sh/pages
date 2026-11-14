@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a Python worker next to a Node API locally</title>
+<meta name="description" content="Run a Python queue worker beside a Node API on your laptop: a Dockerfile, a bring-your-own service.json, a shared queue, and a plain no-Docker option.">
+<meta name="keywords" content="python worker node api, run python and node together locally, python queue worker local, bring your own dockerfile worker, nats python node">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a Python worker next to a Node API locally">
+<meta property="og:description" content="Run a Python queue worker beside a Node API on your laptop: a Dockerfile, a bring-your-own service.json, a shared queue, and a plain no-Docker option.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a Python worker next to a Node API locally","description":"Run a Python queue worker beside a Node API on your laptop: a Dockerfile, a bring-your-own service.json, a shared queue, and a plain no-Docker option.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/","keywords":"python worker node api, run python and node together locally, python queue worker local, bring your own dockerfile worker, nats python node","wordCount":789,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to run a Python worker next to a Node API locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Flisk scaffold a Python worker?","acceptedAnswer":{"@type":"Answer","text":"Not directly. The worker resource generates a Bun project, and the language option only applies to backends. A Python worker is a bring-your-own service with your own Dockerfile, or a local process with a command."}},{"@type":"Question","name":"How do a Node API and a Python worker communicate?","acceptedAnswer":{"@type":"Answer","text":"Through a queue or a database table, using an agreed message shape in JSON. The API publishes a message and returns, and the worker consumes it. They share no code."}},{"@type":"Question","name":"Why do I see no output from my Python worker?","acceptedAnswer":{"@type":"Answer","text":"Python buffers stdout when it is not a terminal. Run it with python -u or call print with flush=True so lines show up in the logs immediately."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to run a Python worker next to a Node API locally</h1><p class="dek">Mixed languages are normal: Node takes the requests, Python does the heavy lifting. They only need to agree on a queue and a message format.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#agree-on-the-contract-first">Agree on the contract first</a></li><li><a href="#the-queue">The queue</a></li><li><a href="#the-python-worker-with-a-dockerfile">The Python worker with a Dockerfile</a></li><li><a href="#the-node-side">The Node side</a></li><li><a href="#without-a-container">Without a container</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run the Python worker as its own service and let the Node API talk to it through a queue, not through function calls. The two only share a subject name and a JSON message shape. Locally you can start the worker from a small Dockerfile, or as a plain Python process if you do not want a container in the loop.</p>
+
+<h2 id="agree-on-the-contract-first">Agree on the contract first</h2>
+<p>Before any tooling, write down three things, because they are the only coupling between the services:</p>
+<ul>
+<li>The subject or queue name, for example <code>jobs.resize</code>.</li>
+<li>The message shape as JSON, for example <code>{"imageId": "abc", "width": 640}</code>. Use plain types, since Node and Python disagree about big integers and dates.</li>
+<li>What the worker does on success and failure: acknowledge, retry, or give up.</li>
+</ul>
+<p>Keep the message small and put large files in storage, passing only an ID. Then each side is testable alone: the Node side by checking what it publishes, and the Python side by publishing a hand-written message.</p>
+
+<h2 id="the-queue">The queue</h2>
+<p>This article uses NATS with JetStream, set up as in <a href="/@odykyi/workers-and-queues/nats-for-local-development/">running NATS locally</a>. With Flisk:</p>
+<pre><code>flisk resource bus --type queue --stack shop --yes</code></pre>
+
+<h2 id="the-python-worker-with-a-dockerfile">The Python worker with a Dockerfile</h2>
+<p>Flisk's <code>worker</code> resource type generates a Bun project, and the <code>--language</code> option works only for backends. That is not a limit, because a Python worker is a bring-your-own service: you write the Dockerfile, and Flisk runs it. The files are small. First <code>worker.py</code>, using the <code>nats-py</code> package:</p>
+<pre><code>import asyncio, json, os
+import nats
+
+async def main():
+    nc = await nats.connect(os.environ["NATS_URL"])
+    js = nc.jetstream()
+    await js.add_stream(name="JOBS", subjects=["jobs.&gt;"])
+    sub = await js.pull_subscribe("jobs.resize", durable="resizer")
+    while True:
+        try:
+            msgs = await sub.fetch(1, timeout=5)
+        except nats.errors.TimeoutError:
+            continue
+        for msg in msgs:
+            job = json.loads(msg.data)
+            print("resizing", job["imageId"], flush=True)
+            await msg.ack()
+
+asyncio.run(main())</code></pre>
+<p>Then <code>requirements.txt</code> with the line <code>nats-py</code>, and the Dockerfile:</p>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "-u", "worker.py"]</code></pre>
+<p>The <code>-u</code> flag turns off output buffering, so log lines appear immediately instead of in bursts. Now the <code>service.json</code> in <code>services/shop/resizer/</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "resizer",
+  "appType": "bring-your-own",
+  "stack": "shop",
+  "dockerfile": "Dockerfile",
+  "exposeViaProxy": false,
+  "healthCheck": false,
+  "dependsOn": ["bus"]
+}</code></pre>
+<p>Each field has a reason. <code>exposeViaProxy: false</code> and <code>healthCheck: false</code> say that the service has no HTTP side, so Flisk should not route to it or probe it. <code>dependsOn: ["bus"]</code> starts the queue first and passes <code>NATS_URL</code> to the worker. I checked a file of exactly this shape with <code>flisk config verify</code>. Do not use <code>flisk resource ... --type bring-your-own</code> for this without editing the result, because that command assumes an HTTP service and sets a health check path of <code>/health</code> and a port of 4001.</p>
+<p>Bring-your-own services restart with <code>unless-stopped</code> by default, so a crash in the Python code brings the worker back. If you want a crash to stay crashed while you debug, set <code>"restart": "no"</code>. More on custom Dockerfiles in <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">bring your own Dockerfile</a>.</p>
+
+<h2 id="the-node-side">The Node side</h2>
+<p>The API publishes after it has saved its own state. With the <code>nats</code> package, and the same <code>NATS_URL</code> variable from the queue resource:</p>
+<pre><code>import { connect, StringCodec } from "nats";
+
+const sc = StringCodec();
+const nc = await connect({ servers: process.env.NATS_URL });
+const js = nc.jetstream();
+
+app.post("/images/:id/resize", async (req, res) =&gt; {
+  await js.publish("jobs.resize",
+    sc.encode(JSON.stringify({ imageId: req.params.id, width: 640 })));
+  res.status(202).json({ queued: true });
+});</code></pre>
+<p>Reply with 202 Accepted, because the work is not done yet. A client that needs the result checks a status route, or polls.</p>
+
+<h2 id="without-a-container">Without a container</h2>
+<p>If you do not want to build an image on every change, run the worker as a local process. Give the service a <code>command</code> instead of a Dockerfile:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "resizer",
+  "appType": "worker",
+  "command": "python3 worker.py",
+  "dependsOn": ["bus"]
+}</code></pre>
+<p>This runs on your machine with your own Python and virtual environment, which is faster to iterate on. The cost is that "works on my machine" returns, because the Python version is yours, not the image's. The no-Docker mode is described in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run services without Docker</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Buffered output.</strong> Without <code>-u</code> or <code>flush=True</code>, a Python worker can look dead while it works. Read its output with <code>flisk logs --service resizer</code>.</li>
+<li><strong>Message drift.</strong> If one side renames a field, the other fails only at runtime. Keep a sample message in the repository and test both sides against it.</li>
+<li><strong>Slow image builds.</strong> Copy <code>requirements.txt</code> and install before copying the code, as above, so the dependency layer is cached.</li>
+<li><strong>Do not split a tiny app.</strong> If the Python code is a ten-line function, a Node library may be less to maintain than a second runtime.</li>
+</ul>
+
+<p>For what happens when the Python code throws, read <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">testing consumer retries locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Flisk scaffold a Python worker?</summary><p>Not directly. The worker resource generates a Bun project, and the language option only applies to backends. A Python worker is a bring-your-own service with your own Dockerfile, or a local process with a command.</p></details><details><summary>How do a Node API and a Python worker communicate?</summary><p>Through a queue or a database table, using an agreed message shape in JSON. The API publishes a message and returns, and the worker consumes it. They share no code.</p></details><details><summary>Why do I see no output from my Python worker?</summary><p>Python buffers stdout when it is not a terminal. Run it with python -u or call print with flush=True so lines show up in the logs immediately.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/nats-for-local-development/"><span class="lbl">Guide</span><b>How to run NATS with JetStream for local development</b><span>One NATS container, JetStream turned on, and a connection string every service can read. Here is the plain way and the Flisk way.</span></a><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/"><span class="lbl">Guide</span><b>How to test queue consumer retries and dead letters locally</b><span>A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

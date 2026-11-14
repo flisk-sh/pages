@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to debug a background job that never finishes</title>
+<meta name="description" content="Find why a queued job never completes: check the worker, the queue name, unacknowledged messages, the environment and the database, in the fastest order.">
+<meta name="keywords" content="background job stuck, debug queue worker, job never processed, message not acknowledged, worker not consuming">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/debug-a-stuck-job/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to debug a background job that never finishes">
+<meta property="og:description" content="Find why a queued job never completes: check the worker, the queue name, unacknowledged messages, the environment and the database, in the fastest order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/debug-a-stuck-job/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to debug a background job that never finishes","description":"Find why a queued job never completes: check the worker, the queue name, unacknowledged messages, the environment and the database, in the fastest order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/debug-a-stuck-job/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/debug-a-stuck-job/","keywords":"background job stuck, debug queue worker, job never processed, message not acknowledged, worker not consuming","wordCount":799,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to debug a background job that never finishes","item":"https://pages.flisk.si/@odykyi/workers-and-queues/debug-a-stuck-job/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is my queued job never processed?","acceptedAnswer":{"@type":"Answer","text":"The usual causes are a worker that is not running, a subject or queue name that does not match, a message that was delivered but never acknowledged, or a worker that points at a different broker or database than the API."}},{"@type":"Question","name":"How do I check if a worker is alive in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Run flisk status, then flisk logs --service \u003cworker> --since 10m. A worker has no HTTP health check, so the logs are the real signal that it is doing work."}},{"@type":"Question","name":"What does unacked mean in a message queue?","acceptedAnswer":{"@type":"Answer","text":"It means the message was delivered to a consumer, but the consumer has not acknowledged it yet. If the ack timeout passes or the consumer disconnects, the message is delivered again."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to debug a background job that never finishes</h1><p class="dek">A stuck job is silent. Work through the same short list each time and you will find the cause faster than by guessing.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#find-where-the-job-stops">Find where the job stops</a></li><li><a href="#checklist-in-order">Checklist, in order</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>When a job never finishes, check in this order: is the worker alive, is it reading the right queue, did the message arrive, is it being held without acknowledgement, and does the worker see the same environment as the API. Most stuck jobs are one of those five, and each has a quick check.</p>
+
+<h2 id="find-where-the-job-stops">Find where the job stops</h2>
+<p>A job passes through stages: the API accepts the request, it publishes a message, the broker stores it, the worker takes it, the worker does the work, and the worker acknowledges. Find the last stage that happened, and the cause is in the gap after it. Add a log line at each stage that includes the job ID, and the search takes minutes instead of hours.</p>
+
+<h2 id="checklist-in-order">Checklist, in order</h2>
+<ol>
+<li><strong>Is the worker running?</strong> A worker has no HTTP endpoint, so "the stack is up" says nothing about it. Check the process or container directly.</li>
+<li><strong>Is it connected to the queue?</strong> Look for the connection line at startup, or the error that replaced it.</li>
+<li><strong>Is the subject or queue name identical?</strong> A typo such as <code>job.email</code> against <code>jobs.email</code> is silent: the publish succeeds and nobody listens.</li>
+<li><strong>Did the message get stored?</strong> With JetStream, a publish to a subject that no stream covers fails with a no-responders error. With a queue broker, check the queue depth.</li>
+<li><strong>Is the message unacknowledged?</strong> A message that was delivered but never acknowledged waits for the ack timeout, then comes back. A handler that throws before the acknowledge, or hangs, looks like a stuck job.</li>
+<li><strong>Is it a poison message?</strong> One message that always fails can block a consumer if the code retries it in place. See <a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/">queue consumer retries locally</a>.</li>
+<li><strong>Is it waiting on something else?</strong> A database lock, an HTTP call with no timeout or a full disk makes a handler hang without an error.</li>
+</ol>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk gives you read-only commands for most of the checklist. Start with the stack as a whole:</p>
+<pre><code>flisk status
+flisk status --unhealthy</code></pre>
+<p>Then read the worker's output. <code>flisk logs</code> prints a bounded snapshot, and you can filter it:</p>
+<pre><code>flisk logs --service mailer --since 10m
+flisk logs --service mailer --tail 100 --json</code></pre>
+<p><code>--unhealthy</code> limits the output to services that are failing or still starting. Remember that a worker has no HTTP health check, so the status mostly tells you whether the process is alive, not whether it is doing work. A process that Flisk restarts again and again shows up as a pattern of start lines in the log,, and for a local process Flisk stops restarting it after five quick exits.</p>
+<p>Compare what the API and the worker each see. This catches the case where the worker connects to a queue the API never publishes to:</p>
+<pre><code>flisk run mailer -- printenv NATS_URL
+flisk run shop-api -- printenv NATS_URL</code></pre>
+<p>The two lines should match. A local process that uses <code>localhost</code> and a container that uses the service name <code>bus</code> are both fine, but they must point at the same server. For a worker running as a local process, the logs are also in files under <code>.flisk/native/logs/</code>, one per service.</p>
+<p>When the checks above find nothing, run <code>flisk doctor</code> for environment problems and <code>flisk config verify</code> for generated files that are out of date.</p>
+
+<h3>Look inside the queue</h3>
+<p>For NATS, the <code>nats</code> command line tool is the best view. It needs the server port on your host, which you can publish with <code>extraPorts</code> as described in <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>:</p>
+<pre><code>nats stream ls
+nats stream info JOBS
+nats consumer info JOBS mailer</code></pre>
+<p>The consumer view shows the number of messages not yet delivered, the number delivered and waiting for acknowledgement, and the number of redeliveries. Pending above zero with no worker activity means the consumer is not pulling. Waiting for acknowledgement above zero means a handler took the message and has not finished. With the <code>-m 8222</code> flag, the server also serves a monitoring page with the same numbers over HTTP.</p>
+<p>For RabbitMQ, the management UI at <code>http://127.0.0.1:15672</code> shows ready and unacked counts for each queue.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Restarting too early.</strong> Restarting the worker clears the evidence. Read the log and the queue state first, then restart with <code>flisk restart mailer</code> if you must.</li>
+<li><strong>Old state.</strong> Queue data persists in a volume between runs, so a job that seems stuck can be an old message from yesterday's code. Check its age.</li>
+<li><strong>Buffered output.</strong> Some languages hold output back when it is not a terminal, which makes a busy worker look silent. Flush your logs.</li>
+<li><strong>The job succeeded.</strong> Sometimes the work is done and the status update failed. Check the side effect itself before blaming the queue.</li>
+</ul>
+
+<p>Once you know the cause, write a test for it. <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">Reading logs from every service</a> covers the logging commands in more depth.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is my queued job never processed?</summary><p>The usual causes are a worker that is not running, a subject or queue name that does not match, a message that was delivered but never acknowledged, or a worker that points at a different broker or database than the API.</p></details><details><summary>How do I check if a worker is alive in Flisk?</summary><p>Run flisk status, then flisk logs --service &lt;worker&gt; --since 10m. A worker has no HTTP health check, so the logs are the real signal that it is doing work.</p></details><details><summary>What does unacked mean in a message queue?</summary><p>It means the message was delivered to a consumer, but the consumer has not acknowledged it yet. If the ack timeout passes or the consumer disconnects, the message is delivered again.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/run-a-background-worker-locally/"><span class="lbl">Guide</span><b>How to run a background worker locally next to your API</b><span>A worker has no URL to click and no page to reload, so it is easy to lose track of. Here is how to keep it running, visible and restartable.</span></a><a href="/@odykyi/workers-and-queues/queue-consumer-retries-locally/"><span class="lbl">Guide</span><b>How to test queue consumer retries and dead letters locally</b><span>A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</span></a><a href="/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/"><span class="lbl">Guide</span><b>How to share one database between a worker and an API</b><span>Two processes, one database. The setup is simple. The mistakes are about who owns the schema and who picks up which row.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
