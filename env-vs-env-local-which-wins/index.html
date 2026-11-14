@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>.env vs .env.local vs .env.development: which one wins?</title>
+<meta name="description" content="When several env files define the same variable, one silently wins. See the precedence in Vite, Next.js, Node.js and Docker Compose, and Flisk&#39;s source order.">
+<meta name="keywords" content=".env vs .env.local, env file precedence, which env file wins, .env.development vs .env, vite env priority, next.js env load order">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content=".env vs .env.local vs .env.development: which one wins?">
+<meta property="og:description" content="When several env files define the same variable, one silently wins. See the precedence in Vite, Next.js, Node.js and Docker Compose, and Flisk&#39;s source order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":".env vs .env.local vs .env.development: which one wins?","description":"When several env files define the same variable, one silently wins. See the precedence in Vite, Next.js, Node.js and Docker Compose, and Flisk's source order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/","keywords":".env vs .env.local, env file precedence, which env file wins, .env.development vs .env, vite env priority, next.js env load order","wordCount":719,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Env vars and secrets in local dev","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/"},{"@type":"ListItem","position":3,"name":".env vs .env.local vs .env.development: which one wins?","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does .env.local override .env?","acceptedAnswer":{"@type":"Answer","text":"In Vite and Next.js, yes: the .local file is read with higher priority than the generic .env. Variables already set in the shell beat both."}},{"@type":"Question","name":"Does a shell variable beat a value in .env?","acceptedAnswer":{"@type":"Answer","text":"In Vite, Next.js, Node.js --env-file and the dotenv package, yes by default. In Flisk's local-process services the shell is also first. For container secrets, the env file of the run wins over the shell for keys it defines."}},{"@type":"Question","name":"Can I merge two env files in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Not with flisk up --env-file. The selected file replaces the project .env for that run and the two are not merged, so copy .env first and edit the copy."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/env-and-secrets-local/">Env vars and secrets in local dev</a></div>
+<section class="hero"><div><div class="lbl">Env vars and secrets in local dev</div><h1>.env vs .env.local vs .env.development: which one wins?</h1><p class="dek">A variable defined in three places has one effective value. Here is the order each common tool uses, and a way to check yours.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-order-in-the-tools-you-probably-use">The order in the tools you probably use</a></li><li><a href="#docker-compose-is-different">Docker Compose is different</a></li><li><a href="#the-order-in-flisk">The order in Flisk</a></li><li><a href="#how-to-see-which-one-won">How to see which one won</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>The shell wins over every file, and among files the more specific one wins: a mode file such as <code>.env.development</code> beats the generic <code>.env</code>, and a <code>.local</code> file beats its non-local twin. That is the rule in Vite and Next.js. Docker Compose and Flisk have their own orders, so a name defined in two places is worth checking, not guessing.</p>
+
+<h2 id="the-order-in-the-tools-you-probably-use">The order in the tools you probably use</h2>
+<table>
+<thead><tr><th>Tool</th><th>Highest to lowest</th></tr></thead>
+<tbody>
+<tr><td>Vite</td><td>Variables already in the environment, then <code>.env.[mode].local</code>, <code>.env.[mode]</code>, <code>.env.local</code>, <code>.env</code></td></tr>
+<tr><td>Next.js</td><td><code>process.env</code>, <code>.env.$(NODE_ENV).local</code>, <code>.env.local</code> (skipped when <code>NODE_ENV</code> is <code>test</code>), <code>.env.$(NODE_ENV)</code>, <code>.env</code></td></tr>
+<tr><td>Node.js <code>--env-file</code></td><td>The existing environment, then the files, where a later <code>--env-file</code> overrides an earlier one</td></tr>
+<tr><td>dotenv (npm package)</td><td>Does not override a variable that is already set, unless you pass <code>override: true</code></td></tr>
+</tbody>
+</table>
+<p>The common thread is that a value you export in the shell for one command is the strongest. That is useful for a quick test and a trap when you exported something last week and forgot.</p>
+<p>The usual convention for <code>.local</code> files is that they hold one developer's overrides and are never committed, while <code>.env</code> and <code>.env.development</code> hold shared, non-secret defaults. Keep to that and the question "which one wins" mostly answers itself: your <code>.local</code> file wins, and teammates do not see it.</p>
+
+<h2 id="docker-compose-is-different">Docker Compose is different</h2>
+<p>Compose uses <code>.env</code> to fill in <code>${NAME}</code> placeholders in the Compose file. That is a separate job from putting variables into a container. For a variable inside the container, the documented order is: <code>docker compose run -e</code>, then a value set with <code>environment:</code>, then <code>env_file:</code>, then <code>ENV</code> in the image. For interpolation, the shell beats the <code>.env</code> file. The next article, <a href="/@odykyi/env-and-secrets-local/compose-env-file-vs-environment/">Compose env_file vs environment</a>, goes through this in detail.</p>
+
+<h2 id="the-order-in-flisk">The order in Flisk</h2>
+<p>Flisk has a project <code>.env</code> (gitignored) and, per service, a few ways to add to it. These rules come from its environment documentation:</p>
+<ul>
+<li><strong>Local-process services</strong> (those with a <code>command</code>): <code>${VAR}</code> and <code>${VAR:-default}</code> inside <code>env</code> resolve in this order, first match wins: your shell, the project <code>.env</code>, the service's own <code>.env</code> next to its <code>service.json</code>, then the default. A missing service <code>.env</code> is ignored.</li>
+<li><strong>Container services:</strong> inside one container, the compose <code>environment:</code> entry beats the service env file generated from <code>params</code>. The secrets come from the env file of the run, and for keys that file defines, it wins over the value exported in your shell. A key the file does not define keeps the shell's value.</li>
+<li><strong>One run with other values:</strong> <code>flisk up --env-file .env.integration</code> replaces the project <code>.env</code> for that run. It is not merged. The file must be inside the project and carry <code>TILT_ENV</code>, <code>DB_PASSWORD</code> and <code>JWT_SECRET</code>, and a running stack refuses it until you <code>flisk down</code> or add <code>--force</code>.</li>
+</ul>
+<p>A concrete example for a plain process, where a developer's port override sits in a service-level file:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "env": { "API_URL": "http://localhost:${API_PORT:-4000}" }
+}</code></pre>
+<p>With nothing set, <code>API_URL</code> is <code>http://localhost:4000</code>. A developer puts <code>API_PORT=4100</code> in a <code>.env</code> next to the service, and it wins over the default, but loses to <code>API_PORT</code> exported in the shell. No edit to the committed manifest is needed.</p>
+
+<h2 id="how-to-see-which-one-won">How to see which one won</h2>
+<ol>
+<li>Print the value in the process: <code>flisk run web -- printenv API_URL</code>, or <code>printenv</code> inside a container.</li>
+<li>If it is wrong, unset it in the shell first: <code>env -u API_PORT flisk run web -- printenv API_URL</code>. If the value changes, the shell was the culprit.</li>
+<li>Search the project for the name: <code>grep -rn "API_PORT" . --include=".env*" --include="service.json"</code>.</li>
+</ol>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Flisk's generated <code>.gitignore</code> lines are <code>.env</code>, <code>.env.*</code> and <code>!.env.example</code>, so every variant except the example stays out of git. If your team wants to commit a shared <code>.env.development</code>, that pattern will ignore it. See <a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">gitignoring env files safely</a>.</li>
+<li>A name listed in <code>secrets</code> and also set in <code>params</code> or <code>env</code> uses the literal and ignores the secret from <code>.env</code>. <code>flisk config verify</code> warns about it.</li>
+<li>Frontend variables are read when the dev server starts. Restart it after a change.</li>
+</ul>
+<p>If a value still looks wrong after this, the checklist in <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">environment variable not loaded</a> picks up where this one ends.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does .env.local override .env?</summary><p>In Vite and Next.js, yes: the .local file is read with higher priority than the generic .env. Variables already set in the shell beat both.</p></details><details><summary>Does a shell variable beat a value in .env?</summary><p>In Vite, Next.js, Node.js --env-file and the dotenv package, yes by default. In Flisk&#39;s local-process services the shell is also first. For container secrets, the env file of the run wins over the shell for keys it defines.</p></details><details><summary>Can I merge two env files in Flisk?</summary><p>Not with flisk up --env-file. The selected file replaces the project .env for that run and the two are not merged, so copy .env first and edit the copy.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Env vars and secrets in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/env-and-secrets-local/compose-env-file-vs-environment/"><span class="lbl">Guide</span><b>Docker Compose env_file vs environment vs .env: the difference</b><span>The .env file next to a Compose file does not put anything inside your container. That surprises many people, and it explains most of the confusion.</span></a><a href="/@odykyi/env-and-secrets-local/dotenv-file-syntax-rules/"><span class="lbl">Guide</span><b>Why your .env file is not parsed: quotes, comments and $ signs</b><span>Two tools can read the same .env file and disagree about it. Learn the rules that most often differ, and how to check what a process really received.</span></a><a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/"><span class="lbl">Guide</span><b>How to gitignore .env files and still commit .env.example</b><span>Two lines of .gitignore protect your secrets, but only if the order is right and the file was never tracked.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
