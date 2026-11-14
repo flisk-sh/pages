@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>uv vs pip for a local Python project: which to use</title>
+<meta name="description" content="Compare uv and pip for a local Python project: speed, lock files, virtualenvs, Python installs, commands side by side, and when plain pip is enough.">
+<meta name="keywords" content="uv vs pip, uv python package manager, pip install vs uv sync, uv run uvicorn, python lock file">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="uv vs pip for a local Python project: which to use">
+<meta property="og:description" content="Compare uv and pip for a local Python project: speed, lock files, virtualenvs, Python installs, commands side by side, and when plain pip is enough.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"uv vs pip for a local Python project: which to use","description":"Compare uv and pip for a local Python project: speed, lock files, virtualenvs, Python installs, commands side by side, and when plain pip is enough.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/","keywords":"uv vs pip, uv python package manager, pip install vs uv sync, uv run uvicorn, python lock file","wordCount":711,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"uv vs pip for a local Python project: which to use","item":"https://pages.flisk.si/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is uv a replacement for pip?","acceptedAnswer":{"@type":"Answer","text":"For most local workflows, yes: uv pip install works like pip, and uv add, uv sync and uv run cover environments and locking. pip remains the default that ships with Python."}},{"@type":"Question","name":"Does uv work with requirements.txt?","acceptedAnswer":{"@type":"Answer","text":"Yes. uv pip install -r requirements.txt installs from it, and a project can keep using requirements files while you try uv."}},{"@type":"Question","name":"Does Flisk require a particular Python package manager?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk runs the command in service.json as a local process, so any installer works as long as the program in the command is on your PATH."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>uv vs pip for a local Python project: which to use</h1><p class="dek">pip is everywhere and does one job. uv replaces pip, venv and a few other tools with one program. Here is how to choose without a migration project.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-tool-does">What each tool does</a></li><li><a href="#a-side-by-side-workflow">A side-by-side workflow</a></li><li><a href="#how-to-choose">How to choose</a></li><li><a href="#running-either-under-flisk">Running either under Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Use pip when your project is a plain <code>requirements.txt</code> and nobody on the team has a reason to change. Use uv when you want a lock file, one command that creates the environment and installs into it, and the ability to install Python itself. Both install from PyPI, and a project can move from one to the other in minutes because both read <code>pyproject.toml</code> and requirements files.</p>
+
+<h2 id="what-each-tool-does">What each tool does</h2>
+<p>pip installs packages into the environment you are running in. It does not create environments (that is <code>venv</code>), it does not manage Python versions, and it has no lock file of its own. That is a small, stable surface, and it ships with Python.</p>
+<p>uv is a separate program from Astral. It covers more ground:</p>
+<ul>
+<li><code>uv venv</code> creates an environment, and <code>uv pip install -r requirements.txt</code> is a drop-in for the pip workflow.</li>
+<li><code>uv add fastapi</code> edits <code>pyproject.toml</code> and a <code>uv.lock</code> file, and <code>uv sync</code> makes the environment match the lock file.</li>
+<li><code>uv run uvicorn main:app --reload</code> makes sure the environment is in sync, then runs the command inside it, with no activation step.</li>
+<li><code>uv python install 3.12</code> and <code>uv python pin 3.12</code> fetch an interpreter and write a <code>.python-version</code> file.</li>
+</ul>
+<p>uv is usually noticeably quicker on installs, mostly because it caches and resolves aggressively. I am not going to put a number on it, because it depends on your packages and your network. Time your own project if the difference matters to you.</p>
+
+<h2 id="a-side-by-side-workflow">A side-by-side workflow</h2>
+<p>The same task, adding a dependency and running tests, in both tools:</p>
+<pre><code># pip
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pip install httpx
+python -m pip freeze &gt; requirements.txt
+python -m pytest
+
+# uv
+uv add httpx
+uv run pytest</code></pre>
+<p>The uv version is shorter because it handles the environment for you. The pip version has more steps, and each one is something you can see and debug with ordinary tools.</p>
+
+<h2 id="how-to-choose">How to choose</h2>
+<table>
+<thead><tr><th>Situation</th><th>Lean toward</th></tr></thead>
+<tbody>
+<tr><td>Tiny script or one service, requirements.txt already works</td><td>pip</td></tr>
+<tr><td>You want reproducible installs across a team</td><td>uv, for the lock file</td></tr>
+<tr><td>People on the team have different Python versions</td><td>uv, or pyenv or mise with either</td></tr>
+<tr><td>CI image is minimal and you cannot add tools</td><td>pip</td></tr>
+<tr><td>A Dockerfile that must work on any base image</td><td>pip, unless you copy uv into the image</td></tr>
+</tbody>
+</table>
+<p>Poetry and PDM are also good, and have their own lock files. If your team already uses one of them, the case for switching to uv is weaker than the case for finishing what you started.</p>
+
+<h2 id="running-either-under-flisk">Running either under Flisk</h2>
+<p>Flisk does not care which installer you use, because it only runs the <code>command</code> in your <code>service.json</code>. With pip, activate the environment before <code>flisk up</code>, or name the interpreter in the command. With uv, let uv do it:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "uv run uvicorn main:app --reload --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Flisk checks before it starts that the program in the command is installed, so <code>uv</code> must be on your <code>PATH</code>. One thing to watch: the optional <code>toolchain</code> field is compared with the <code>python3</code> or <code>python</code> found on your <code>PATH</code>, not with the interpreter uv picks for the project. If uv manages the interpreter, leave <code>toolchain</code> out and pin the version with <code>uv python pin</code> instead.</p>
+<p>The container route is different. A service scaffolded with <code>flisk resource api --type backend --language python</code> gets a <code>pyproject.toml</code>, and its generated Dockerfile builds wheels from that file with pip. It does not use uv, and you should not expect it to read a <code>uv.lock</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Mixing tools in one environment.</strong> Installing with <code>uv pip</code> and then <code>pip</code> works, but two lock sources drift. Choose one source of truth.</li>
+<li><strong>Forgetting to commit <code>uv.lock</code>.</strong> The lock file only helps if everyone shares it.</li>
+<li><strong>Assuming uv replaces your deploy process.</strong> Production images still need an install step, and you need to decide how it will read your lock file.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If the main pain is people running different interpreters, read <a href="/@odykyi/python-dev-setup/pin-python-version-per-project/">how to pin the Python version for a project</a>. For the basics of isolating packages, start with <a href="/@odykyi/python-dev-setup/python-virtualenv-per-project/">one virtual environment per project</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is uv a replacement for pip?</summary><p>For most local workflows, yes: uv pip install works like pip, and uv add, uv sync and uv run cover environments and locking. pip remains the default that ships with Python.</p></details><details><summary>Does uv work with requirements.txt?</summary><p>Yes. uv pip install -r requirements.txt installs from it, and a project can keep using requirements files while you try uv.</p></details><details><summary>Does Flisk require a particular Python package manager?</summary><p>No. Flisk runs the command in service.json as a local process, so any installer works as long as the program in the command is on your PATH.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/python-virtualenv-per-project/"><span class="lbl">Guide</span><b>How to set up a Python virtual environment for each project</b><span>One virtual environment per project keeps dependencies from colliding. The commands are short. The part people trip on is making every tool use the same one.</span></a><a href="/@odykyi/python-dev-setup/pin-python-version-per-project/"><span class="lbl">Guide</span><b>How to pin the Python version for a project (pyenv, uv, mise)</b><span>A project that works on 3.12 and fails on 3.9 is a project nobody pinned. Pinning takes three small files and saves hours of confusing bug reports.</span></a><a href="/@odykyi/python-dev-setup/modulenotfounderror-in-local-service/"><span class="lbl">Guide</span><b>ModuleNotFoundError when starting a Python service: fixes</b><span>The error says a module is missing. Usually the module is installed, just not for the Python that is running. Here is how to find which Python that is, and the usual fixes.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

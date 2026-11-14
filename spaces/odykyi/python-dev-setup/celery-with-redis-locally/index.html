@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Celery with Redis for local development</title>
+<meta name="description" content="Run a Celery worker, Redis as broker and a FastAPI or Django producer on your laptop: worker command, reload with watchfiles, eager mode for tests, and Flisk.">
+<meta name="keywords" content="celery redis local development, celery worker command, celery autoreload, celery task_always_eager, run celery locally">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/celery-with-redis-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Celery with Redis for local development">
+<meta property="og:description" content="Run a Celery worker, Redis as broker and a FastAPI or Django producer on your laptop: worker command, reload with watchfiles, eager mode for tests, and Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/celery-with-redis-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Celery with Redis for local development","description":"Run a Celery worker, Redis as broker and a FastAPI or Django producer on your laptop: worker command, reload with watchfiles, eager mode for tests, and Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/celery-with-redis-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/celery-with-redis-locally/","keywords":"celery redis local development, celery worker command, celery autoreload, celery task_always_eager, run celery locally","wordCount":832,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run Celery with Redis for local development","item":"https://pages.flisk.si/@odykyi/python-dev-setup/celery-with-redis-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Redis to try Celery locally?","acceptedAnswer":{"@type":"Answer","text":"You need some broker. Redis is the easiest to run in a container. For unit tests you can skip the broker with task_always_eager."}},{"@type":"Question","name":"Why does my Celery worker not pick up code changes?","acceptedAnswer":{"@type":"Answer","text":"The worker keeps the imported code in memory. Restart it after editing a task, or run it under a file watcher such as the watchfiles command."}},{"@type":"Question","name":"Does Flisk run Celery workers?","acceptedAnswer":{"@type":"Answer","text":"Flisk runs any command as a local process, so a Celery worker is a service with a command in service.json. Redis can run beside it as a container image."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to run Celery with Redis for local development</h1><p class="dek">A Celery setup has three moving parts: something that enqueues, a broker that holds the jobs, and a worker that runs them. Locally you can run all three with a couple of small files.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-pieces">The pieces</a></li><li><a href="#the-celery-app">The Celery app</a></li><li><a href="#run-the-worker">Run the worker</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#testing-tasks">Testing tasks</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Start Redis, define a Celery app that uses it as broker and result backend, run a worker with <code>celery -A tasks worker --loglevel=info</code>, and enqueue work from your web service with <code>.delay()</code>. For tests, set <code>task_always_eager</code> so tasks run inline with no broker at all. Three processes are enough: the web app, the worker and Redis.</p>
+
+<h2 id="the-pieces">The pieces</h2>
+<p>The producer, for example a FastAPI endpoint, puts a message on a queue. The broker holds it. The worker pulls it and runs the function. Celery can also store the result in a backend so the producer can ask for it later. Redis can play both the broker and the backend roles, which is why it is the usual local choice. Redis itself is covered in <a href="/@odykyi/local-database-guide/redis-for-local-development/">running Redis for development</a>.</p>
+
+<h2 id="the-celery-app">The Celery app</h2>
+<p>Install the packages and write <code>tasks.py</code>:</p>
+<pre><code>python -m pip install celery redis</code></pre>
+<pre><code>import os
+from celery import Celery
+
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+
+app = Celery("tasks", broker=REDIS_URL, backend=REDIS_URL)
+
+@app.task(name="tasks.add")
+def add(x, y):
+    return x + y</code></pre>
+<p>The producer imports the task and sends it:</p>
+<pre><code>from tasks import add
+
+result = add.delay(15, 30)        # returns immediately
+print(result.id)
+print(result.get(timeout=10))     # 45, waits for the worker</code></pre>
+<p>In a web endpoint, return the id with a 202 response and let clients poll a status route, instead of calling <code>.get()</code> inside the request. Waiting inside a request ties up a web worker for the length of the job.</p>
+
+<h2 id="run-the-worker">Run the worker</h2>
+<pre><code>docker run --name redis -p 127.0.0.1:6379:6379 -d redis:7-alpine
+celery -A tasks worker --loglevel=info</code></pre>
+<p>On Windows, Celery's default pool does not work. Add <code>--pool=solo</code> (one task at a time) for local development. Celery 5 removed the old <code>--autoreload</code> option, so the worker does not restart when you edit a task. A common workaround is the <code>watchfiles</code> command line tool, which restarts a command when files change:</p>
+<pre><code>python -m pip install watchfiles
+watchfiles "celery -A tasks worker --loglevel=info" .</code></pre>
+<p>Restart the worker whenever you change task code. A worker keeps the old version of a function in memory, and "my fix did nothing" is very often just an old worker still running.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk can run the worker and the web app as local processes with Redis in a container, in one command. This is the same shape as the repository's own recipe for FastAPI, Celery and Redis (<a href="https://github.com/flisk-sh/flisk/blob/main/docs/recipes/fastapi-celery-redis.md">docs/recipes/fastapi-celery-redis.md</a>), which also has an end-to-end test. A shortened version of the manifests, each in its own folder with a <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "redis",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "image": "redis:7-alpine",
+  "port": 6379,
+  "exposeViaProxy": false
+}</code></pre>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "worker",
+  "appType": "worker",
+  "stack": "app",
+  "command": "celery -A tasks worker --loglevel=info",
+  "dependsOn": ["redis"],
+  "env": { "REDIS_URL": "redis://localhost:6379/0" }
+}</code></pre>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "stack": "app",
+  "command": "uvicorn main:app --reload --port $PORT",
+  "port": 8000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["redis"],
+  "env": { "REDIS_URL": "redis://localhost:6379/0" }
+}</code></pre>
+<p>Points to know:</p>
+<ul>
+<li>Flisk starts Redis first with <code>docker run</code>, so Docker must be running. It publishes the port on <code>127.0.0.1</code>.</li>
+<li>Local processes reach the container at <code>localhost</code>, not by service name, because the containers share no Docker network with them.</li>
+<li>A service with no port counts as ready once its process is still running after about a second, which is how the worker is treated. It is not a proof that Celery connected to Redis, so read its log.</li>
+<li>If the worker crashes, Flisk restarts it after 1, 2, 4 and 8 seconds, and gives up after five quick exits. Look at it with <code>flisk logs --service worker --tail 50</code>.</li>
+<li>Restart only the worker after changing a task, with <code>flisk restart worker</code>, instead of the whole stack.</li>
+</ul>
+<p>Python buffers output when it is not writing to a terminal. If a worker looks silent, set <code>PYTHONUNBUFFERED=1</code> in its <code>env</code> block. Celery's own log handler is usually unaffected, but your <code>print</code> calls are not.</p>
+
+<h2 id="testing-tasks">Testing tasks</h2>
+<p>For unit tests, you rarely want a broker. Set eager mode and tasks run in the calling process:</p>
+<pre><code>app.conf.task_always_eager = True
+app.conf.task_eager_propagates = True</code></pre>
+<p>The second line makes exceptions in a task raise in your test instead of being stored in the result. Use real Redis and a real worker only for the few tests that check wiring. See <a href="/@odykyi/workers-and-queues/debug-a-stuck-job/">debugging a stuck job</a> for what to check when a task never finishes.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Different Redis databases.</strong> A producer on <code>/0</code> and a worker on <code>/1</code> never meet. Share one URL through the environment.</li>
+<li><strong>Task names.</strong> Autogenerated names include the module path, so importing a task as <code>src.tasks</code> in one place and <code>tasks</code> in another yields two names. Set <code>name=</code> explicitly.</li>
+<li><strong>Passing big objects.</strong> Pass IDs, not model instances or files.</li>
+<li><strong>Losing jobs on restart.</strong> Without persistence, Redis forgets queued jobs when the container is removed.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Test the whole loop with <a href="/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/">pytest against a local stack</a>. If your producer is a Node service, <a href="/@odykyi/workers-and-queues/python-worker-next-to-a-node-api/">a Python worker next to a Node API</a> uses NATS instead of Redis.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Redis to try Celery locally?</summary><p>You need some broker. Redis is the easiest to run in a container. For unit tests you can skip the broker with task_always_eager.</p></details><details><summary>Why does my Celery worker not pick up code changes?</summary><p>The worker keeps the imported code in memory. Restart it after editing a task, or run it under a file watcher such as the watchfiles command.</p></details><details><summary>Does Flisk run Celery workers?</summary><p>Flisk runs any command as a local process, so a Celery worker is a service with a command in service.json. Redis can run beside it as a container image.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/"><span class="lbl">Guide</span><b>How to run pytest against a local API and database</b><span>Unit tests tell you a function works. Integration tests tell you the service, its database and its queue work together. In Python this is mostly an organizational problem, and a few habits make it manageable.</span></a><a href="/@odykyi/python-dev-setup/django-with-postgres-locally/"><span class="lbl">Guide</span><b>How to run Django locally with Postgres in Docker</b><span>Django reloads fast on the host, and Postgres is easiest in a container. Splitting them this way is a common setup. Here is how to wire it so migrations run first and data survives restarts.</span></a><a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/"><span class="lbl">Guide</span><b>How to debug a Python service with debugpy and VS Code</b><span>Print statements get you far. When they stop being enough, attach a real debugger to the running service. It is a small amount of setup and it works the same for a service you start by hand or through a tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

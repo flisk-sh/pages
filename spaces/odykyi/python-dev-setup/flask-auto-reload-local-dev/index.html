@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Flask with auto-reload in local development</title>
+<meta name="description" content="Use flask run --debug for the reloader and debugger, set the port, reload extra files like config, and run Flask next to other services with Flisk.">
+<meta name="keywords" content="flask run debug, flask auto reload, flask --app run --debug, flask reload templates, flask local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/flask-auto-reload-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Flask with auto-reload in local development">
+<meta property="og:description" content="Use flask run --debug for the reloader and debugger, set the port, reload extra files like config, and run Flask next to other services with Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/flask-auto-reload-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Flask with auto-reload in local development","description":"Use flask run --debug for the reloader and debugger, set the port, reload extra files like config, and run Flask next to other services with Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/flask-auto-reload-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/flask-auto-reload-local-dev/","keywords":"flask run debug, flask auto reload, flask --app run --debug, flask reload templates, flask local development","wordCount":738,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run Flask with auto-reload in local development","item":"https://pages.flisk.si/@odykyi/python-dev-setup/flask-auto-reload-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between flask run --debug and app.run(debug=True)?","acceptedAnswer":{"@type":"Answer","text":"Both enable the reloader and the debugger. flask run --debug is the current way and works with Flask's app discovery and CLI commands."}},{"@type":"Question","name":"Why does my Flask app start twice with the reloader?","acceptedAnswer":{"@type":"Answer","text":"The reloader launches a parent process that watches files and a child that serves requests, so import-time code runs in both."}},{"@type":"Question","name":"Does Flisk have a Flask template?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk's Python backend scaffold uses FastAPI. A Flask app runs as any other service with a command in its service.json."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to run Flask with auto-reload in local development</h1><p class="dek">Flask has a reloader built in. The trick is knowing which command turns it on, what it watches, and why you must never leave it on outside your laptop.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-commands-that-work">The commands that work</a></li><li><a href="#what-the-reloader-watches">What the reloader watches</a></li><li><a href="#why-the-debugger-is-dangerous">Why the debugger is dangerous</a></li><li><a href="#run-it-next-to-other-services-with-flisk">Run it next to other services with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Start Flask with <code>flask --app app run --debug</code>. The <code>--debug</code> flag turns on both the reloader, which restarts the server when your Python files change, and the interactive debugger, which shows a traceback page in the browser. Use <code>--port</code> to choose the port. Never enable debug mode on a server that anyone else can reach.</p>
+
+<h2 id="the-commands-that-work">The commands that work</h2>
+<p>With a file named <code>app.py</code> that defines <code>app = Flask(__name__)</code>:</p>
+<pre><code>flask --app app run --debug --port 5000</code></pre>
+<p><code>--app</code> names the module, or <code>module:object</code> if your variable has another name. Without <code>--app</code>, Flask looks for <code>app.py</code> or <code>wsgi.py</code> by itself. You can also set the environment variable <code>FLASK_DEBUG=1</code> instead of passing the flag.</p>
+<p>Older tutorials end the file with <code>app.run(debug=True)</code> and start it with <code>python app.py</code>. That still works. The <code>flask run</code> form is preferred now because it uses the same app discovery everywhere, including the shell command <code>flask shell</code> and CLI commands you add yourself.</p>
+
+<h2 id="what-the-reloader-watches">What the reloader watches</h2>
+<p>The reloader restarts the process when an imported Python module changes. If <code>watchdog</code> is installed, Flask uses it, which is more efficient. Without it, the reloader polls file times. Things it does not watch by default are non-Python files that your app reads at start, such as a JSON config or a translation file. Add them explicitly:</p>
+<pre><code>flask --app app run --debug --extra-files config.json:translations/messages.po</code></pre>
+<p>The separator is the OS path separator, a colon on macOS and Linux. Jinja templates are a special case. In debug mode Flask reloads templates when they change without restarting the process, so you do not need to list them.</p>
+<p>If your reloader restarts constantly, something in the watched tree is changing on its own, for example a log file or a <code>.venv</code> folder. The newer versions of Flask let you filter with <code>--exclude-patterns</code>. Another fix is to keep the virtual environment outside the project folder.</p>
+
+<h2 id="why-the-debugger-is-dangerous">Why the debugger is dangerous</h2>
+<p>The Werkzeug debugger lets anyone who can open the error page run Python code on your machine. It is protected by a PIN printed to your terminal, which is a guard against accidents and not a security boundary. Keep two rules:</p>
+<ul>
+<li>Bind to <code>127.0.0.1</code>, which is Flask's default. Do not use <code>--host 0.0.0.0</code> on a shared network just to test from a phone.</li>
+<li>Do not set <code>FLASK_DEBUG=1</code> in any image or environment you deploy. Production should use a real server such as gunicorn.</li>
+</ul>
+
+<h2 id="run-it-next-to-other-services-with-flisk">Run it next to other services with Flisk</h2>
+<p>Flask is just a command to Flisk. Put it in a <code>service.json</code> and give it a health route:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "toolchain": "python@3.12",
+  "command": "flask --app app run --debug --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<pre><code>@app.get("/health")
+def health():
+    return {"status": "ok"}</code></pre>
+<p>Flisk passes <code>PORT</code> to the process and runs the command through a shell from the service folder, so <code>$PORT</code> expands. Flisk waits for <code>/health</code> to answer before it starts services that depend on this one,. The reload still comes from Flask, not from Flisk. Read the output with <code>flisk logs --service api --tail 50</code> and stop everything with <code>flisk down</code>. Flisk does not create a virtualenv, so activate yours first or call <code>.venv/bin/flask</code> in the command. This setup is described in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a>.</p>
+<p>Flisk scaffolds FastAPI, not Flask, for its Python backend template. A Flask service is a service you write yourself and register with a <code>service.json</code>, which is the example above. If you want the container route for it, you would write your own Dockerfile and use the <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">bring your own Dockerfile</a> path.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port 5000 is taken on macOS.</strong> AirPlay Receiver can listen there, so a default Flask start fails or answers with something else. Pick another port, which is what <code>$PORT</code> under a manager gives you.</li>
+<li><strong>Reloader runs your startup code twice.</strong> It starts a parent and a child process. Code at import time, like creating a background thread, runs in both. Keep side effects inside functions.</li>
+<li><strong>Environment changes need a restart.</strong> Flask does not re-read <code>.env</code> on reload unless your code loads it at startup.</li>
+<li><strong>Docker bind mounts.</strong> File events may not arrive from a mounted folder. See <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Reload is only half of the loop. To stop at a line and look at variables, read <a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/">debugging with debugpy</a>. If you use uvicorn instead, the equivalent problems are in <a href="/@odykyi/python-dev-setup/uvicorn-reload-not-working/">uvicorn reload not working</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between flask run --debug and app.run(debug=True)?</summary><p>Both enable the reloader and the debugger. flask run --debug is the current way and works with Flask&#39;s app discovery and CLI commands.</p></details><details><summary>Why does my Flask app start twice with the reloader?</summary><p>The reloader launches a parent process that watches files and a child that serves requests, so import-time code runs in both.</p></details><details><summary>Does Flisk have a Flask template?</summary><p>No. Flisk&#39;s Python backend scaffold uses FastAPI. A Flask app runs as any other service with a command in its service.json.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/uvicorn-reload-not-working/"><span class="lbl">Guide</span><b>uvicorn --reload not working: causes and fixes</b><span>When uvicorn stops picking up your edits, the cause is nearly always one of five things. Each is quick to check once you know what the reloader watches.</span></a><a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/"><span class="lbl">Guide</span><b>How to debug a Python service with debugpy and VS Code</b><span>Print statements get you far. When they stop being enough, attach a real debugger to the running service. It is a small amount of setup and it works the same for a service you start by hand or through a tool.</span></a><a href="/@odykyi/python-dev-setup/django-with-postgres-locally/"><span class="lbl">Guide</span><b>How to run Django locally with Postgres in Docker</b><span>Django reloads fast on the host, and Postgres is easiest in a container. Splitting them this way is a common setup. Here is how to wire it so migrations run first and data survives restarts.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

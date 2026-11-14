@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>uvicorn --reload not working: causes and fixes</title>
+<meta name="description" content="Why uvicorn does not reload on save or reloads in a loop: import strings, watched directories, file patterns, Docker bind mounts and venv folders, with fixes.">
+<meta name="keywords" content="uvicorn reload not working, uvicorn --reload-dir, fastapi auto reload, uvicorn reload docker, uvicorn reload loop">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/uvicorn-reload-not-working/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="uvicorn --reload not working: causes and fixes">
+<meta property="og:description" content="Why uvicorn does not reload on save or reloads in a loop: import strings, watched directories, file patterns, Docker bind mounts and venv folders, with fixes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/uvicorn-reload-not-working/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"uvicorn --reload not working: causes and fixes","description":"Why uvicorn does not reload on save or reloads in a loop: import strings, watched directories, file patterns, Docker bind mounts and venv folders, with fixes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/uvicorn-reload-not-working/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/uvicorn-reload-not-working/","keywords":"uvicorn reload not working, uvicorn --reload-dir, fastapi auto reload, uvicorn reload docker, uvicorn reload loop","wordCount":704,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"uvicorn --reload not working: causes and fixes","item":"https://pages.flisk.si/@odykyi/python-dev-setup/uvicorn-reload-not-working/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does uvicorn --reload not detect changes to my templates?","acceptedAnswer":{"@type":"Answer","text":"By default only .py files are watched. Add --reload-include with a pattern such as *.html to include other file types."}},{"@type":"Question","name":"Why does uvicorn reload again and again?","acceptedAnswer":{"@type":"Answer","text":"Something inside the watched directory changes on its own, often a .venv folder, a SQLite file or a log file. Limit watching with --reload-dir or use --reload-exclude."}},{"@type":"Question","name":"Can I use --reload with multiple workers?","acceptedAnswer":{"@type":"Answer","text":"No. Reload is a development feature and is not compatible with --workers. Use a single process while developing."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>uvicorn --reload not working: causes and fixes</h1><p class="dek">When uvicorn stops picking up your edits, the cause is nearly always one of five things. Each is quick to check once you know what the reloader watches.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-the-reloader-decides">How the reloader decides</a></li><li><a href="#the-checklist">The checklist</a></li><li><a href="#what-flisk-does-here">What Flisk does here</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>If <code>uvicorn --reload</code> ignores your edits, check these in order: the app is passed as an import string, you are editing a file the reloader watches, the file pattern matches, and, if you use Docker or WSL, file events actually reach the process. If it reloads endlessly instead, it is watching a folder that changes on its own, usually <code>.venv</code> or a log directory.</p>
+
+<h2 id="how-the-reloader-decides">How the reloader decides</h2>
+<p>With <code>--reload</code>, uvicorn runs a supervisor process that watches files and restarts a worker process when something changes. By default it watches the current working directory. If the <code>watchfiles</code> package is installed (it comes with <code>uvicorn[standard]</code>), it uses that. Otherwise it falls back to polling file modification times. By default only <code>*.py</code> files count as changes. Knowing that default explains most surprises.</p>
+
+<h2 id="the-checklist">The checklist</h2>
+<h3>1. Reload needs an import string</h3>
+<p>This works:</p>
+<pre><code>uvicorn main:app --reload</code></pre>
+<p>This does not, and uvicorn says so in the log:</p>
+<pre><code>uvicorn.run(app, reload=True)   # app object, not an import string</code></pre>
+<p>Use <code>uvicorn.run("main:app", reload=True)</code> when you start it from Python. The supervisor has to import your app again in a fresh process, so it needs a name to import.</p>
+
+<h3>2. You edited a file that is not watched</h3>
+<p>Changing an <code>.html</code> template, a <code>.env</code> file or a YAML config does not trigger a reload, because only Python files are included. Add patterns:</p>
+<pre><code>uvicorn main:app --reload --reload-include "*.html" --reload-include "*.yaml"</code></pre>
+<p>Environment variables are read when the process starts. Even if you reload, a changed <code>.env</code> is only picked up if your code loads it at startup.</p>
+
+<h3>3. The edited file is outside the watched directory</h3>
+<p><code>--reload-dir src</code> limits watching to <code>src</code>. A helper package in a sibling folder will not trigger anything. Pass the option once for each folder:</p>
+<pre><code>uvicorn main:app --app-dir src --reload --reload-dir src --reload-dir ../shared</code></pre>
+
+<h3>4. It reloads in a loop</h3>
+<p>A restart that triggers another restart means something under the watched path is being written constantly. The usual culprits are a <code>.venv</code> inside the project, a SQLite database file, or a log file. Narrow the watch with <code>--reload-dir</code>, or exclude the noisy pattern with <code>--reload-exclude</code>. Limiting the watch to your source folder is the most robust fix.</p>
+
+<h3>5. File events never arrive</h3>
+<p>Inside Docker on macOS or Windows, bind mounts do not always deliver the change notifications Linux programs rely on. The same happens for projects stored under <code>/mnt/c</code> in WSL 2. If saving does nothing and the paths above are right, this is likely it. Either run the service on the host, keep the project in the Linux file system, or switch to polling. The general causes are covered in <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>.</p>
+
+<h2 id="what-flisk-does-here">What Flisk does here</h2>
+<p>Flisk does not add its own reloader to a Python service. For a service started as a local process, the reload is whatever you put in <code>command</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "uvicorn main:app --app-dir src --reload --reload-dir src --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>That is the same shape that <code>flisk resource api --type backend --language python --local</code> scaffolds: its command is a uvicorn line with <code>--reload</code> and <code>--reload-dir src</code>. Running on the host avoids the bind mount problem in step 5 entirely. For the container route, the generated Python image starts uvicorn with the same flags, and Flisk syncs your changed files into the running container and relies on uvicorn's reload to pick them up. If you watch the output with <code>flisk logs --service api --tail 50</code>, you should see the reload message after each save. If you do not, work through the checklist above.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Reload in production.</strong> <code>--reload</code> is for development. It starts a supervisor, watches files and restarts workers. Leave it out of production commands.</li>
+<li><strong>Combining <code>--reload</code> with <code>--workers</code>.</strong> Reload is a single-process development mode, so run one process while you develop.</li>
+<li><strong>Import errors on reload.</strong> A syntax error stops the worker, and the supervisor waits for the next save. The log shows the traceback.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>When reload works but you still cannot see why a request misbehaves, attach a debugger: <a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/">debugging a Python service with debugpy</a>. For Flask, which has its own reloader, see <a href="/@odykyi/python-dev-setup/flask-auto-reload-local-dev/">Flask auto-reload</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does uvicorn --reload not detect changes to my templates?</summary><p>By default only .py files are watched. Add --reload-include with a pattern such as *.html to include other file types.</p></details><details><summary>Why does uvicorn reload again and again?</summary><p>Something inside the watched directory changes on its own, often a .venv folder, a SQLite file or a log file. Limit watching with --reload-dir or use --reload-exclude.</p></details><details><summary>Can I use --reload with multiple workers?</summary><p>No. Reload is a development feature and is not compatible with --workers. Use a single process while developing.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/flask-auto-reload-local-dev/"><span class="lbl">Guide</span><b>How to run Flask with auto-reload in local development</b><span>Flask has a reloader built in. The trick is knowing which command turns it on, what it watches, and why you must never leave it on outside your laptop.</span></a><a href="/@odykyi/python-dev-setup/debug-python-service-with-debugpy/"><span class="lbl">Guide</span><b>How to debug a Python service with debugpy and VS Code</b><span>Print statements get you far. When they stop being enough, attach a real debugger to the running service. It is a small amount of setup and it works the same for a service you start by hand or through a tool.</span></a><a href="/@odykyi/python-dev-setup/modulenotfounderror-in-local-service/"><span class="lbl">Guide</span><b>ModuleNotFoundError when starting a Python service: fixes</b><span>The error says a module is missing. Usually the module is installed, just not for the Python that is running. Here is how to find which Python that is, and the usual fixes.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

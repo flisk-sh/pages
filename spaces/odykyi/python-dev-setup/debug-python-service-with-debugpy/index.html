@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to debug a Python service with debugpy and VS Code</title>
+<meta name="description" content="Attach VS Code to a running Python API with debugpy: install, listen port, path mappings, why to turn reload off, and debugging one service in a stack.">
+<meta name="keywords" content="debugpy attach vscode, debug python api vscode, python -m debugpy listen, debug fastapi breakpoint, attach debugger to running python">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/debug-python-service-with-debugpy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to debug a Python service with debugpy and VS Code">
+<meta property="og:description" content="Attach VS Code to a running Python API with debugpy: install, listen port, path mappings, why to turn reload off, and debugging one service in a stack.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/debug-python-service-with-debugpy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to debug a Python service with debugpy and VS Code","description":"Attach VS Code to a running Python API with debugpy: install, listen port, path mappings, why to turn reload off, and debugging one service in a stack.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/debug-python-service-with-debugpy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/debug-python-service-with-debugpy/","keywords":"debugpy attach vscode, debug python api vscode, python -m debugpy listen, debug fastapi breakpoint, attach debugger to running python","wordCount":752,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to debug a Python service with debugpy and VS Code","item":"https://pages.flisk.si/@odykyi/python-dev-setup/debug-python-service-with-debugpy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my VS Code breakpoint show as unbound?","acceptedAnswer":{"@type":"Answer","text":"Usually the path mapping is wrong, the debugger is attached to a different process or interpreter, or the code was never imported. For code in a container, set remoteRoot to the container path."}},{"@type":"Question","name":"Can I debug with uvicorn --reload?","acceptedAnswer":{"@type":"Answer","text":"It is awkward, because the reloader serves requests from a child process that it replaces on each change. Turn reload off while debugging."}},{"@type":"Question","name":"What is the difference between debugpy launch and attach?","acceptedAnswer":{"@type":"Answer","text":"Launch starts your program under the debugger. Attach connects to a program that is already running and listening, which suits services started by another tool."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to debug a Python service with debugpy and VS Code</h1><p class="dek">Print statements get you far. When they stop being enough, attach a real debugger to the running service. It is a small amount of setup and it works the same for a service you start by hand or through a tool.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#two-ways-to-debug-in-vs-code">Two ways to debug in VS Code</a></li><li><a href="#launch-configuration-for-a-single-service">Launch configuration for a single service</a></li><li><a href="#attach-to-a-service-that-is-already-running">Attach to a service that is already running</a></li><li><a href="#debug-one-service-in-a-flisk-stack">Debug one service in a Flisk stack</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Install <code>debugpy</code>, start your service with <code>python -m debugpy --listen 5678 -m uvicorn main:app</code>, and add an "attach" configuration to VS Code that connects to port 5678. Then set breakpoints in the editor and send a request. Turn off auto-reload while you debug, because the reloader runs your code in a child process, which complicates attaching.</p>
+
+<h2 id="two-ways-to-debug-in-vs-code">Two ways to debug in VS Code</h2>
+<p><strong>Launch</strong> means VS Code starts your program under the debugger. It is the easiest when you have one service. <strong>Attach</strong> means the program is already running and the debugger connects to it. Attach is what you want when something else starts the service, such as a process manager or a container, or when you only want to debug one of several services.</p>
+
+<h2 id="launch-configuration-for-a-single-service">Launch configuration for a single service</h2>
+<p>In <code>.vscode/launch.json</code>:</p>
+<pre><code>{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (launch)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["main:app", "--port", "8000"],
+      "cwd": "${workspaceFolder}/api",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}</code></pre>
+<p>This needs the Python Debugger extension, and VS Code must have the right interpreter selected, ideally your project's <code>.venv</code>. Notice there is no <code>--reload</code>. The debugger works with the process it started, and a reloader replaces that process on every save.</p>
+
+<h2 id="attach-to-a-service-that-is-already-running">Attach to a service that is already running</h2>
+<p>Install the package in the same environment as the service:</p>
+<pre><code>python -m pip install debugpy</code></pre>
+<p>Start the service so that it listens for a debugger:</p>
+<pre><code>python -m debugpy --listen 127.0.0.1:5678 -m uvicorn main:app --port 8000</code></pre>
+<p>The program runs normally and debugpy waits in the background for a client. Add <code>--wait-for-client</code> only if you need to debug code that runs at startup. Otherwise a service that blocks until you attach will never answer its health check.</p>
+<p>Then the attach configuration:</p>
+<pre><code>{
+  "name": "API (attach)",
+  "type": "debugpy",
+  "request": "attach",
+  "connect": { "host": "localhost", "port": 5678 },
+  "pathMappings": [
+    { "localRoot": "${workspaceFolder}/api", "remoteRoot": "${workspaceFolder}/api" }
+  ]
+}</code></pre>
+<p>When the service runs on the same machine, the local and remote roots are the same folder. They only differ when the program runs inside a container, where the code is mounted at another path, for example <code>/app</code>. Then <code>remoteRoot</code> must be that container path or breakpoints will show up as unbound.</p>
+
+<h2 id="debug-one-service-in-a-flisk-stack">Debug one service in a Flisk stack</h2>
+<p>A service Flisk starts from a <code>command</code> is an ordinary process on your machine, so a debugger can attach to it. Put the debugpy command in its manifest while you debug:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "python -m debugpy --listen 127.0.0.1:5678 -m uvicorn main:app --port $PORT",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Run <code>flisk up</code>, attach VS Code to port 5678, and the other services keep running as usual. Flisk's own readiness checks still apply, so keep <code>--wait-for-client</code> out of this command. Change the command back (or keep a second manifest value in a branch) when you finish, so the team does not inherit a debug port. Container services behave differently: they need the debug port published and the path mappings above.</p>
+<p>For breakpoints in a one-off script, a test or a management command, use <code>flisk run</code>, which passes stdin and stdout through, so an interactive debugger prompt works:</p>
+<pre><code>flisk run api -- python -m pytest --pdb</code></pre>
+<p>That runs pytest on the host from the service folder with the service's environment, and drops into <code>pdb</code> on the first failure. Details are in <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">running a one-off command</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Breakpoints that never hit.</strong> Wrong interpreter, wrong path mapping, or the code path never ran. Add a log line to confirm the request reaches that function.</li>
+<li><strong>Debugging with <code>--reload</code> on.</strong> The reloader runs your app in a child process and replaces it on change. Debug without reload, then turn it back on.</li>
+<li><strong>Exposing the debug port.</strong> debugpy gives whoever connects full control of the process. Listen on <code>127.0.0.1</code>, not <code>0.0.0.0</code>, unless you also control the network.</li>
+<li><strong>Timeouts.</strong> Stopped at a breakpoint, requests wait. A client with a short timeout will give up, and a health check that depends on the paused thread can fail, so a supervisor may restart the service while you are looking at it.</li>
+<li><strong>Async code.</strong> Stepping across an <code>await</code> is supported, but the call stack shows the event loop. Use the "Call stack" panel to follow coroutines.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If the thing you are chasing is a reload that does not happen, see <a href="/@odykyi/python-dev-setup/uvicorn-reload-not-working/">uvicorn reload not working</a>. For a failing import rather than a failing request, start with <a href="/@odykyi/python-dev-setup/modulenotfounderror-in-local-service/">ModuleNotFoundError in a local service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my VS Code breakpoint show as unbound?</summary><p>Usually the path mapping is wrong, the debugger is attached to a different process or interpreter, or the code was never imported. For code in a container, set remoteRoot to the container path.</p></details><details><summary>Can I debug with uvicorn --reload?</summary><p>It is awkward, because the reloader serves requests from a child process that it replaces on each change. Turn reload off while debugging.</p></details><details><summary>What is the difference between debugpy launch and attach?</summary><p>Launch starts your program under the debugger. Attach connects to a program that is already running and listening, which suits services started by another tool.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/uvicorn-reload-not-working/"><span class="lbl">Guide</span><b>uvicorn --reload not working: causes and fixes</b><span>When uvicorn stops picking up your edits, the cause is nearly always one of five things. Each is quick to check once you know what the reloader watches.</span></a><a href="/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/"><span class="lbl">Guide</span><b>How to run pytest against a local API and database</b><span>Unit tests tell you a function works. Integration tests tell you the service, its database and its queue work together. In Python this is mostly an organizational problem, and a few habits make it manageable.</span></a><a href="/@odykyi/python-dev-setup/modulenotfounderror-in-local-service/"><span class="lbl">Guide</span><b>ModuleNotFoundError when starting a Python service: fixes</b><span>The error says a module is missing. Usually the module is installed, just not for the Python that is running. Here is how to find which Python that is, and the usual fixes.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

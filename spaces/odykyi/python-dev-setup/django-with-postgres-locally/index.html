@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Django locally with Postgres in Docker</title>
+<meta name="description" content="Run Django on your laptop with Postgres in Docker: DATABASE_URL, a migrator that runs once before the server, runserver, and a superuser, using Flisk.">
+<meta name="keywords" content="django postgres docker local, django runserver postgres, dj-database-url, django migrate before runserver, django local development setup">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/python-dev-setup/django-with-postgres-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Django locally with Postgres in Docker">
+<meta property="og:description" content="Run Django on your laptop with Postgres in Docker: DATABASE_URL, a migrator that runs once before the server, runserver, and a superuser, using Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/python-dev-setup/django-with-postgres-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Django locally with Postgres in Docker","description":"Run Django on your laptop with Postgres in Docker: DATABASE_URL, a migrator that runs once before the server, runserver, and a superuser, using Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/python-dev-setup/django-with-postgres-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/python-dev-setup/django-with-postgres-locally/","keywords":"django postgres docker local, django runserver postgres, dj-database-url, django migrate before runserver, django local development setup","wordCount":779,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Python local development setup","item":"https://pages.flisk.si/@odykyi/python-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run Django locally with Postgres in Docker","item":"https://pages.flisk.si/@odykyi/python-dev-setup/django-with-postgres-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Docker to run Django with Postgres locally?","acceptedAnswer":{"@type":"Answer","text":"You need Docker only for the Postgres container. You can install Postgres directly on your machine instead, or use SQLite in development."}},{"@type":"Question","name":"Where should Django migrations run in local development?","acceptedAnswer":{"@type":"Answer","text":"As a separate step before the server starts, not inside the web process. In Flisk that is a migrator service that web depends on, so the server starts only after migrate exits successfully."}},{"@type":"Question","name":"Why does Django ignore my new Postgres password?","acceptedAnswer":{"@type":"Answer","text":"Postgres sets the password when it first creates the data volume. A later change in the environment does not apply to an existing volume until you recreate it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/python-dev-setup/">Python local development setup</a></div>
+<section class="hero"><div><div class="lbl">Python local development setup</div><h1>How to run Django locally with Postgres in Docker</h1><p class="dek">Django reloads fast on the host, and Postgres is easiest in a container. Splitting them this way is a common setup. Here is how to wire it so migrations run first and data survives restarts.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-sqlite-in-development">Why not SQLite in development</a></li><li><a href="#wire-django-to-postgres">Wire Django to Postgres</a></li><li><a href="#without-flisk">Without Flisk</a></li><li><a href="#the-flisk-way-three-services-in-order">The Flisk way: three services in order</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Run Django with <code>python manage.py runserver</code> on your machine, run Postgres from the official image in Docker, and point Django at it with a <code>DATABASE_URL</code>. Apply migrations as a separate step before the server starts. This keeps Django's reload and debugger working normally and keeps a real Postgres version instead of SQLite.</p>
+
+<h2 id="why-not-sqlite-in-development">Why not SQLite in development</h2>
+<p>SQLite is fine for a first tutorial. It differs from Postgres in ways that matter later: stricter column types in Postgres, different locking, no <code>JSONField</code> lookups on some SQLite builds, and no way to test things like <code>ArrayField</code> or full text search. If production uses Postgres, development should too. A container is the cheapest way to get one without installing it system-wide.</p>
+
+<h2 id="wire-django-to-postgres">Wire Django to Postgres</h2>
+<p>Install a driver and a URL parser:</p>
+<pre><code>python -m pip install "psycopg[binary]" dj-database-url</code></pre>
+<p>In <code>settings.py</code>, read the connection from the environment so no password lives in code:</p>
+<pre><code>import dj_database_url
+
+DATABASES = {
+    "default": dj_database_url.config(default="sqlite:///db.sqlite3"),
+}</code></pre>
+<p>With <code>DATABASE_URL=postgres://app:app@localhost:5432/app</code> in the environment, Django talks to Postgres. Without it, it falls back to SQLite, which is a deliberate default so a fresh clone still runs. The username and password above are throwaway values for a database that only listens on your own machine. Do not reuse them anywhere real. More patterns are in <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars locally</a>.</p>
+
+<h2 id="without-flisk">Without Flisk</h2>
+<pre><code>docker run --name pg -e POSTGRES_USER=app -e POSTGRES_PASSWORD=app \
+  -e POSTGRES_DB=app -p 127.0.0.1:5432:5432 \
+  -v pgdata:/var/lib/postgresql/data -d postgres:17-alpine
+export DATABASE_URL=postgres://app:app@localhost:5432/app
+python manage.py migrate
+python manage.py runserver</code></pre>
+<p>Binding the port to <code>127.0.0.1</code> keeps the database off your network. The named volume <code>pgdata</code> keeps the data when the container is removed. For Postgres 18 and later the mount point changes to <code>/var/lib/postgresql</code>, so check the image documentation when you move up. You have to remember the order every time, and wait for Postgres to accept connections before <code>migrate</code>, which is where the first-run errors come from. See <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally</a> for the container details.</p>
+
+<h2 id="the-flisk-way-three-services-in-order">The Flisk way: three services in order</h2>
+<p>Flisk can run Django and the migration as local processes and Postgres as a container, started by one <code>flisk up</code>. It needs Docker running for the Postgres image, and nothing else in the project may be built from a Dockerfile. Each service has its own <code>service.json</code>. The database:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "postgres",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "image": "postgres:17-alpine",
+  "port": 5432,
+  "exposeViaProxy": false,
+  "env": {
+    "POSTGRES_USER": "app",
+    "POSTGRES_PASSWORD": "app",
+    "POSTGRES_DB": "app"
+  },
+  "healthCheck": { "command": ["pg_isready", "-U", "app"] },
+  "volumes": [{ "source": "postgres", "target": "/var/lib/postgresql/data" }]
+}</code></pre>
+<p>The migration, as a one-shot job that runs once and must exit with code 0:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "migrate",
+  "appType": "migrator",
+  "stack": "app",
+  "command": "python manage.py migrate",
+  "dependsOn": ["postgres"],
+  "env": { "DATABASE_URL": "postgres://app:app@localhost:5432/app" }
+}</code></pre>
+<p>And Django:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "backend",
+  "stack": "app",
+  "toolchain": "python@3.12",
+  "command": "python manage.py runserver localhost:$PORT",
+  "port": 8000,
+  "healthCheckPath": "/health/",
+  "dependsOn": ["migrate"],
+  "env": { "DATABASE_URL": "postgres://app:app@localhost:5432/app" }
+}</code></pre>
+<p>The three manifests passed <code>flisk config verify</code> when I tried them. A few details are worth knowing. The <code>healthCheck.command</code> runs inside the container and Flisk waits for it to exit 0, which matters because Docker accepts connections on the published port before Postgres is ready. A <code>migrator</code> is ready when it exits 0 and is never restarted, so Django starts only after the migrations succeed. Django needs a <code>/health/</code> route for the health path, or you can leave <code>healthCheckPath</code> out and Flisk falls back to checking that the port accepts connections. The container is published on <code>127.0.0.1</code>, and <code>flisk down</code> stops it but keeps the named volume.</p>
+<pre><code>flisk up --dry-run
+flisk up</code></pre>
+<p>For one-off commands that need the same environment, use <code>flisk run</code>:</p>
+<pre><code>flisk run web -- python manage.py createsuperuser</code></pre>
+<p>It runs on the host, from the service folder, with the environment that service has. More on that in <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">running a one-off command in a service</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Docker must be running.</strong> The Postgres image needs it. If you want no Docker at all, use SQLite for development and accept the differences.</li>
+<li><strong>A leftover volume with an old password.</strong> Postgres reads the password only when it first initialises the volume. Changing it in the manifest later does nothing until you reset the data.</li>
+<li><strong><code>ALLOWED_HOSTS</code>.</strong> With <code>DEBUG = True</code>, Django allows <code>localhost</code> and <code>127.0.0.1</code> by default. Behind another hostname you have to list it.</li>
+<li><strong>Not for production parity.</strong> This runs Django's development server. Test your real WSGI or ASGI server before you ship.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>To run tests against the same database, read <a href="/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/">pytest against a local stack</a>. For a background job system on top, see <a href="/@odykyi/python-dev-setup/celery-with-redis-locally/">Celery with Redis</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Docker to run Django with Postgres locally?</summary><p>You need Docker only for the Postgres container. You can install Postgres directly on your machine instead, or use SQLite in development.</p></details><details><summary>Where should Django migrations run in local development?</summary><p>As a separate step before the server starts, not inside the web process. In Flisk that is a migrator service that web depends on, so the server starts only after migrate exits successfully.</p></details><details><summary>Why does Django ignore my new Postgres password?</summary><p>Postgres sets the password when it first creates the data volume. A later change in the environment does not apply to an existing volume until you recreate it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Python local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/python-dev-setup/run-pytest-against-a-local-stack/"><span class="lbl">Guide</span><b>How to run pytest against a local API and database</b><span>Unit tests tell you a function works. Integration tests tell you the service, its database and its queue work together. In Python this is mostly an organizational problem, and a few habits make it manageable.</span></a><a href="/@odykyi/python-dev-setup/celery-with-redis-locally/"><span class="lbl">Guide</span><b>How to run Celery with Redis for local development</b><span>A Celery setup has three moving parts: something that enqueues, a broker that holds the jobs, and a worker that runs them. Locally you can run all three with a couple of small files.</span></a><a href="/@odykyi/python-dev-setup/uv-vs-pip-for-local-dev/"><span class="lbl">Guide</span><b>uv vs pip for a local Python project: which to use</b><span>pip is everywhere and does one job. uv replaces pip, venv and a few other tools with one program. Here is how to choose without a migration project.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
