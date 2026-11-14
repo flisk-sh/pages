@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run one Postgres server for several local services to save RAM</title>
+<meta name="description" content="Run one Postgres server with a database per service instead of a container each. Setup with an init script, trade-offs, and how Flisk&#39;s shared Postgres works.">
+<meta name="keywords" content="multiple databases one postgres container, postgres docker create multiple databases, save memory local postgres, shared postgres dev">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/one-postgres-for-several-local-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run one Postgres server for several local services to save RAM">
+<meta property="og:description" content="Run one Postgres server with a database per service instead of a container each. Setup with an init script, trade-offs, and how Flisk&#39;s shared Postgres works.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/one-postgres-for-several-local-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run one Postgres server for several local services to save RAM","description":"Run one Postgres server with a database per service instead of a container each. Setup with an init script, trade-offs, and how Flisk's shared Postgres works.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/one-postgres-for-several-local-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/one-postgres-for-several-local-services/","keywords":"multiple databases one postgres container, postgres docker create multiple databases, save memory local postgres, shared postgres dev","wordCount":715,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"Run one Postgres server for several local services to save RAM","item":"https://pages.flisk.si/@odykyi/laptop-resources/one-postgres-for-several-local-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can several services share one Postgres container safely?","acceptedAnswer":{"@type":"Answer","text":"Yes for local development, if each service has its own database and role. They share the version, connection limit and restarts, so use separate servers when you need real isolation."}},{"@type":"Question","name":"Why did my init script not create a new database?","acceptedAnswer":{"@type":"Answer","text":"Scripts in /docker-entrypoint-initdb.d run only when the data directory is empty. Create the new database by hand or reset the volume."}},{"@type":"Question","name":"Does Flisk start one Postgres per service?","acceptedAnswer":{"@type":"Answer","text":"On the Docker and Tilt path Flisk runs one shared Postgres per project and gives each stack its own database inside it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>Run one Postgres server for several local services to save RAM</h1><p class="dek">Each Postgres container carries its own processes and caches. One server with several databases costs much less on a small laptop.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-you-save-and-what-you-give-up">What you save and what you give up</a></li><li><a href="#create-the-databases-with-an-init-script">Create the databases with an init script</a></li><li><a href="#how-flisk-s-shared-postgres-works">How Flisk&#39;s shared Postgres works</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>You can run one Postgres server and give each service its own database and user inside it. That keeps the data separated while paying the fixed memory cost of a Postgres server once instead of once per service. The cost is that all services share one version, one set of settings and one point of failure.</p>
+
+<h2 id="what-you-save-and-what-you-give-up">What you save and what you give up</h2>
+<p>A running Postgres server has a postmaster, background writers, a WAL writer, autovacuum and a shared buffer cache. An idle server is not free. In Flisk's published idle memory measurement of its restaurant demo (six services on one Mac, Docker VM with 7.7 GiB), Postgres was 107 MiB of the 134 MiB of infrastructure. That is one machine and one run, not a guarantee, but it shows the size of the fixed cost: five separate Postgres containers can use a few hundred MB before they hold any data.</p>
+<p>What you give up:</p>
+<ul>
+<li>One major version for everyone. If two services need different versions, they need separate servers.</li>
+<li>Shared <code>max_connections</code> and a shared cache. A noisy service can starve the others.</li>
+<li>A restart or crash affects every service at once.</li>
+<li>It is easier to write a cross-database shortcut by mistake. Postgres does not allow cross-database queries in one statement, which helps, but a shared superuser account lets code reach another service's database. Give each service its own role.</li>
+</ul>
+<p>If you want strict isolation, read <a href="/@odykyi/local-database-guide/one-database-per-service/">one database per service</a> first; it is about separate databases, and this article is about putting them on one server.</p>
+
+<h2 id="create-the-databases-with-an-init-script">Create the databases with an init script</h2>
+<p>The official <code>postgres</code> image runs files in <code>/docker-entrypoint-initdb.d</code> the first time it starts with an empty data directory. A shell script there can create a role and a database for each service:</p>
+<pre><code>#!/bin/bash
+set -e
+for svc in orders billing search; do
+  psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres &lt;&lt;SQL
+CREATE ROLE ${svc} LOGIN PASSWORD '${svc}_dev';
+CREATE DATABASE ${svc} OWNER ${svc};
+SQL
+done</code></pre>
+<p>Mount it read-only and keep the data in a named volume:</p>
+<pre><code>docker run -d --name pg \
+  -e POSTGRES_PASSWORD=postgres \
+  -v pgdata:/var/lib/postgresql/data \
+  -v "$PWD/init.sh":/docker-entrypoint-initdb.d/init.sh:ro \
+  -p 127.0.0.1:5432:5432 postgres:17</code></pre>
+<p>Each service then connects with its own URL, such as <code>postgres://orders:orders_dev@localhost:5432/orders</code>. These are local development passwords; never reuse them elsewhere. For Postgres 18 and later the volume mount path is <code>/var/lib/postgresql</code> instead; check the image notes for the version you run.</p>
+<p>The init scripts run only once. If you add a service later, either run the <code>CREATE</code> statements by hand with <code>docker exec</code> or reset the volume, which deletes the data.</p>
+
+<h2 id="how-flisk-s-shared-postgres-works">How Flisk's shared Postgres works</h2>
+<p>Flisk's Docker and Tilt path already works this way. It runs one shared PostgreSQL for the project, and each stack gets its own database inside it, named <code>FLISK_{stack}</code> by default (<code>databaseName</code> in a service overrides that). Services receive <code>DATABASE_URL</code> without you writing it. You can declare the database as a resource so services can wait for it by name:</p>
+<pre><code>flisk resource shop-db --type database --stack shop</code></pre>
+<p>That writes a <code>service.json</code> with <code>"appType": "database"</code> and <code>"framework": "postgres"</code>. It gets no container of its own; it is the project's shared Postgres. A service lists <code>"dependsOn": ["shop-db"]</code> to start after it. Note that the unit is the stack, so two services in the same stack share one database unless you set <code>databaseName</code> on one of them.</p>
+<p>If you do not need the shared Postgres at all, <code>flisk up --no-database</code> turns it off and saves <code>capabilities.database=false</code> in <code>.flisk/project.json</code>. For a project made only of bring-your-own resources, the shared Postgres starts only when some resource asks for it through <code>dependsOn</code> or a database resource.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Migrations: run each service's migrations against its own database and role. A migration run as superuser can create objects the service role cannot touch. See <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">migrations in local dev</a>.</li>
+<li>Resetting: dropping the volume resets every service at once. Drop one database with <code>DROP DATABASE</code> to reset only one.</li>
+<li>Do not point a service at a database it does not own just because the credentials work.</li>
+<li>If a service needs an extension such as pgvector, the image must contain it for all services.</li>
+</ul>
+<p>Once the server is shared, its settings matter more. <a href="/@odykyi/laptop-resources/tune-postgres-for-a-laptop/">Tune Postgres for a laptop</a> shows the few that count, and <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally</a> covers the basics.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can several services share one Postgres container safely?</summary><p>Yes for local development, if each service has its own database and role. They share the version, connection limit and restarts, so use separate servers when you need real isolation.</p></details><details><summary>Why did my init script not create a new database?</summary><p>Scripts in /docker-entrypoint-initdb.d run only when the data directory is empty. Create the new database by hand or reset the volume.</p></details><details><summary>Does Flisk start one Postgres per service?</summary><p>On the Docker and Tilt path Flisk runs one shared Postgres per project and gives each stack its own database inside it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/tune-postgres-for-a-laptop/"><span class="lbl">Guide</span><b>How to tune a local Postgres container for a laptop</b><span>Postgres defaults suit a small server. For local work a handful of settings change memory use and test speed. Most do not matter.</span></a><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a><a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/"><span class="lbl">Guide</span><b>How to set memory and CPU limits on a local Docker container</b><span>A container with no limit can take the whole Docker VM. A limit turns a slow leak into a clear, local failure.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

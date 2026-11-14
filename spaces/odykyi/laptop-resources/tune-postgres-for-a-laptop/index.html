@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to tune a local Postgres container for a laptop</title>
+<meta name="description" content="Set shared_buffers, max_connections and fsync for a development Postgres, pass them with docker run -c or Flisk container.command, and know what not to copy.">
+<meta name="keywords" content="postgres docker memory settings, postgres fsync off development, shared_buffers local dev, speed up postgres tests">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/tune-postgres-for-a-laptop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to tune a local Postgres container for a laptop">
+<meta property="og:description" content="Set shared_buffers, max_connections and fsync for a development Postgres, pass them with docker run -c or Flisk container.command, and know what not to copy.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/tune-postgres-for-a-laptop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to tune a local Postgres container for a laptop","description":"Set shared_buffers, max_connections and fsync for a development Postgres, pass them with docker run -c or Flisk container.command, and know what not to copy.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/tune-postgres-for-a-laptop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/tune-postgres-for-a-laptop/","keywords":"postgres docker memory settings, postgres fsync off development, shared_buffers local dev, speed up postgres tests","wordCount":741,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"How to tune a local Postgres container for a laptop","item":"https://pages.flisk.si/@odykyi/laptop-resources/tune-postgres-for-a-laptop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is it safe to set fsync=off in development?","acceptedAnswer":{"@type":"Answer","text":"Only for data you can rebuild. A crash or power loss can corrupt the whole cluster. synchronous_commit=off is a safer way to speed up writes."}},{"@type":"Question","name":"How do I pass Postgres settings to the Docker image?","acceptedAnswer":{"@type":"Answer","text":"Add -c name=value flags after the image name, for example postgres:17 -c max_connections=50, or put the same strings in the command list of a Compose service."}},{"@type":"Question","name":"How do I check that a setting was applied?","acceptedAnswer":{"@type":"Answer","text":"Run SHOW shared_buffers; or SHOW max_connections; inside psql against the running container."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>How to tune a local Postgres container for a laptop</h1><p class="dek">Postgres defaults suit a small server. For local work a handful of settings change memory use and test speed. Most do not matter.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-setting-does">What each setting does</a></li><li><a href="#pass-settings-to-the-container">Pass settings to the container</a></li><li><a href="#the-same-settings-in-flisk">The same settings in Flisk</a></li><li><a href="#speed-up-tests-safely">Speed up tests, safely</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>For a development Postgres, three settings matter: <code>shared_buffers</code> and <code>max_connections</code> set how much memory the server holds, and <code>fsync=off</code> (with <code>synchronous_commit=off</code>) makes writes much faster by skipping the wait for the disk. Pass them with <code>-c name=value</code> after the image name. Use the durability switches only for data you can recreate.</p>
+
+<h2 id="what-each-setting-does">What each setting does</h2>
+<table>
+<thead><tr><th>Setting</th><th>Default</th><th>Effect on a laptop</th></tr></thead>
+<tbody>
+<tr><td><code>shared_buffers</code></td><td>128MB</td><td>Postgres's own page cache. The operating system caches files too, so a small value is fine for local data sets. Lower it to 64MB to save memory; raise it only if a big local data set needs it.</td></tr>
+<tr><td><code>max_connections</code></td><td>100</td><td>Each connection is a process that takes memory when active. Several services with pools of 10 add up. Lower it to 30 or 50 if your pools are small, and fix pools that are too large.</td></tr>
+<tr><td><code>work_mem</code></td><td>4MB</td><td>Memory per sort or hash step per query, per connection. Raise it for one slow query with a session setting, not globally.</td></tr>
+<tr><td><code>fsync</code></td><td>on</td><td>Off skips flushing to disk. Much faster writes, but a crash or power loss can corrupt the whole cluster.</td></tr>
+<tr><td><code>synchronous_commit</code></td><td>on</td><td>Off lets a commit return before its WAL is flushed. A crash can lose the last few transactions but does not corrupt data. Safer than turning <code>fsync</code> off.</td></tr>
+</tbody>
+</table>
+<p>The values above are the stock ones in current Postgres releases; check <code>SHOW shared_buffers;</code> in your version. Do not copy "production tuning" advice such as setting <code>shared_buffers</code> to a quarter of RAM. That is for a server that does only database work.</p>
+
+<h2 id="pass-settings-to-the-container">Pass settings to the container</h2>
+<p>Anything after the image name goes to the <code>postgres</code> command, so settings are flags:</p>
+<pre><code>docker run -d --name pg \
+  -e POSTGRES_PASSWORD=postgres \
+  -v pgdata:/var/lib/postgresql/data \
+  -p 127.0.0.1:5432:5432 \
+  postgres:17 \
+  -c shared_buffers=64MB \
+  -c max_connections=50 \
+  -c synchronous_commit=off</code></pre>
+<p>Check that they took effect:</p>
+<pre><code>docker exec pg psql -U postgres -c "SHOW shared_buffers;" -c "SHOW max_connections;"</code></pre>
+<p>In Compose the same flags go in the <code>command</code> list of the service. A mounted <code>postgresql.conf</code> also works but is easy to get wrong because it replaces the defaults file the image generates; flags are simpler for a few settings.</p>
+
+<h2 id="the-same-settings-in-flisk">The same settings in Flisk</h2>
+<p>For a Postgres you run yourself as a bring-your-own service, <code>container.command</code> in <code>service.json</code> carries the flags, and <code>container.shmSize</code> raises the shared memory of the container:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "pg",
+  "appType": "bring-your-own",
+  "stack": "dev",
+  "image": "postgres:17",
+  "port": 5432,
+  "env": { "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}" },
+  "healthCheck": { "command": ["pg_isready", "-U", "postgres"] },
+  "volumes": [{ "source": "pg", "target": "/var/lib/postgresql/data", "name": "myapp_pg" }],
+  "container": {
+    "command": ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=50", "-c", "synchronous_commit=off"],
+    "shmSize": "256mb"
+  }
+}</code></pre>
+<p>Run <code>flisk config verify</code> to check the file. The command list is passed as given, without a shell, so spell out <code>postgres</code> as the first element. The <code>container</code> block can also carry <code>memory</code> to cap the container, as described in <a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/">memory and CPU limits</a>. Flisk's own shared Postgres, which runs when you use <code>--type database</code> or <code>postgres</code> in <code>dependsOn</code>, is a platform service; the docs do not describe a way to pass server flags to it, so if you need custom settings, run your own bring-your-own Postgres instead.</p>
+
+<h2 id="speed-up-tests-safely">Speed up tests, safely</h2>
+<ul>
+<li>Use <code>fsync=off</code> only on a throwaway container whose data you can rebuild with migrations and a seed script. Never on a database that holds work you cannot recreate.</li>
+<li>For a test database that is rebuilt on each run, a RAM backed data directory (<code>--tmpfs /var/lib/postgresql/data</code>) removes disk cost altogether. Data is gone when the container stops.</li>
+<li>Run migrations once and reuse a template database for each test, with <code>CREATE DATABASE test_x TEMPLATE base</code>, instead of migrating every time.</li>
+<li>Log slow queries with <code>-c log_min_duration_statement=200</code> to find the query that matters before you tune anything else.</li>
+</ul>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Settings are read at start. Changing a flag means recreating or restarting the container; a <code>docker restart</code> keeps the flags and the volume.</li>
+<li>With a very small <code>max_connections</code>, a pool that is too big gets "too many clients" errors. Size the pools first.</li>
+<li>Docker gives containers 64MB of shared memory by default. Parallel queries can fail with a shared memory error if it is too small; raise <code>--shm-size</code> (or <code>shmSize</code> in Flisk).</li>
+<li>Do not carry <code>fsync=off</code> into a staging or shared environment because "it was in the dev config".</li>
+</ul>
+<p>Set up the server itself with <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally for development</a>, and see <a href="/@odykyi/laptop-resources/one-postgres-for-several-local-services/">one Postgres for several services</a> for sharing it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is it safe to set fsync=off in development?</summary><p>Only for data you can rebuild. A crash or power loss can corrupt the whole cluster. synchronous_commit=off is a safer way to speed up writes.</p></details><details><summary>How do I pass Postgres settings to the Docker image?</summary><p>Add -c name=value flags after the image name, for example postgres:17 -c max_connections=50, or put the same strings in the command list of a Compose service.</p></details><details><summary>How do I check that a setting was applied?</summary><p>Run SHOW shared_buffers; or SHOW max_connections; inside psql against the running container.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/one-postgres-for-several-local-services/"><span class="lbl">Guide</span><b>Run one Postgres server for several local services to save RAM</b><span>Each Postgres container carries its own processes and caches. One server with several databases costs much less on a small laptop.</span></a><a href="/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/"><span class="lbl">Guide</span><b>How to set memory and CPU limits on a local Docker container</b><span>A container with no limit can take the whole Docker VM. A limit turns a slow leak into a clear, local failure.</span></a><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

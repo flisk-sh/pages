@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set memory and CPU limits on a local Docker container</title>
+<meta name="description" content="Cap a local container with docker run --memory and --cpus, Compose limits, or Flisk container.memory and cpus, and learn to spot exit code 137 (OOM kill).">
+<meta name="keywords" content="docker memory limit, docker run --memory --cpus, compose deploy resources limits, container exit code 137">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set memory and CPU limits on a local Docker container">
+<meta property="og:description" content="Cap a local container with docker run --memory and --cpus, Compose limits, or Flisk container.memory and cpus, and learn to spot exit code 137 (OOM kill).">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set memory and CPU limits on a local Docker container","description":"Cap a local container with docker run --memory and --cpus, Compose limits, or Flisk container.memory and cpus, and learn to spot exit code 137 (OOM kill).","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/","keywords":"docker memory limit, docker run --memory --cpus, compose deploy resources limits, container exit code 137","wordCount":763,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Keep your laptop fast while developing","item":"https://pages.flisk.si/@odykyi/laptop-resources/"},{"@type":"ListItem","position":3,"name":"How to set memory and CPU limits on a local Docker container","item":"https://pages.flisk.si/@odykyi/laptop-resources/set-memory-and-cpu-limits-on-a-local-container/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does Docker exit code 137 mean?","acceptedAnswer":{"@type":"Answer","text":"The process was killed with signal 9, most often by the kernel because the container went over its memory limit. docker inspect shows OOMKilled true in that case."}},{"@type":"Question","name":"Does Docker Compose honor deploy.resources.limits outside Swarm?","acceptedAnswer":{"@type":"Answer","text":"Yes, current Docker Compose applies deploy.resources.limits on a normal docker compose up."}},{"@type":"Question","name":"What is the default limit Flisk gives a container?","acceptedAnswer":{"@type":"Answer","text":"A container Flisk builds from its own Dockerfile gets 0.5 CPU and 512M. A bring-your-own container has no limit unless you set container.memory or container.cpus."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-resources/">Keep your laptop fast while developing</a></div>
+<section class="hero"><div><div class="lbl">Keep your laptop fast while developing</div><h1>How to set memory and CPU limits on a local Docker container</h1><p class="dek">A container with no limit can take the whole Docker VM. A limit turns a slow leak into a clear, local failure.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-limit-local-containers-at-all">Why limit local containers at all</a></li><li><a href="#with-plain-docker">With plain Docker</a></li><li><a href="#with-compose">With Compose</a></li><li><a href="#recognise-an-out-of-memory-kill">Recognise an out of memory kill</a></li><li><a href="#in-flisk">In Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Set a memory limit with <code>docker run --memory 512m --cpus 1</code>, or with <code>deploy.resources.limits</code> in a Compose file. When a container goes over its memory limit the kernel kills it and Docker reports exit code 137; that is a sign to raise the limit or fix a leak, not a random crash.</p>
+
+<h2 id="why-limit-local-containers-at-all">Why limit local containers at all</h2>
+<p>On a laptop all containers share one virtual machine (on Mac and Windows) or your whole host (on Linux). One container with a memory leak, or a model server that loads everything it can, pushes the others into swap and slows your editor too. A limit gives each container a ceiling. It does not make the service use less; it makes the failure small and visible. Limits also catch a service that will not fit in production's memory budget long before it gets there.</p>
+
+<h2 id="with-plain-docker">With plain Docker</h2>
+<pre><code>docker run --rm --memory 512m --cpus 1 -p 8080:80 nginx</code></pre>
+<ul>
+<li><code>--memory</code> (<code>-m</code>) is a hard limit. Use <code>m</code> or <code>g</code> as the unit.</li>
+<li><code>--cpus</code> is a share of CPU time. <code>1.5</code> means one and a half cores' worth, spread over any cores.</li>
+<li><code>--memory-reservation</code> is a soft limit that applies only when the host is short of memory.</li>
+</ul>
+<p>Inspect what is applied:</p>
+<pre><code>docker stats --no-stream
+docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.NanoCpus}}' &lt;container&gt;</code></pre>
+<p>Memory is shown in bytes and CPUs in billionths of a core in the <code>inspect</code> output.</p>
+
+<h2 id="with-compose">With Compose</h2>
+<pre><code>services:
+  worker:
+    image: myapp-worker
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M</code></pre>
+<p>Current Docker Compose applies <code>deploy.resources.limits</code> on a plain <code>docker compose up</code>. Older guides say this only works in Swarm; that was true of the first Compose file format, not today's Compose specification. The short forms <code>mem_limit</code> and <code>cpus</code> directly under the service also work.</p>
+
+<h2 id="recognise-an-out-of-memory-kill">Recognise an out of memory kill</h2>
+<p>A container that reaches its limit is killed by the kernel with no application error. The signs:</p>
+<ul>
+<li>Exit code 137 (128 plus signal 9) in <code>docker ps -a</code>.</li>
+<li><code>docker inspect -f '{{.State.OOMKilled}}' &lt;container&gt;</code> prints <code>true</code>.</li>
+<li>Logs that simply stop mid-line.</li>
+</ul>
+<p>Raise the limit, or find the leak. Runtimes with their own heap limit add a second ceiling: a Node process stops at its heap limit before the container limit, with a different error. The article on <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">containers that keep restarting</a> shows how to tell the causes apart.</p>
+
+<h2 id="in-flisk">In Flisk</h2>
+<p>On the Docker and Tilt path, Flisk limits a container it builds from its own Dockerfile to 0.5 CPU and 512M of memory. A bring-your-own container (an <code>image</code> or your own Dockerfile) has no limit unless you set one in the <code>container</code> block of its <code>service.json</code>, and only the limit you set is written:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "cache",
+  "appType": "bring-your-own",
+  "stack": "dev",
+  "image": "redis:7",
+  "port": 6379,
+  "container": { "memory": "256m", "cpus": "0.5" },
+  "healthCheck": { "command": ["redis-cli", "ping"] }
+}</code></pre>
+<p><code>memory</code> is a size string such as <code>8g</code> or <code>512mb</code>. <code>cpus</code> is a whole number or a string such as <code>"2.5"</code>; a bare decimal number like <code>0.5</code> is rejected by <code>flisk config verify</code>, so quote it. Run <code>flisk config verify</code> after editing to catch that. <code>flisk export compose</code> writes the same limits into a standalone Compose file.</p>
+<p>The container fields that apply to the simpler mixed run (local processes plus an image started with <code>docker run</code>) are listed separately in the Flisk docs, and <code>memory</code> and <code>cpus</code> are not among them, so check there before relying on them in that mode. Local processes started from a <code>command</code> are not containers and have no such limit; use the tool's own settings, such as a heap flag, for them.</p>
+<p>When a container does hit the memory ceiling, <code>flisk doctor</code> can flag containers pinned near their memory limit while using CPU, which points to a boot-time retry loop, and it explains exit 137 as usually out of memory, with the advice to raise the container's limit.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Limits that are too tight look like flaky crashes. Size them from <code>docker stats</code> readings under real load, then add headroom.</li>
+<li>A CPU limit throttles instead of killing. A service that is slow only in a container may be throttled; raise <code>cpus</code> before you hunt for a bug.</li>
+<li>Databases use memory for cache by design. Give them a limit large enough for their working set, or tune the server as in <a href="/@odykyi/laptop-resources/tune-postgres-for-a-laptop/">tuning Postgres for a laptop</a>.</li>
+<li>The total of all limits must fit in the VM. Check the VM size too.</li>
+</ul>
+<p>Limits cap a single container. To see how everything adds up across the machine, start with <a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/">finding what uses your RAM</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does Docker exit code 137 mean?</summary><p>The process was killed with signal 9, most often by the kernel because the container went over its memory limit. docker inspect shows OOMKilled true in that case.</p></details><details><summary>Does Docker Compose honor deploy.resources.limits outside Swarm?</summary><p>Yes, current Docker Compose applies deploy.resources.limits on a normal docker compose up.</p></details><details><summary>What is the default limit Flisk gives a container?</summary><p>A container Flisk builds from its own Dockerfile gets 0.5 CPU and 512M. A bring-your-own container has no limit unless you set container.memory or container.cpus.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Keep your laptop fast while developing</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-resources/find-what-is-using-ram-while-developing/"><span class="lbl">Guide</span><b>How to find what is using your RAM while developing</b><span>Free memory is a misleading number. Memory pressure, resident size per process and swap tell you what is really going on.</span></a><a href="/@odykyi/laptop-resources/tune-postgres-for-a-laptop/"><span class="lbl">Guide</span><b>How to tune a local Postgres container for a laptop</b><span>Postgres defaults suit a small server. For local work a handful of settings change memory use and test speed. Most do not matter.</span></a><a href="/@odykyi/laptop-resources/limit-parallel-tests-and-builds-on-a-laptop/"><span class="lbl">Guide</span><b>Limit parallel tests and builds so your laptop stays usable</b><span>Test runners and compilers default to one worker per core. That is fast, and it leaves nothing for your editor, browser and database.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
