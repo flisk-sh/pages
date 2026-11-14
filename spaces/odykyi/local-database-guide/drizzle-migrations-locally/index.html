@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drizzle migrations in local development with Postgres</title>
+<meta name="description" content="Generate SQL migrations with drizzle-kit, apply them with migrate, and know when push is fine. Includes the Flisk drizzle feature and a one-shot migration job.">
+<meta name="keywords" content="drizzle migrations, drizzle-kit migrate, drizzle postgres docker, drizzle-kit push vs migrate, drizzle local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-database-guide/drizzle-migrations-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Drizzle migrations in local development with Postgres">
+<meta property="og:description" content="Generate SQL migrations with drizzle-kit, apply them with migrate, and know when push is fine. Includes the Flisk drizzle feature and a one-shot migration job.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-database-guide/drizzle-migrations-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Drizzle migrations in local development with Postgres","description":"Generate SQL migrations with drizzle-kit, apply them with migrate, and know when push is fine. Includes the Flisk drizzle feature and a one-shot migration job.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-database-guide/drizzle-migrations-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-database-guide/drizzle-migrations-locally/","keywords":"drizzle migrations, drizzle-kit migrate, drizzle postgres docker, drizzle-kit push vs migrate, drizzle local development","wordCount":753,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Databases in local development","item":"https://pages.flisk.si/@odykyi/local-database-guide/"},{"@type":"ListItem","position":3,"name":"Drizzle migrations in local development with Postgres","item":"https://pages.flisk.si/@odykyi/local-database-guide/drizzle-migrations-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use drizzle-kit push or migrate locally?","acceptedAnswer":{"@type":"Answer","text":"Use migrate for anything you want to keep, because it leaves SQL files in version control. push is fine for a prototype you will throw away, but a database built with push has no migration history."}},{"@type":"Question","name":"Does Flisk create a migrator for Drizzle?","acceptedAnswer":{"@type":"Answer","text":"No. The drizzle feature writes the config, a db module and a schema file, but no migration resource. Run migrations from your terminal or register a bring-your-own one-shot job."}},{"@type":"Question","name":"Why does my Drizzle job fail on SSL?","acceptedAnswer":{"@type":"Answer","text":"The local Postgres has no SSL. Add ?sslmode=disable to the connection URL."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-database-guide/">Databases in local development</a></div>
+<section class="hero"><div><div class="lbl">Databases in local development</div><h1>Drizzle migrations in local development with Postgres</h1><p class="dek">Drizzle splits schema changes into generate, migrate and push. Here is which to use locally, and how to run the migration step before your API starts.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-commands-that-matter-locally">The commands that matter locally</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#run-migrations-as-a-job-before-the-api">Run migrations as a job before the API</a></li><li><a href="#a-normal-day">A normal day</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>With Drizzle, edit your schema file, run <code>drizzle-kit generate</code> to write a SQL migration, and run <code>drizzle-kit migrate</code> to apply it. Use <code>drizzle-kit push</code> only for quick prototypes, because it changes the database without leaving a migration file behind.</p>
+
+<h2 id="the-commands-that-matter-locally">The commands that matter locally</h2>
+<table>
+<thead><tr><th>Command</th><th>What it does</th><th>Use it for</th></tr></thead>
+<tbody>
+<tr><td><code>drizzle-kit generate</code></td><td>Compares your schema with the previous snapshot and writes a SQL file into the <code>out</code> folder</td><td>Every schema change you keep</td></tr>
+<tr><td><code>drizzle-kit migrate</code></td><td>Applies the SQL files that the database has not seen yet</td><td>Local runs, CI, a migration job</td></tr>
+<tr><td><code>drizzle-kit push</code></td><td>Syncs the database to the schema directly, with no migration file</td><td>Throwaway prototypes</td></tr>
+<tr><td><code>drizzle-kit studio</code></td><td>Opens a browser UI over your data</td><td>Looking at rows</td></tr>
+</tbody></table>
+<p>There is no built-in reset command. To start over you drop and recreate the database, then run <code>migrate</code> again. That is covered in <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a>.</p>
+<p>A minimal <code>drizzle.config.ts</code> for Postgres reads the URL from the environment:</p>
+<pre><code>import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "postgresql",
+  schema: "./src/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: process.env.DATABASE_URL as string },
+});</code></pre>
+<p>Commit the <code>drizzle</code> folder. It holds the SQL files and the snapshots that <code>generate</code> diffs against.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Add Drizzle to a service with the feature flag:</p>
+<pre><code>flisk resource orders-api --type backend --stack shop --feature drizzle --yes</code></pre>
+<p>That writes a <code>drizzle.config.ts</code> like the one above, a <code>src/db.ts</code> that builds a <code>pg</code> pool and wraps it with <code>drizzle-orm/node-postgres</code>, and an empty <code>src/schema.ts</code>. It also adds <code>drizzle-orm</code> and <code>drizzle-kit</code> to the dependencies.</p>
+<p>What it does not do is create a migrator. Unlike the Prisma feature, the Drizzle feature does not add a one-shot migration resource and does not add Postgres to <code>dependsOn</code> for you. Two things follow:</p>
+<ul>
+<li>You must make sure the service can reach a database. List a database resource in <code>dependsOn</code>, for example one created with <code>flisk resource shop-db --type database --stack shop</code>, and the service receives <code>DATABASE_URL</code>.</li>
+<li>You must run migrations yourself, either from your terminal or from a job you register.</li>
+</ul>
+<p>From your terminal, the shared Postgres is on <code>127.0.0.1:15432</code> by default, so with the stack up you can run:</p>
+<pre><code>DATABASE_URL="postgresql://USER:PASSWORD@127.0.0.1:15432/DBNAME?sslmode=disable" \
+  npx drizzle-kit migrate</code></pre>
+<p>Fill in the user, password and database name from your project. <a href="/@odykyi/local-database-guide/connect-to-a-local-database-from-your-machine/">Connecting from your machine</a> shows where each value lives.</p>
+
+<h2 id="run-migrations-as-a-job-before-the-api">Run migrations as a job before the API</h2>
+<p>To make <code>flisk up</code> apply migrations without you, use a bring-your-own one-shot job. The Flisk repository ships a working example in <code>examples/byo-jobs/drizzle</code>. Its container command is:</p>
+<pre><code>node ensure-db.js &amp;&amp; npx drizzle-kit migrate</code></pre>
+<p>The first step exists because Flisk does not create a database for a bring-your-own job. <code>ensure-db.js</code> creates the database if it is missing, removes a trailing <code>?schema=public</code> from the URL if there is one, and appends <code>?sslmode=disable</code>. Register the job so it never restarts after finishing:</p>
+<pre><code>flisk resource drizzle-migrate --type bring-your-own --stack shop \
+  --dockerfile ./Dockerfile --restart no --register-existing --yes</code></pre>
+<p>Without <code>"restart": "no"</code> in its <code>service.json</code>, Docker starts the finished job again and again. Then add <code>drizzle-migrate</code> to the API's <code>dependsOn</code>, so the API waits for it. The reasoning behind a separate job is in <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>.</p>
+
+<h2 id="a-normal-day">A normal day</h2>
+<p>Edit <code>src/schema.ts</code>, run <code>generate</code>, open the new SQL file and read it, then run <code>migrate</code>. Reading the SQL is the habit that pays off: Drizzle may turn a rename into a drop and an add, which loses the column's data, and the file shows you that before it runs. Commit the schema change and the SQL together in one commit so teammates apply both at once.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Using push, then switching to migrate.</strong> A database built with <code>push</code> has no migration history. When you later run <code>migrate</code>, it tries to create tables that already exist. Pick one approach per database, and reset the database when you switch.</li>
+<li><strong>Forgetting to generate.</strong> Changing <code>schema.ts</code> does nothing to the database until you run <code>generate</code> and then <code>migrate</code>.</li>
+<li><strong>SSL errors.</strong> The local Postgres has no SSL, and some drivers try it by default. Add <code>?sslmode=disable</code> to the URL.</li>
+<li><strong>Editing generated SQL after it ran.</strong> Treat applied migration files as read-only and write a new one.</li>
+<li><strong>Seeds.</strong> Drizzle has no seed command. Write a script, or use plain SQL as in <a href="/@odykyi/local-database-guide/seed-a-local-database/">seed a local database</a>.</li>
+</ul>
+
+<p>If you are choosing between the two ORMs, <a href="/@odykyi/local-database-guide/prisma-migrations-locally/">Prisma migrations locally</a> shows the other flow side by side. If a worker shares the same database, see <a href="/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/">worker and API sharing a database</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use drizzle-kit push or migrate locally?</summary><p>Use migrate for anything you want to keep, because it leaves SQL files in version control. push is fine for a prototype you will throw away, but a database built with push has no migration history.</p></details><details><summary>Does Flisk create a migrator for Drizzle?</summary><p>No. The drizzle feature writes the config, a db module and a schema file, but no migration resource. Run migrations from your terminal or register a bring-your-own one-shot job.</p></details><details><summary>Why does my Drizzle job fail on SSL?</summary><p>The local Postgres has no SSL. Add ?sslmode=disable to the connection URL.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Databases in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/"><span class="lbl">Guide</span><b>Run database migrations in local dev with a migrator</b><span>Migrations belong in their own step. Here is why, how to wire the order by hand, and how a Flisk migrator resource does it for you.</span></a><a href="/@odykyi/local-database-guide/prisma-migrations-locally/"><span class="lbl">Guide</span><b>Prisma migrations in local development, step by step</b><span>Prisma has three commands you will use against a local database, and each one has a different job. Mixing them up is the usual source of drift.</span></a><a href="/@odykyi/local-database-guide/reset-a-local-database/"><span class="lbl">Guide</span><b>How to reset a local database: drop, recreate, restore</b><span>Resetting a local database is routine, but the commands differ in how much they destroy. Pick the smallest one that fixes your problem.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

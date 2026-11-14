@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run database migrations in local dev with a migrator</title>
+<meta name="description" content="Run migrations as a one-shot job that finishes before your API starts, not from the API start script. Works with Prisma, Drizzle, Atlas and dbmate in Flisk.">
+<meta name="keywords" content="database migrations local development, run migrations before api starts, migrator service, prisma migrate deploy docker, one-shot migration job">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-database-guide/database-migrations-in-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run database migrations in local dev with a migrator">
+<meta property="og:description" content="Run migrations as a one-shot job that finishes before your API starts, not from the API start script. Works with Prisma, Drizzle, Atlas and dbmate in Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-database-guide/database-migrations-in-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run database migrations in local dev with a migrator","description":"Run migrations as a one-shot job that finishes before your API starts, not from the API start script. Works with Prisma, Drizzle, Atlas and dbmate in Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-database-guide/database-migrations-in-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-database-guide/database-migrations-in-local-dev/","keywords":"database migrations local development, run migrations before api starts, migrator service, prisma migrate deploy docker, one-shot migration job","wordCount":712,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Databases in local development","item":"https://pages.flisk.si/@odykyi/local-database-guide/"},{"@type":"ListItem","position":3,"name":"Run database migrations in local dev with a migrator","item":"https://pages.flisk.si/@odykyi/local-database-guide/database-migrations-in-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why not run migrations when the API starts?","acceptedAnswer":{"@type":"Answer","text":"Each API restart would re-run them, parallel instances would race, and a migration failure would look like an API crash. A one-shot job has one purpose and one exit code."}},{"@type":"Question","name":"What does appType migrator do in Flisk?","acceptedAnswer":{"@type":"Answer","text":"It creates a one-shot container with restart no, no port and no route. It counts as ready when it exits 0, and services that depend on it start only after that."}},{"@type":"Question","name":"Can I use a migration tool other than Prisma?","acceptedAnswer":{"@type":"Answer","text":"Yes. Register your own job as a bring-your-own resource with --restart no and list it in dependsOn. The repository has examples for dbmate, Atlas, Drizzle and MikroORM."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-database-guide/">Databases in local development</a></div>
+<section class="hero"><div><div class="lbl">Databases in local development</div><h1>Run database migrations in local dev with a migrator</h1><p class="dek">Migrations belong in their own step. Here is why, how to wire the order by hand, and how a Flisk migrator resource does it for you.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-migrate-from-the-api-start-script">Why not migrate from the API start script</a></li><li><a href="#the-general-pattern-without-flisk">The general pattern without Flisk</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#other-migration-tools">Other migration tools</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run migrations as a separate one-shot job that applies the pending changes and exits, and make your API start only after that job succeeds. Do not put the migration command in the API's start script. In Flisk that job is a resource with <code>appType</code> set to <code>migrator</code>, and the API lists it in <code>dependsOn</code>.</p>
+
+<h2 id="why-not-migrate-from-the-api-start-script">Why not migrate from the API start script</h2>
+<p>The shortcut is <code>"start": "prisma migrate deploy &amp;&amp; node server.js"</code>. It works on day one and causes trouble later:</p>
+<ul>
+<li>Every restart of the API runs the migration again, including restarts caused by a hot reload.</li>
+<li>If you run two copies of the API, both try to migrate at once. Most tools take a lock, but a failed lock shows up as a crashing API.</li>
+<li>A failing migration looks like a crashing API, so you read the wrong logs first.</li>
+<li>The API image needs the migration tooling and its permissions, which production often does not want.</li>
+</ul>
+<p>A separate job has one purpose, one exit code and one log. It runs, it finishes with 0 or fails loudly, and the API either starts or does not.</p>
+
+<h2 id="the-general-pattern-without-flisk">The general pattern without Flisk</h2>
+<p>In Docker Compose you express this with a one-shot service and a dependency condition:</p>
+<pre><code>services:
+  migrate:
+    build: ./api
+    command: npx prisma migrate deploy
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: ./api
+    depends_on:
+      migrate:
+        condition: service_completed_successfully</code></pre>
+<p>The two details that people miss are <code>restart: "no"</code>, because the default restart policy would start a finished job again and again, and <code>service_completed_successfully</code>, because <code>service_started</code> only waits for the container to exist.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk scaffolds this pair when you enable the Prisma feature:</p>
+<pre><code>flisk resource orders-api --type backend --stack shop --feature prisma --yes</code></pre>
+<p>That creates two folders under <code>services/shop/</code>: <code>orders-api</code> and <code>orders-api-migrator</code>. The migrator manifest waits for Postgres:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders-api-migrator",
+  "appType": "migrator",
+  "stack": "shop",
+  "featuresEnabled": ["prisma"],
+  "dependsOn": ["postgres"]
+}</code></pre>
+<p>and the API waits for the migrator:</p>
+<pre><code>"appName": "orders-api",
+"appType": "backend",
+"dependsOn": ["orders-api-migrator"]</code></pre>
+<p>Read it from the bottom up: the API needs the migrator, the migrator needs Postgres, so the order is Postgres, migrator, API. The migrator's <code>start</code> script is <code>prisma migrate deploy</code>. Flisk gives a migrator a one-shot container with <code>restart: "no"</code>, no port, no health check and no route. It is ready when it exits 0, and any other exit code counts as a failure. When it fails, the services after it are not started. Tilt shows an <code>orders-api-migrator-done</code> resource for the wait.</p>
+<p>Run <code>flisk config verify</code> after editing the manifests. It catches a <code>dependsOn</code> name that matches no service.</p>
+
+<h2 id="other-migration-tools">Other migration tools</h2>
+<p>The Prisma scaffold is the only one that writes a migrator for you. For Drizzle, Atlas, dbmate or anything else, register your own job as a bring-your-own resource with a restart policy of <code>no</code>:</p>
+<pre><code>flisk resource migrate --type bring-your-own --stack shop \
+  --dockerfile ./Dockerfile --restart no --register-existing --yes</code></pre>
+<p>A service that lists <code>migrate</code> in <code>dependsOn</code> then waits for it to exit 0. The Flisk repository has runnable job examples for dbmate, Atlas, Drizzle and MikroORM under <code>examples/byo-jobs/</code>. A bring-your-own job has no database created for it, so your job must create the database if it is missing and wait for Postgres to accept connections. The examples do both.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Re-running after a fix.</strong> After a migration fails and you fix it, restart the migrator resource (<code>flisk restart orders-api-migrator</code> or the button in Tilt). Restarting only the API will not run the migrator again.</li>
+<li><strong>Destructive migrations.</strong> A migrator that drops a column runs on every <code>flisk up</code> that starts it. Keep local data disposable, and read <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a> before you need it.</li>
+<li><strong>Two sources of schema.</strong> The Prisma scaffold writes a <code>prisma/schema.prisma</code> in both the API and the migrator folder. Pick one place to edit and keep the other identical, or the client and the applied migrations drift apart.</li>
+<li><strong>Not yet verified by Flisk's own docs.</strong> The docs state that Tilt holds the API until the migrator exits, but mark that as not checked against a live stack. Watch the first run of your own project.</li>
+</ul>
+
+<p>For the tool-specific steps, continue with <a href="/@odykyi/local-database-guide/prisma-migrations-locally/">Prisma migrations locally</a> or <a href="/@odykyi/local-database-guide/drizzle-migrations-locally/">Drizzle migrations locally</a>. For ordering beyond databases, see <a href="/@odykyi/microservices-local-dev/service-startup-order/">service startup order</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why not run migrations when the API starts?</summary><p>Each API restart would re-run them, parallel instances would race, and a migration failure would look like an API crash. A one-shot job has one purpose and one exit code.</p></details><details><summary>What does appType migrator do in Flisk?</summary><p>It creates a one-shot container with restart no, no port and no route. It counts as ready when it exits 0, and services that depend on it start only after that.</p></details><details><summary>Can I use a migration tool other than Prisma?</summary><p>Yes. Register your own job as a bring-your-own resource with --restart no and list it in dependsOn. The repository has examples for dbmate, Atlas, Drizzle and MikroORM.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Databases in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-database-guide/prisma-migrations-locally/"><span class="lbl">Guide</span><b>Prisma migrations in local development, step by step</b><span>Prisma has three commands you will use against a local database, and each one has a different job. Mixing them up is the usual source of drift.</span></a><a href="/@odykyi/local-database-guide/drizzle-migrations-locally/"><span class="lbl">Guide</span><b>Drizzle migrations in local development with Postgres</b><span>Drizzle splits schema changes into generate, migrate and push. Here is which to use locally, and how to run the migration step before your API starts.</span></a><a href="/@odykyi/local-database-guide/reset-a-local-database/"><span class="lbl">Guide</span><b>How to reset a local database: drop, recreate, restore</b><span>Resetting a local database is routine, but the commands differ in how much they destroy. Pick the smallest one that fixes your problem.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
