@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to shut down a Node.js dev server cleanly on Ctrl+C</title>
+<meta name="description" content="Handle SIGINT and SIGTERM in Node.js so the port is freed, connections close and the database pool ends. Includes code, and how Flisk stops local services.">
+<meta name="keywords" content="node graceful shutdown, handle SIGTERM node, node server close on ctrl c, EADDRINUSE after restart, server.close node express">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to shut down a Node.js dev server cleanly on Ctrl+C">
+<meta property="og:description" content="Handle SIGINT and SIGTERM in Node.js so the port is freed, connections close and the database pool ends. Includes code, and how Flisk stops local services.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to shut down a Node.js dev server cleanly on Ctrl+C","description":"Handle SIGINT and SIGTERM in Node.js so the port is freed, connections close and the database pool ends. Includes code, and how Flisk stops local services.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/","keywords":"node graceful shutdown, handle SIGTERM node, node server close on ctrl c, EADDRINUSE after restart, server.close node express","wordCount":719,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to shut down a Node.js dev server cleanly on Ctrl+C","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I handle Ctrl+C in a Node.js server?","acceptedAnswer":{"@type":"Answer","text":"Listen for SIGINT and SIGTERM with process.on, call server.close(), end your database pool, then call process.exit. Add a short timer that forces an exit if shutdown hangs."}},{"@type":"Question","name":"Why does server.close() never finish?","acceptedAnswer":{"@type":"Answer","text":"It waits for open connections, and idle keep-alive sockets count. Call server.closeIdleConnections() or closeAllConnections() after it."}},{"@type":"Question","name":"How long does Flisk wait before killing a local service?","acceptedAnswer":{"@type":"Answer","text":"It sends SIGTERM to the process group, waits 5 seconds, then sends SIGKILL."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>How to shut down a Node.js dev server cleanly on Ctrl+C</h1><p class="dek">A dev server that ignores signals leaves ports busy and connections open. Twenty lines of code fix it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-it-matters-in-development">Why it matters in development</a></li><li><a href="#a-handler-you-can-copy">A handler you can copy</a></li><li><a href="#make-sure-the-signal-reaches-your-code">Make sure the signal reaches your code</a></li><li><a href="#how-flisk-stops-local-services">How Flisk stops local services</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Listen for <code>SIGINT</code> (Ctrl+C) and <code>SIGTERM</code> (what process managers send), stop accepting new connections with <code>server.close()</code>, end your database pool, and then exit. Add a timer that forces an exit if something hangs, so a stuck shutdown never blocks the next start.</p>
+
+<h2 id="why-it-matters-in-development">Why it matters in development</h2>
+<p>Node's default for SIGINT and SIGTERM is to exit at once. That is fine for a plain script. It is wrong for a server that holds open requests, a queue consumer that is halfway through a job, or a database pool with connections the server has to time out. In development the visible symptom is the next start failing with <code>EADDRINUSE</code> because the old process is still shutting down, or a worker that processes the same job twice after a restart. A clean shutdown also makes <code>node --watch</code> restarts quicker, since the old process exits promptly.</p>
+
+<h2 id="a-handler-you-can-copy">A handler you can copy</h2>
+<pre><code>import http from "node:http";
+
+const server = http.createServer(app);
+server.listen(process.env.PORT || 3000);
+
+let closing = false;
+
+async function shutdown(signal) {
+  if (closing) return;       // ignore a second signal
+  closing = true;
+  console.log(`${signal} received, shutting down`);
+
+  // Hard stop if something hangs.
+  const timer = setTimeout(() =&gt; process.exit(1), 4000);
+  timer.unref();
+
+  server.close(async (err) =&gt; {
+    try {
+      await pool.end();      // database pool, queue client, etc.
+    } finally {
+      process.exit(err ? 1 : 0);
+    }
+  });
+  server.closeIdleConnections();  // keep-alive sockets block close()
+}
+
+process.on("SIGINT", () =&gt; shutdown("SIGINT"));
+process.on("SIGTERM", () =&gt; shutdown("SIGTERM"));</code></pre>
+<p>Three details matter. <code>server.close()</code> stops new connections but waits for existing ones, and idle keep-alive connections count, so call <code>closeIdleConnections()</code> (available since Node 18.2) right after it. In a dev server you can also call <code>server.closeAllConnections()</code> to cut slow requests. The timer must be shorter than the time your supervisor waits before it kills you. And <code>unref()</code> stops the timer itself from keeping the process alive.</p>
+<p>Express, Fastify and Koa all sit on a Node <code>http.Server</code>, so the same pattern works. Fastify also has <code>await app.close()</code>, which does the closing for you.</p>
+
+<h2 id="make-sure-the-signal-reaches-your-code">Make sure the signal reaches your code</h2>
+<p>The signal goes to the process the supervisor started. If that process is a wrapper, your server may never see it. With <code>npm run dev</code> the chain is npm, then a shell, then Node. Each extra layer is another place where a signal can be swallowed. In a dev script, run <code>node</code> directly (<code>node --watch server.js</code>) when you can, and in a shell command use <code>exec node server.js</code> so Node replaces the shell.</p>
+
+<h2 id="how-flisk-stops-local-services">How Flisk stops local services</h2>
+<p>When you press Ctrl+C in the terminal running <code>flisk up</code>, or run <code>flisk down</code> from another one, Flisk sends SIGTERM to each service's process group, which includes the shell and everything it started. It waits up to 5 seconds for the process to exit, and then sends SIGKILL. Services that depend on each other are stopped dependents first, and they get their grace period at the same time. So a handler that finishes in a second or two is enough, and one that hangs costs a five-second wait and an unclean exit.</p>
+<pre><code>flisk down
+flisk status</code></pre>
+<p><code>flisk status</code> afterwards shows each service as not running, and the ports are free again. If a port is still held, <code>flisk up</code> refuses to start and names the process that holds it. Flisk's SIGTERM-then-SIGKILL behaviour applies to services with a <code>command</code>. Container services use Docker's own stop behaviour, which has its own timeout.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A handler that never calls <code>process.exit()</code>.</strong> If something keeps the event loop busy (a timer, an open socket), the process stays alive until the supervisor kills it. Exit explicitly or unref your timers.</li>
+<li><strong>Doing real work in the handler.</strong> Keep it short. Stop taking work, finish what is in flight, release resources.</li>
+<li><strong>Workers.</strong> For a queue consumer, stop fetching new jobs first, then wait for the current one. Make jobs safe to run twice anyway, because a hard kill will happen eventually.</li>
+<li><strong>Windows.</strong> Signals behave differently there: <code>SIGTERM</code> is not delivered the same way, and Ctrl+C is the reliable one. Test your shutdown path on a clean terminal.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If a port stays busy after a crash and not only after Ctrl+C, <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">fix port already in use</a> shows how to find the process. To clear a whole stack, see <a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/">stop and clean up a local stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I handle Ctrl+C in a Node.js server?</summary><p>Listen for SIGINT and SIGTERM with process.on, call server.close(), end your database pool, then call process.exit. Add a short timer that forces an exit if shutdown hangs.</p></details><details><summary>Why does server.close() never finish?</summary><p>It waits for open connections, and idle keep-alive sockets count. Call server.closeIdleConnections() or closeAllConnections() after it.</p></details><details><summary>How long does Flisk wait before killing a local service?</summary><p>It sends SIGTERM to the process group, waits 5 seconds, then sends SIGKILL.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"><span class="lbl">Guide</span><b>Node.js watch mode: node --watch instead of nodemon</b><span>Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</span></a><a href="/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/"><span class="lbl">Guide</span><b>How to run several npm scripts at once (API, web, worker)</b><span>npm run dev only starts one thing. Here are the ways to start three, from a one-line script to a manifest per service.</span></a><a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/"><span class="lbl">Guide</span><b>How to debug a Node.js server with --inspect and VS Code</b><span>console.log gets you far, but a breakpoint on a running server is faster. Here is the minimum setup that works.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

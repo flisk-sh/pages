@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>npm ci vs npm install: which one to run and when</title>
+<meta name="description" content="npm ci installs exactly what the lockfile says and fails on a mismatch, npm install can change it. Learn when to use each, and the equivalents in pnpm, Yarn and Bun.">
+<meta name="keywords" content="npm ci vs npm install, npm ci, frozen lockfile, npm ci package-lock.json, pnpm install --frozen-lockfile">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/npm-ci-vs-npm-install/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="npm ci vs npm install: which one to run and when">
+<meta property="og:description" content="npm ci installs exactly what the lockfile says and fails on a mismatch, npm install can change it. Learn when to use each, and the equivalents in pnpm, Yarn and Bun.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/npm-ci-vs-npm-install/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"npm ci vs npm install: which one to run and when","description":"npm ci installs exactly what the lockfile says and fails on a mismatch, npm install can change it. Learn when to use each, and the equivalents in pnpm, Yarn and Bun.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/npm-ci-vs-npm-install/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/npm-ci-vs-npm-install/","keywords":"npm ci vs npm install, npm ci, frozen lockfile, npm ci package-lock.json, pnpm install --frozen-lockfile","wordCount":708,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"npm ci vs npm install: which one to run and when","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/npm-ci-vs-npm-install/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is npm ci faster than npm install?","acceptedAnswer":{"@type":"Answer","text":"Often, because it skips dependency resolution and uses the lockfile directly, but it also deletes node_modules first. Measure on your project and cache ~/.npm in CI."}},{"@type":"Question","name":"Should I commit package-lock.json?","acceptedAnswer":{"@type":"Answer","text":"Yes for applications. It makes installs repeatable for everyone and for CI."}},{"@type":"Question","name":"Does flisk up install my npm packages?","acceptedAnswer":{"@type":"Answer","text":"No. It starts the commands you declared. Run your install step first."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>npm ci vs npm install: which one to run and when</h1><p class="dek">Both commands fill node_modules. They differ in who wins when package.json and the lockfile disagree.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-command-does">What each command does</a></li><li><a href="#day-to-day-use">Day-to-day use</a></li><li><a href="#in-a-dockerfile">In a Dockerfile</a></li><li><a href="#equivalents-in-other-tools">Equivalents in other tools</a></li><li><a href="#installing-and-starting-a-local-stack">Installing and starting a local stack</a></li><li><a href="#checking-what-you-actually-installed">Checking what you actually installed</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Use <code>npm ci</code> when you want the exact versions in <code>package-lock.json</code>: in CI, in Docker builds, and on a fresh clone. Use <code>npm install</code> when you add or update a dependency and want the lockfile to change. <code>npm ci</code> never writes the lockfile and fails if it does not match <code>package.json</code>.</p>
+
+<h2 id="what-each-command-does">What each command does</h2>
+<table>
+<thead><tr><th></th><th><code>npm install</code></th><th><code>npm ci</code></th></tr></thead>
+<tbody>
+<tr><td>Source of truth</td><td><code>package.json</code>, then the lockfile</td><td>The lockfile only</td></tr>
+<tr><td>Writes the lockfile</td><td>Yes, when versions change</td><td>Never</td></tr>
+<tr><td>Existing <code>node_modules</code></td><td>Reused and updated</td><td>Deleted first, then rebuilt</td></tr>
+<tr><td>Lockfile missing</td><td>Creates one</td><td>Fails</td></tr>
+<tr><td>Lockfile disagrees with <code>package.json</code></td><td>Fixes the lockfile</td><td>Fails with an error</td></tr>
+</tbody>
+</table>
+<p>The failure of <code>npm ci</code> is the point. If a teammate changes <code>package.json</code> and forgets to commit the lockfile, CI stops instead of installing something nobody tested.</p>
+
+<h2 id="day-to-day-use">Day-to-day use</h2>
+<pre><code># add a dependency and update package-lock.json
+npm install zod
+
+# commit both files
+git add package.json package-lock.json
+
+# fresh clone, CI, Dockerfile
+npm ci
+
+# production image: skip devDependencies
+npm ci --omit=dev</code></pre>
+<p>Always commit the lockfile for an application. For a library you publish, the lockfile is not shipped to users, but committing it still gives your CI a stable install.</p>
+<p>A common surprise is that <code>npm install</code> on a clean machine may change the lockfile slightly, for example by rewriting a field after a different npm version touched it. That produces noisy diffs. Pin the Node and npm versions (see <a href="/@odykyi/nodejs-dev-setup/node-version-per-project/">a Node version per project</a>) and use <code>npm ci</code> when you are not changing dependencies.</p>
+
+<h2 id="in-a-dockerfile">In a Dockerfile</h2>
+<p>Copy the manifest files first, install, then copy the code. The install layer is cached until a dependency changes:</p>
+<pre><code>FROM node:22-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+CMD ["node", "src/server.js"]</code></pre>
+<p>Add a <code>.dockerignore</code> with <code>node_modules</code> so a host copy never overwrites the one built inside the image. Native modules built on macOS do not run in a Linux container, which is one more reason to install inside the image.</p>
+
+<h2 id="equivalents-in-other-tools">Equivalents in other tools</h2>
+<ul>
+<li>pnpm: <code>pnpm install --frozen-lockfile</code> (it is the default in CI environments)</li>
+<li>Yarn (current line): <code>yarn install --immutable</code>; Yarn 1: <code>yarn install --frozen-lockfile</code></li>
+<li>Bun: <code>bun install --frozen-lockfile</code></li>
+</ul>
+<p>If you are still choosing a tool, see <a href="/@odykyi/nodejs-dev-setup/npm-pnpm-yarn-or-bun-for-local-dev/">npm, pnpm, Yarn or Bun</a>.</p>
+
+<h2 id="installing-and-starting-a-local-stack">Installing and starting a local stack</h2>
+<p>Installing packages and starting services are separate steps. Flisk's <code>flisk up</code> runs your service commands, it does not install their dependencies. A reasonable repeatable setup is a script or README line that runs the lockfile install in each service folder, then <code>flisk up</code>. If a service starts and then crashes with "Cannot find module", the install step was skipped or ran in the wrong directory.</p>
+
+<h2 id="checking-what-you-actually-installed">Checking what you actually installed</h2>
+<p>After an install, three commands tell you what is on disk. <code>npm ls</code> prints the dependency tree, and <code>npm ls some-package</code> shows every copy of one package and which parent pulled it in. <code>npm outdated</code> lists packages that have newer versions than the ones installed. <code>npm explain some-package</code> says why a package is there at all. If two teammates see different behaviour, have both run <code>npm ls</code> for the suspect package and compare the output. A difference means one of them did not use <code>npm ci</code>, or the lockfile was not committed.</p>
+<p>When you update on purpose, do it in a small, separate commit: run <code>npm update</code> or <code>npm install package@latest</code>, run your tests, and commit the lockfile with a message that names the change. A reviewer can then see exactly which versions moved. Mixing an upgrade into a feature commit hides it.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>"npm ci can only install with an existing package-lock.json".</strong> Run <code>npm install</code> once and commit the lockfile.</li>
+<li><strong>"package.json and package-lock.json are not in sync".</strong> Run <code>npm install</code> locally, commit the lockfile, and push again.</li>
+<li><strong>Lifecycle scripts.</strong> Both commands run <code>postinstall</code> and similar scripts of your dependencies. Use <code>--ignore-scripts</code> when you install code you do not trust, and then run the needed build step by hand.</li>
+<li><strong>Slow <code>npm ci</code> in CI.</strong> It deletes <code>node_modules</code> every time, so cache the npm download cache (<code>~/.npm</code>), not <code>node_modules</code>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>With installs repeatable, make the rest of the setup repeatable too: <a href="/@odykyi/team-dev-environments/document-local-setup-in-the-readme/">what to put in the README for local setup</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is npm ci faster than npm install?</summary><p>Often, because it skips dependency resolution and uses the lockfile directly, but it also deletes node_modules first. Measure on your project and cache ~/.npm in CI.</p></details><details><summary>Should I commit package-lock.json?</summary><p>Yes for applications. It makes installs repeatable for everyone and for CI.</p></details><details><summary>Does flisk up install my npm packages?</summary><p>No. It starts the commands you declared. Run your install step first.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-version-per-project/"><span class="lbl">Guide</span><b>How to use a different Node.js version per project</b><span>Two projects on one laptop often need two Node versions. Pin the version in the repo so nobody has to remember it.</span></a><a href="/@odykyi/nodejs-dev-setup/npm-pnpm-yarn-or-bun-for-local-dev/"><span class="lbl">Guide</span><b>npm, pnpm, Yarn or Bun for local development: which to pick</b><span>Package managers differ less than their pages suggest. What hurts teams is using two at once.</span></a><a href="/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/"><span class="lbl">Guide</span><b>How to run several npm scripts at once (API, web, worker)</b><span>npm run dev only starts one thing. Here are the ways to start three, from a one-line script to a manifest per service.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

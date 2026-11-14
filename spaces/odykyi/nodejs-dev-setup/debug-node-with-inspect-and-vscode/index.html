@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to debug a Node.js server with --inspect and VS Code</title>
+<meta name="description" content="Start Node with --inspect, attach VS Code or Chrome DevTools, keep the debugger attached through restarts, and avoid inspector port clashes between services.">
+<meta name="keywords" content="node --inspect vscode, debug node.js server, vscode attach to node process, chrome://inspect node, node --inspect-brk">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to debug a Node.js server with --inspect and VS Code">
+<meta property="og:description" content="Start Node with --inspect, attach VS Code or Chrome DevTools, keep the debugger attached through restarts, and avoid inspector port clashes between services.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to debug a Node.js server with --inspect and VS Code","description":"Start Node with --inspect, attach VS Code or Chrome DevTools, keep the debugger attached through restarts, and avoid inspector port clashes between services.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/","keywords":"node --inspect vscode, debug node.js server, vscode attach to node process, chrome://inspect node, node --inspect-brk","wordCount":623,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to debug a Node.js server with --inspect and VS Code","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What port does node --inspect use?","acceptedAnswer":{"@type":"Answer","text":"9229 on 127.0.0.1 by default. Change it with --inspect=127.0.0.1:PORT."}},{"@type":"Question","name":"How do I keep VS Code attached when node --watch restarts?","acceptedAnswer":{"@type":"Answer","text":"Set restart to true in the attach configuration of launch.json, so VS Code reattaches to each new process."}},{"@type":"Question","name":"Can I debug a Flisk service?","acceptedAnswer":{"@type":"Answer","text":"Yes for a service with a command: add --inspect to the command and attach to that port. Use different inspector ports for different services."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>How to debug a Node.js server with --inspect and VS Code</h1><p class="dek">console.log gets you far, but a breakpoint on a running server is faster. Here is the minimum setup that works.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-flags">The flags</a></li><li><a href="#attach-from-vs-code">Attach from VS Code</a></li><li><a href="#attach-from-chrome-devtools">Attach from Chrome DevTools</a></li><li><a href="#debugging-a-service-started-by-flisk">Debugging a service started by Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Start the server with <code>node --inspect server.js</code>, then attach a debugger to port 9229: in VS Code with an <code>attach</code> launch configuration, or in Chrome by opening <code>chrome://inspect</code>. The server keeps running normally, and your breakpoints stop it when they are hit.</p>
+
+<h2 id="the-flags">The flags</h2>
+<ul>
+<li><code>--inspect</code> opens the inspector on <code>127.0.0.1:9229</code> and runs your code at once.</li>
+<li><code>--inspect-brk</code> opens it and pauses on the first line. Use it when the bug happens during startup, before you could attach.</li>
+<li><code>--inspect=127.0.0.1:9230</code> picks another port. You need this as soon as two Node processes run at once.</li>
+</ul>
+<pre><code>node --inspect --watch src/server.js</code></pre>
+<blockquote>Keep the inspector on <code>127.0.0.1</code>. Anyone who can reach the port can run code in your process. Do not use <code>0.0.0.0</code> unless you know why, and never on a shared network.</blockquote>
+
+<h2 id="attach-from-vs-code">Attach from VS Code</h2>
+<p>Add a configuration to <code>.vscode/launch.json</code>:</p>
+<pre><code>{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach to API",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "skipFiles": ["&lt;node_internals&gt;/**"]
+    }
+  ]
+}</code></pre>
+<p>Run it from the Run and Debug panel and set a breakpoint in your source file. <code>"restart": true</code> matters with watch mode: each restart is a new process, and this setting makes VS Code reattach to it. Without it the debugger disconnects at every save and you have to click attach again.</p>
+<p>If you do not want to edit any file, open the Command Palette and choose "Debug: JavaScript Debug Terminal". Anything you start in that terminal, including <code>npm run dev</code>, is attached automatically.</p>
+
+<h2 id="attach-from-chrome-devtools">Attach from Chrome DevTools</h2>
+<p>Open <code>chrome://inspect</code> in Chrome, and your Node process appears under Remote Target. Click "inspect" to get a DevTools window with sources, a console, the memory tab and a profiler. This is also how you take a heap snapshot, which helps with <a href="/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/">out of memory errors</a>.</p>
+
+<h2 id="debugging-a-service-started-by-flisk">Debugging a service started by Flisk</h2>
+<p>For a Flisk service with a <code>command</code>, add the flag to the command. Flisk runs the command as written, so nothing else changes:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch --inspect=127.0.0.1:9229 src/server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Run <code>flisk up</code> and attach VS Code to 9229. If a second Node service also needs a debugger, give it <code>--inspect=127.0.0.1:9230</code>. Flisk checks that the <code>port</code> values of services do not collide, but the inspector port is not a service port, so it does not know about it. Two services on 9229 means the second one fails to bind, which shows up in that service's log (<code>flisk logs --service worker</code>).</p>
+<p>Containers need a different recipe: you must publish the inspector port, and the inspector inside a container has to listen on all interfaces, which is why that setup is a security trade-off. For the Docker route, prefer running the process you are debugging on the host. A mixed setup, where Postgres is a container and your code runs as a local process, is described in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Breakpoints show as gray.</strong> The source map does not match. For TypeScript, run the code with a runner that emits source maps (tsx does), or enable <code>--enable-source-maps</code>.</li>
+<li><strong>"Address already in use" on 9229.</strong> Another Node process holds the inspector. Use a different port with <code>--inspect=127.0.0.1:PORT</code>.</li>
+<li><strong>The debugger pauses the whole server.</strong> While stopped at a breakpoint, requests wait. A health check from a supervisor may time out and mark the service unhealthy. That is expected while you are paused.</li>
+<li><strong>Do not ship the flag.</strong> Keep <code>--inspect</code> in the dev script, not in <code>start</code>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If you start several Node processes together, give each one its own inspector port and read <a href="/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/">how to run several npm scripts at once</a> for ways to keep their logs readable.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What port does node --inspect use?</summary><p>9229 on 127.0.0.1 by default. Change it with --inspect=127.0.0.1:PORT.</p></details><details><summary>How do I keep VS Code attached when node --watch restarts?</summary><p>Set restart to true in the attach configuration of launch.json, so VS Code reattaches to each new process.</p></details><details><summary>Can I debug a Flisk service?</summary><p>Yes for a service with a command: add --inspect to the command and attach to that port. Use different inspector ports for different services.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"><span class="lbl">Guide</span><b>Node.js watch mode: node --watch instead of nodemon</b><span>Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</span></a><a href="/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/"><span class="lbl">Guide</span><b>Fix &quot;JavaScript heap out of memory&quot; in Node.js</b><span>The error means one Node process hit its heap limit. Raising the limit is one fix. Knowing whether you have a leak is the other.</span></a><a href="/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/"><span class="lbl">Guide</span><b>Run TypeScript in Node.js without a build step</b><span>For local development you can skip the compile step. Node strips types itself in current releases, and tsx covers the rest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

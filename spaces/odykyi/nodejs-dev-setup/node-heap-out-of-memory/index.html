@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fix &quot;JavaScript heap out of memory&quot; in Node.js</title>
+<meta name="description" content="Raise the Node.js heap limit with --max-old-space-size or NODE_OPTIONS, find a real leak with heap snapshots, and tell it apart from a container memory kill.">
+<meta name="keywords" content="JavaScript heap out of memory, node max-old-space-size, NODE_OPTIONS memory, node heap snapshot, FATAL ERROR Reached heap limit">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fix &quot;JavaScript heap out of memory&quot; in Node.js">
+<meta property="og:description" content="Raise the Node.js heap limit with --max-old-space-size or NODE_OPTIONS, find a real leak with heap snapshots, and tell it apart from a container memory kill.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Fix \"JavaScript heap out of memory\" in Node.js","description":"Raise the Node.js heap limit with --max-old-space-size or NODE_OPTIONS, find a real leak with heap snapshots, and tell it apart from a container memory kill.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/","keywords":"JavaScript heap out of memory, node max-old-space-size, NODE_OPTIONS memory, node heap snapshot, FATAL ERROR Reached heap limit","wordCount":747,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"Fix \"JavaScript heap out of memory\" in Node.js","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-heap-out-of-memory/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How much should I set --max-old-space-size to?","acceptedAnswer":{"@type":"Answer","text":"A value in megabytes below the memory you really have free. 4096 is a common first step. Do not set it to the total RAM, or the machine will swap."}},{"@type":"Question","name":"What does exit code 137 mean for a Node container?","acceptedAnswer":{"@type":"Answer","text":"The kernel killed the process because the container hit its memory limit. It is not a V8 heap error, so raise the container memory or lower the heap limit."}},{"@type":"Question","name":"Where do I set NODE_OPTIONS for a Flisk service?","acceptedAnswer":{"@type":"Answer","text":"In the env map of the service.json, for example NODE_OPTIONS set to --max-old-space-size=2048."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>Fix &quot;JavaScript heap out of memory&quot; in Node.js</h1><p class="dek">The error means one Node process hit its heap limit. Raising the limit is one fix. Knowing whether you have a leak is the other.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-error-means">What the error means</a></li><li><a href="#raise-the-limit">Raise the limit</a></li><li><a href="#decide-big-job-or-leak">Decide: big job or leak</a></li><li><a href="#set-it-for-a-flisk-service">Set it for a Flisk service</a></li><li><a href="#container-kills-look-different">Container kills look different</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Run the process with a larger limit, for example <code>node --max-old-space-size=4096 build.js</code> (the value is in megabytes), or set <code>NODE_OPTIONS=--max-old-space-size=4096</code> so tools that start Node for you pick it up. If the process still runs out after you double the limit, you have a leak or an unbounded data load, and a bigger heap only delays the crash.</p>
+
+<h2 id="what-the-error-means">What the error means</h2>
+<p>The message looks like <code>FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory</code>. V8, the engine inside Node, caps the old-generation heap, which is where long-lived objects live. The default cap depends on the Node version and on how much memory the machine or container has, so the same code can fail on a small CI runner and work on your laptop. It is a per-process limit and it is separate from the machine's RAM: Node can fail with 8 GB free.</p>
+<p>It shows up most often in builds and tools (a TypeScript compile, a bundler, a linter on a large repo, a test runner) and in dev servers that have run for hours. Those are two different problems.</p>
+
+<h2 id="raise-the-limit">Raise the limit</h2>
+<pre><code># one command
+node --max-old-space-size=4096 node_modules/.bin/vite build
+
+# every Node process started from this shell
+export NODE_OPTIONS="--max-old-space-size=4096"
+
+# one npm script (cross-platform with cross-env)
+"build": "cross-env NODE_OPTIONS=--max-old-space-size=4096 tsc -p ."</code></pre>
+<p>Pick a value below the memory you really have, and remember that every Node process in the shell gets the setting, including editors' helper processes. 4096 (4 GB) is a common first step on a laptop. Do not set it to the total RAM of the machine.</p>
+
+<h2 id="decide-big-job-or-leak">Decide: big job or leak</h2>
+<p>Watch the memory of the process over time with <code>process.memoryUsage().heapUsed</code>, or the Activity Monitor or <code>top</code>. A build that climbs to a peak and then exits is a big job: raise the limit or split the work (for example, run <code>tsc</code> per package). A server that grows with each request and never drops back is a leak.</p>
+<p>To find the leak, ask Node to write a snapshot before it dies:</p>
+<pre><code>node --heapsnapshot-near-heap-limit=1 server.js</code></pre>
+<p>Open the resulting <code>.heapsnapshot</code> file in Chrome DevTools, in the Memory tab, and sort by retained size. Or attach with <code>--inspect</code> and take two snapshots a few minutes apart, then use the "comparison" view to see which objects grew. See <a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/">debugging with --inspect</a> for the attach steps. Typical culprits are a global array or Map used as a cache with no limit, event listeners added on every request, and a request body or query result loaded entirely into memory.</p>
+
+<h2 id="set-it-for-a-flisk-service">Set it for a Flisk service</h2>
+<p>A service with a <code>command</code> receives the variables from its <code>env</code> map, so you can set the option there and keep it out of the command line:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch server.js",
+  "port": 4000,
+  "env": { "NODE_OPTIONS": "--max-old-space-size=2048" }
+}</code></pre>
+<p>If the service then restarts by itself, check <code>flisk logs --service api --tail 100</code> for the fatal error text. Flisk restarts an exited process after 1, 2, 4 and 8 seconds and stops after five quick exits, so a service that runs out of memory at startup ends up stopped, and the log tells you why. Flisk does not measure or limit the memory of a local process.</p>
+
+<h2 id="container-kills-look-different">Container kills look different</h2>
+<p>If the process runs in Docker, there are two limits: V8's heap and the container's memory limit. When the container limit is hit, the kernel kills the process without any JavaScript error, and the exit code is 137. If you see 137 and no "heap out of memory" text, raise the container memory, or lower the heap setting so Node fails with a message before the container does. On a Mac, the Docker VM has its own memory size as well. See <a href="/@odykyi/team-dev-environments/many-services-on-one-laptop/">many services on one laptop without running out of RAM</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Setting it too high.</strong> The machine starts swapping, and everything slows down before Node fails.</li>
+<li><strong>Setting <code>NODE_OPTIONS</code> in a profile file.</strong> It then affects every Node tool on the machine. Set it per command or per service.</li>
+<li><strong>Treating it as a fix for a leak.</strong> The process will fail later, usually in the middle of something important.</li>
+<li><strong>Buffers and streams.</strong> Large files read with <code>readFile</code> use memory outside the old-generation heap as well. Stream them.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For build-time memory issues in a monorepo, run the heavy step per package, which also fits the filters described in <a href="/@odykyi/nodejs-dev-setup/npm-pnpm-yarn-or-bun-for-local-dev/">choosing a package manager</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How much should I set --max-old-space-size to?</summary><p>A value in megabytes below the memory you really have free. 4096 is a common first step. Do not set it to the total RAM, or the machine will swap.</p></details><details><summary>What does exit code 137 mean for a Node container?</summary><p>The kernel killed the process because the container hit its memory limit. It is not a V8 heap error, so raise the container memory or lower the heap limit.</p></details><details><summary>Where do I set NODE_OPTIONS for a Flisk service?</summary><p>In the env map of the service.json, for example NODE_OPTIONS set to --max-old-space-size=2048.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/"><span class="lbl">Guide</span><b>How to debug a Node.js server with --inspect and VS Code</b><span>console.log gets you far, but a breakpoint on a running server is faster. Here is the minimum setup that works.</span></a><a href="/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/"><span class="lbl">Guide</span><b>How to run several npm scripts at once (API, web, worker)</b><span>npm run dev only starts one thing. Here are the ways to start three, from a one-line script to a manifest per service.</span></a><a href="/@odykyi/nodejs-dev-setup/npm-pnpm-yarn-or-bun-for-local-dev/"><span class="lbl">Guide</span><b>npm, pnpm, Yarn or Bun for local development: which to pick</b><span>Package managers differ less than their pages suggest. What hurts teams is using two at once.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

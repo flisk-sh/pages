@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Node.js watch mode: node --watch instead of nodemon</title>
+<meta name="description" content="Use the built-in node --watch to restart a Node.js server on file changes, when nodemon or tsx still make sense, and how to wire it into a local service.">
+<meta name="keywords" content="node --watch, nodemon alternative, node watch mode, node --watch-path, restart node on file change">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Node.js watch mode: node --watch instead of nodemon">
+<meta property="og:description" content="Use the built-in node --watch to restart a Node.js server on file changes, when nodemon or tsx still make sense, and how to wire it into a local service.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Node.js watch mode: node --watch instead of nodemon","description":"Use the built-in node --watch to restart a Node.js server on file changes, when nodemon or tsx still make sense, and how to wire it into a local service.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/","keywords":"node --watch, nodemon alternative, node watch mode, node --watch-path, restart node on file change","wordCount":698,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"Node.js watch mode: node --watch instead of nodemon","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is node --watch stable?","acceptedAnswer":{"@type":"Answer","text":"Yes in current releases. It became stable in Node 20.13 and Node 22. On older versions it prints an experimental warning."}},{"@type":"Question","name":"Does node --watch reload when a JSON or template file changes?","acceptedAnswer":{"@type":"Answer","text":"Only if that file is imported, or if you list its folder with --watch-path. Files read at runtime with fs are not tracked by default."}},{"@type":"Question","name":"Does Flisk watch my files for local processes?","acceptedAnswer":{"@type":"Answer","text":"No. For a service with a command, Flisk starts and supervises the process. Live reload comes from the command, for example node --watch."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>Node.js watch mode: node --watch instead of nodemon</h1><p class="dek">Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-node-watch-does">What node --watch does</a></li><li><a href="#when-nodemon-is-still-the-better-tool">When nodemon is still the better tool</a></li><li><a href="#use-watch-mode-as-a-flisk-service-command">Use watch mode as a Flisk service command</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Run <code>node --watch server.js</code>. Node starts your program, tracks the files it imports, and restarts the process when one of them changes. Watch mode is stable in current Node releases (Node 20.13 and later, and Node 22), so for a plain server you no longer need nodemon.</p>
+
+<h2 id="what-node-watch-does">What node --watch does</h2>
+<p>It is a restart loop, not hot module replacement. Every save kills the process and starts a new one, so in-memory state is lost and the port is released and bound again. That is fine for an API that keeps its state in a database. It is annoying for a server that holds a large cache or a long WebSocket session, because every client reconnects.</p>
+<pre><code>{
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  }
+}</code></pre>
+<p>By default Node watches the entry file and the modules it loads with <code>import</code> or <code>require</code>. It does not know about files you read at runtime, such as a JSON config opened with <code>fs.readFile</code>, an email template or a SQL file. Name those with <code>--watch-path</code>:</p>
+<pre><code>node --watch --watch-path=./src --watch-path=./templates src/server.js</code></pre>
+<p>Pass the flag once per directory. Be aware that when you use <code>--watch-path</code>, Node watches those paths and no longer relies on the import graph alone, so list every folder you care about. If your terminal gets cleared on each restart and you lose the error, add <code>--watch-preserve-output</code>.</p>
+
+<h2 id="when-nodemon-is-still-the-better-tool">When nodemon is still the better tool</h2>
+<ul>
+<li><strong>You want a delay.</strong> Editors and code generators can write many files in a burst. Nodemon has <code>--delay</code> and per-extension settings in <code>nodemon.json</code>. Node's flag has no debounce setting.</li>
+<li><strong>You watch non-JavaScript files</strong> and need to choose extensions (<code>--ext js,json,graphql</code>).</li>
+<li><strong>You must run an arbitrary command</strong> on each change, not just Node. Nodemon can restart a Python script as easily as a JavaScript one.</li>
+</ul>
+<p>For TypeScript, <code>tsx watch src/server.ts</code> is the usual choice when you run through a loader. Newer Node versions can run <code>.ts</code> files directly, and the watcher works the same way. See <a href="/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/">running TypeScript in Node without a build step</a>.</p>
+
+<h2 id="use-watch-mode-as-a-flisk-service-command">Use watch mode as a Flisk service command</h2>
+<p>A Flisk service that declares a <code>command</code> runs as a local process. Flisk does not add its own file watcher for these services, so the reload behaviour comes from the command you write. Flisk's own docs suggest exactly this for live reload without Docker: put <code>node --watch</code> (or Bun's or uvicorn's watch flag) in the command.</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch src/server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Flisk passes the <code>port</code> to your process as the <code>PORT</code> environment variable, so read <code>process.env.PORT</code> in the server. Start it with <code>flisk up</code>. When Node restarts inside the same Flisk-managed process, Flisk sees one long-running service and does not restart it. When your code crashes at startup, Node's watcher waits for the next file change, so the process stays alive. Flisk shows the output in the log lines prefixed with the service name, and you can read recent lines with <code>flisk logs --service api --tail 50</code>.</p>
+<p>A process that exits is a different case. If the command ends (for example you drop <code>--watch</code>), Flisk starts it again after 1 second, then 2, 4 and 8, and gives up after five quick exits in a row.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port still in use after a restart.</strong> If your shutdown handler hangs, the new process cannot bind. See <a href="/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/">graceful shutdown for a dev server</a>.</li>
+<li><strong>Changes to <code>.env</code> do not trigger a restart</strong> unless the file is in a watched path. Add it with <code>--watch-path</code>, or restart by hand.</li>
+<li><strong>Too many files.</strong> If you run a monorepo from the root, do not point <code>--watch-path</code> at <code>.</code>: it includes <code>node_modules</code> and build output. Watch the source folders only.</li>
+<li><strong>Nothing happens on save</strong> inside a container with a bind mount. Notifications may not cross the mount, which is a Docker issue and not a Node one. See <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If the restarted server keeps exiting with an error, attach a debugger instead of reading logs: <a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/">debug Node with --inspect and VS Code</a> works with <code>--watch</code>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is node --watch stable?</summary><p>Yes in current releases. It became stable in Node 20.13 and Node 22. On older versions it prints an experimental warning.</p></details><details><summary>Does node --watch reload when a JSON or template file changes?</summary><p>Only if that file is imported, or if you list its folder with --watch-path. Files read at runtime with fs are not tracked by default.</p></details><details><summary>Does Flisk watch my files for local processes?</summary><p>No. For a service with a command, Flisk starts and supervises the process. Live reload comes from the command, for example node --watch.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/"><span class="lbl">Guide</span><b>How to debug a Node.js server with --inspect and VS Code</b><span>console.log gets you far, but a breakpoint on a running server is faster. Here is the minimum setup that works.</span></a><a href="/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/"><span class="lbl">Guide</span><b>How to shut down a Node.js dev server cleanly on Ctrl+C</b><span>A dev server that ignores signals leaves ports busy and connections open. Twenty lines of code fix it.</span></a><a href="/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/"><span class="lbl">Guide</span><b>Run TypeScript in Node.js without a build step</b><span>For local development you can skip the compile step. Node strips types itself in current releases, and tsx covers the rest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
