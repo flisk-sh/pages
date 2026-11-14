@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep CI the same as local development</title>
+<meta name="description" content="Make CI test what developers run: one start command, pinned Node and Flisk versions, minFliskVersion, a drift check and a short list of allowed differences.">
+<meta name="keywords" content="ci matches local dev, pin tool versions ci, minFliskVersion, works on my machine ci, flisk config verify">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep CI the same as local development">
+<meta property="og:description" content="Make CI test what developers run: one start command, pinned Node and Flisk versions, minFliskVersion, a drift check and a short list of allowed differences.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep CI the same as local development","description":"Make CI test what developers run: one start command, pinned Node and Flisk versions, minFliskVersion, a drift check and a short list of allowed differences.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/","keywords":"ci matches local dev, pin tool versions ci, minFliskVersion, works on my machine ci, flisk config verify","wordCount":803,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"CI for multi-service apps","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/"},{"@type":"ListItem","position":3,"name":"How to keep CI the same as local development","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does minFliskVersion do?","acceptedAnswer":{"@type":"Answer","text":"It is a minimum version in .flisk/project.json. flisk up and flisk doctor fail with a clear message when the installed CLI is older. It does not require an exact match."}},{"@type":"Question","name":"How do I install a specific Flisk version in CI?","acceptedAnswer":{"@type":"Answer","text":"Run npm install -g @flisk-sh/flisk@\u003cversion> with the exact version you want. flisk upgrade takes no version argument."}},{"@type":"Question","name":"Does matching local mean matching production?","acceptedAnswer":{"@type":"Answer","text":"No. It makes CI match the local loop. Production differences belong to your deploy pipeline and a staging environment."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a></div>
+<section class="hero"><div><div class="lbl">CI for multi-service apps</div><h1>How to keep CI the same as local development</h1><p class="dek">One definition of the stack, used in both places. Pin the versions and write down what legitimately differs.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-ci-and-local-drift-apart">Why CI and local drift apart</a></li><li><a href="#step-1-one-entry-command">Step 1: one entry command</a></li><li><a href="#step-2-pin-the-versions">Step 2: pin the versions</a></li><li><a href="#step-3-check-that-generated-files-match-the-source">Step 3: check that generated files match the source</a></li><li><a href="#step-4-write-down-what-legitimately-differs">Step 4: write down what legitimately differs</a></li><li><a href="#where-flisk-fits-and-where-it-does-not">Where Flisk fits, and where it does not</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-chase-parity">When not to chase parity</a></li></ol></nav></aside>
+<article><p>CI stays close to local development when both start the stack with the same command, the same tool versions and the same committed files, and when every difference is on a short list you can name. If the workflow has its own start-up script that no developer runs, CI is testing something other than what people use.</p>
+
+<h2 id="why-ci-and-local-drift-apart">Why CI and local drift apart</h2>
+<p>It starts small. A developer fixes a start-up problem with a local flag. CI gets a shell script that sets three variables and a sleep. Six months later, tests pass on laptops and fail in CI, or the other way round, and nobody can say which setup is right. Each drift has the same fix: one definition of the stack, used in both places.</p>
+
+<h2 id="step-1-one-entry-command">Step 1: one entry command</h2>
+<p>Decide on the command that starts the stack and use it everywhere. With Flisk it is <code>flisk up</code> locally and <code>flisk up --wait</code> in CI, which runs the stack in the background and exits when it is healthy, so the next step can start. Everything else, such as which services exist, their ports and their dependencies, lives in the <code>service.json</code> files in the repository. The workflow then contains no service list of its own to go stale.</p>
+<pre><code>- run: flisk project --yes
+- run: flisk up --wait --wait-timeout 600
+- run: npm test</code></pre>
+<p>If you wrap this in a <code>make ci</code> or an npm script, let developers run the same wrapper. A command only CI runs is a command nobody notices when it breaks.</p>
+
+<h2 id="step-2-pin-the-versions">Step 2: pin the versions</h2>
+<p>The usual cause of "works on my machine" in CI is a different tool version. Pin what you can:</p>
+<ul>
+<li><strong>Node.</strong> Commit an <code>.nvmrc</code> and point <code>actions/setup-node</code> at it with <code>node-version-file: .nvmrc</code>. Flisk needs Node 22.12 or newer.</li>
+<li><strong>The Flisk CLI.</strong> Install an exact version in CI with <code>npm install -g @flisk-sh/flisk@&lt;version&gt;</code> instead of the latest. Then upgrading is a commit you can review and revert.</li>
+<li><strong>A floor for everyone.</strong> Add <code>"minFliskVersion": "1.4.57"</code> (use your own number) to <code>.flisk/project.json</code>. <code>flisk up</code> and <code>flisk doctor</code> then fail with a clear message on an older CLI, locally and in CI. It is a minimum, not an exact match, so it stops stale installs but does not stop someone being newer.</li>
+<li><strong>Images and services.</strong> Use specific tags for databases and base images, not <code>latest</code>.</li>
+</ul>
+
+<h2 id="step-3-check-that-generated-files-match-the-source">Step 3: check that generated files match the source</h2>
+<p>Flisk generates files from your <code>service.json</code> and <code>package.json</code> files. If someone changes a source and forgets to regenerate, or edits a generated file by hand, local and CI can disagree. Run <code>flisk config verify</code> as a fast job before the stack starts. It exits 1 on drift. This has its own walkthrough in <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">checking config drift in CI</a>, so here the point is only to make it the first job. On a fresh clone, run <code>flisk project --yes</code> first, because the <code>.env</code> and generated output are not committed.</p>
+
+<h2 id="step-4-write-down-what-legitimately-differs">Step 4: write down what legitimately differs</h2>
+<p>Some differences are fine, as long as you know them:</p>
+<table>
+<thead><tr><th>Area</th><th>Local</th><th>CI</th></tr></thead>
+<tbody>
+<tr><td>Secrets</td><td>Generated <code>.env</code></td><td>Generated <code>.env</code>, plus repository secrets only for real third parties</td></tr>
+<tr><td>Data</td><td>Persistent volumes</td><td>Fresh every run</td></tr>
+<tr><td>Hardware</td><td>Your laptop</td><td>A small shared runner, so give waits more time</td></tr>
+<tr><td>Cache</td><td>Warm</td><td>Cold unless you configure it</td></tr>
+</tbody>
+</table>
+<p>Keep this table in your contributing guide. When a CI-only failure appears, you check the table first. A difference that is not on it is probably a bug.</p>
+
+<h2 id="where-flisk-fits-and-where-it-does-not">Where Flisk fits, and where it does not</h2>
+<p>Flisk is a local development tool. It does not emit Kubernetes manifests and does not replace the way you deploy. Keeping CI close to local means CI is close to the local loop, not that it equals production. If you also want a Compose file that runs without Flisk, for CI or a colleague, see <a href="/@odykyi/docker-compose-guide/export-a-standalone-compose-file/">exporting a standalone Compose file</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>CI-only environment variables.</strong> A variable set only in the workflow makes a test pass there and fail on a laptop. Prefer values in committed config or the generated <code>.env</code>.</li>
+<li><strong>Skipped tests in CI.</strong> A test tagged to run only locally, or only in CI, makes the two diverge. Avoid environment checks in tests.</li>
+<li><strong>Different start order.</strong> A <code>sleep</code> in the workflow hides a missing <code>dependsOn</code> that a developer will hit locally.</li>
+</ul>
+
+<h2 id="when-not-to-chase-parity">When not to chase parity</h2>
+<p>Do not push CI to match a developer's laptop in everything. CI should match the shared definition of the stack. Personal settings, editor tools and local overrides are not part of it. Where production differs from both, test that in a staging environment, not in CI.</p>
+
+<p>Next, look at how the generated <code>.env</code> and your real secrets should be handled in CI in <a href="/@odykyi/ci-for-multi-service-apps/secrets-and-env-files-for-ci-stacks/">how to handle secrets and .env files for a stack in CI</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does minFliskVersion do?</summary><p>It is a minimum version in .flisk/project.json. flisk up and flisk doctor fail with a clear message when the installed CLI is older. It does not require an exact match.</p></details><details><summary>How do I install a specific Flisk version in CI?</summary><p>Run npm install -g @flisk-sh/flisk@&lt;version&gt; with the exact version you want. flisk upgrade takes no version argument.</p></details><details><summary>Does matching local mean matching production?</summary><p>No. It makes CI match the local loop. Production differences belong to your deploy pipeline and a staging environment.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI for multi-service apps</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/"><span class="lbl">Guide</span><b>How to wait for every service to be healthy before CI tests</b><span>Replace the fixed sleep with a readiness wait that fails fast, names the unhealthy service and prints its last log lines.</span></a><a href="/@odykyi/ci-for-multi-service-apps/secrets-and-env-files-for-ci-stacks/"><span class="lbl">Guide</span><b>How to handle secrets and .env files for a stack in CI</b><span>Let the stack generate its own values, add only the real secrets a test needs, and keep them away from forks and logs.</span></a><a href="/@odykyi/ci-for-multi-service-apps/run-integration-tests-in-ci-without-docker/"><span class="lbl">Guide</span><b>How to run integration tests in CI without Docker</b><span>No image builds, no pulls. Each service runs as a local process and CI waits until all of them answer.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
