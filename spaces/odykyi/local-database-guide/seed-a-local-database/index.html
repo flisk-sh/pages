@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to seed a local database with test data</title>
+<meta name="description" content="Seed a local Postgres with idempotent SQL, an ORM seed script or a one-shot job. Flisk has no seed command, so here is the pattern that works with flisk up.">
+<meta name="keywords" content="seed local database, postgres seed data, prisma db seed, idempotent seed script, seed database docker">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-database-guide/seed-a-local-database/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to seed a local database with test data">
+<meta property="og:description" content="Seed a local Postgres with idempotent SQL, an ORM seed script or a one-shot job. Flisk has no seed command, so here is the pattern that works with flisk up.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-database-guide/seed-a-local-database/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to seed a local database with test data","description":"Seed a local Postgres with idempotent SQL, an ORM seed script or a one-shot job. Flisk has no seed command, so here is the pattern that works with flisk up.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-database-guide/seed-a-local-database/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-database-guide/seed-a-local-database/","keywords":"seed local database, postgres seed data, prisma db seed, idempotent seed script, seed database docker","wordCount":713,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Databases in local development","item":"https://pages.flisk.si/@odykyi/local-database-guide/"},{"@type":"ListItem","position":3,"name":"How to seed a local database with test data","item":"https://pages.flisk.si/@odykyi/local-database-guide/seed-a-local-database/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is there a flisk db seed command?","acceptedAnswer":{"@type":"Answer","text":"No. Seed with docker exec and psql, with your ORM's seed command, or with a one-shot bring-your-own job that runs after Postgres."}},{"@type":"Question","name":"How do I make a seed safe to run twice?","acceptedAnswer":{"@type":"Answer","text":"Give each row a fixed key and use ON CONFLICT DO NOTHING in SQL, or upsert in your ORM."}},{"@type":"Question","name":"Does prisma migrate reset run the seed?","acceptedAnswer":{"@type":"Answer","text":"Not in Prisma 7. Run prisma db seed explicitly after a reset."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-database-guide/">Databases in local development</a></div>
+<section class="hero"><div><div class="lbl">Databases in local development</div><h1>How to seed a local database with test data</h1><p class="dek">A good seed can run twice without breaking anything. Here is how to write one, and three ways to run it against a local database.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#write-a-seed-you-can-run-twice">Write a seed you can run twice</a></li><li><a href="#run-it-by-hand">Run it by hand</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Write the seed as a script that is safe to run more than once, then run it after your migrations. Plain SQL with <code>ON CONFLICT DO NOTHING</code> is the simplest form. Flisk has no <code>flisk db seed</code> command, so you run the script with <code>docker exec</code> or as a one-shot job.</p>
+
+<h2 id="write-a-seed-you-can-run-twice">Write a seed you can run twice</h2>
+<p>The mistake that costs the most time is a seed that inserts rows blindly. The second run fails on a unique key, or worse, doubles your data. Give every seeded row a fixed key and skip rows that exist:</p>
+<pre><code>-- seed.sql
+INSERT INTO customers (id, email, name) VALUES
+  (1, 'ada@example.test', 'Ada'),
+  (2, 'grace@example.test', 'Grace')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO products (id, sku, price_cents) VALUES
+  (1, 'MUG-01', 1200),
+  (2, 'TEE-01', 2500)
+ON CONFLICT (id) DO NOTHING;</code></pre>
+<p>Use fake addresses on a domain such as <code>example.test</code> so no test email can ever reach a real person. Keep the seed small. Ten well-chosen rows that cover the awkward cases (an empty order, a long name, a refunded payment) find more bugs than ten thousand random ones.</p>
+<p>If your ORM owns the schema, you can seed through it. Prisma runs <code>prisma db seed</code>, which executes the command you set under <code>prisma.seed</code> in <code>package.json</code>. In Prisma 7 the seed no longer runs automatically after <code>migrate dev</code> or <code>migrate reset</code>, so call it yourself. Use <code>upsert</code> in the script so it stays repeatable. Drizzle has no seed command, so a small script that calls <code>db.insert(...).onConflictDoNothing()</code> does the same job.</p>
+
+<h2 id="run-it-by-hand">Run it by hand</h2>
+<p>With Postgres in a container, pipe the file in:</p>
+<pre><code>docker exec -i my_shop_postgres \
+  psql -U my_shop -d my_shop_store -v ON_ERROR_STOP=1 &lt; seed.sql</code></pre>
+<p>The <code>-i</code> flag lets the container read your file from standard input. <code>ON_ERROR_STOP=1</code> makes <code>psql</code> exit non-zero on the first error, instead of printing it and carrying on. That flag is what lets a script or CI notice a failed seed.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>The names in the command above follow the Flisk convention: for a project called <code>my-shop</code> with a stack called <code>store</code>, the container is <code>my_shop_postgres</code>, the superuser is <code>my_shop</code> and the database is <code>my_shop_store</code>. Confirm yours with <code>docker ps</code> and, inside <code>psql</code>, with <code>\l</code>. The stack stays up, so nothing needs a restart.</p>
+<p>To make the seed part of <code>flisk up</code>, turn it into a one-shot job. Create a folder with the SQL, a script and a Dockerfile that has <code>psql</code> in it:</p>
+<pre><code>services/store/seed/
+  seed.sql
+  seed.sh
+  Dockerfile        # FROM alpine, apk add postgresql-client
+  service.json</code></pre>
+<p>The <code>service.json</code> makes it run once, after Postgres:</p>
+<pre><code>{
+  "appName": "seed",
+  "appType": "bring-your-own",
+  "stack": "store",
+  "restart": "no",
+  "dependsOn": ["postgres"]
+}</code></pre>
+<p>In <code>seed.sh</code>, call <code>psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f seed.sql</code>. A bring-your-own container receives <code>DATABASE_URL</code> because it depends on <code>postgres</code>. Register it with <code>flisk resource seed --type bring-your-own --stack store --dockerfile ./Dockerfile --restart no --register-existing --yes</code>.</p>
+<p>Two cautions, both from the Flisk docs. First, the order of the seed job relative to the migrator and the API is not guaranteed, so the seed has to cope with a table that does not exist yet. The simplest fix is to list the migrator in the seed's <code>dependsOn</code> too. Second, the documented example was checked in pieces and not end to end through <code>flisk up</code>, so run it once and read <code>flisk logs --service seed</code> before you rely on it. If <code>DATABASE_URL</code> ends in <code>?schema=public</code>, strip that suffix, because <code>psql</code> rejects it.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Seeding production by accident.</strong> Gate the seed on an environment check, or keep it in a folder that only the local stack registers.</li>
+<li><strong>Hard-coded IDs and sequences.</strong> If you insert rows with fixed ids, the serial counter does not move. The next normal insert then collides. Follow the inserts with <code>SELECT setval(pg_get_serial_sequence('customers','id'), (SELECT max(id) FROM customers));</code>.</li>
+<li><strong>Real data.</strong> Do not copy production rows into a laptop. Generate fake data, or anonymise before it leaves the server.</li>
+<li><strong>Seeding before migrating.</strong> The tables must exist. See <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>.</li>
+</ul>
+
+<p>When the seed is wrong and you want a clean slate, <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a> shows how to drop everything and start again. For integration tests that need the same data, see <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is there a flisk db seed command?</summary><p>No. Seed with docker exec and psql, with your ORM&#39;s seed command, or with a one-shot bring-your-own job that runs after Postgres.</p></details><details><summary>How do I make a seed safe to run twice?</summary><p>Give each row a fixed key and use ON CONFLICT DO NOTHING in SQL, or upsert in your ORM.</p></details><details><summary>Does prisma migrate reset run the seed?</summary><p>Not in Prisma 7. Run prisma db seed explicitly after a reset.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Databases in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-database-guide/reset-a-local-database/"><span class="lbl">Guide</span><b>How to reset a local database: drop, recreate, restore</b><span>Resetting a local database is routine, but the commands differ in how much they destroy. Pick the smallest one that fixes your problem.</span></a><a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/"><span class="lbl">Guide</span><b>Run database migrations in local dev with a migrator</b><span>Migrations belong in their own step. Here is why, how to wire the order by hand, and how a Flisk migrator resource does it for you.</span></a><a href="/@odykyi/local-database-guide/prisma-migrations-locally/"><span class="lbl">Guide</span><b>Prisma migrations in local development, step by step</b><span>Prisma has three commands you will use against a local database, and each one has a different job. Mixing them up is the usual source of drift.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
