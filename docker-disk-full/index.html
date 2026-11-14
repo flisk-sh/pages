@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker disk full: how to free space without losing data</title>
+<meta name="description" content="Docker images, build cache and volumes fill a disk quietly. Learn what each prune removes, which command deletes data, and how the Flisk disk guard warns you.">
+<meta name="keywords" content="docker disk full, no space left on device docker, docker system prune, docker build cache size, colima disk full">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/docker-disk-full/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker disk full: how to free space without losing data">
+<meta property="og:description" content="Docker images, build cache and volumes fill a disk quietly. Learn what each prune removes, which command deletes data, and how the Flisk disk guard warns you.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/docker-disk-full/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker disk full: how to free space without losing data","description":"Docker images, build cache and volumes fill a disk quietly. Learn what each prune removes, which command deletes data, and how the Flisk disk guard warns you.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/docker-disk-full/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/docker-disk-full/","keywords":"docker disk full, no space left on device docker, docker system prune, docker build cache size, colima disk full","wordCount":725,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Docker disk full: how to free space without losing data","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/docker-disk-full/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is docker system prune safe?","acceptedAnswer":{"@type":"Answer","text":"Without extra flags it removes stopped containers, unused networks, dangling images and build cache, but not volumes. Adding -a also removes every image not used by a container, and --volumes removes unused volumes, which can delete database data."}},{"@type":"Question","name":"Why is my disk full when df shows space free?","acceptedAnswer":{"@type":"Answer","text":"With Colima or Docker Desktop, Docker lives in a VM with its own disk. The VM can be full while the host has space. Check both."}},{"@type":"Question","name":"How do I clear the Docker build cache with Flisk?","acceptedAnswer":{"@type":"Answer","text":"Run flisk down --prune-cache. By default it removes cache older than 24h. Use --cache-until to pick another age, such as 168h."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Docker disk full: how to free space without losing data</h1><p class="dek">Free the build cache first, then unused images. Leave volumes alone until you know what is in them.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#see-what-is-using-the-space">See what is using the space</a></li><li><a href="#prune-in-this-order">Prune in this order</a></li><li><a href="#how-flisk-helps">How Flisk helps</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>When Docker reports <code>no space left on device</code>, free the build cache first, then unused images, and leave volumes for last because they can hold your data. <code>docker system df</code> shows where the space went, and <code>docker builder prune</code> is the safest first step.</p>
+<h2 id="see-what-is-using-the-space">See what is using the space</h2>
+<pre><code>docker system df
+docker system df -v</code></pre>
+<p>The first command gives four lines: images, containers, local volumes and build cache, each with a size and a "reclaimable" figure. Reclaimable is what a prune could free. Developers who rebuild images all day often find the build cache is the largest line, because every changed layer leaves an old one behind.</p>
+<p>If you use Colima or Docker Desktop, Docker's data sits in a VM disk, not directly on the host. Check both the host (<code>df -h</code>) and the VM. A full host disk can also damage Docker's image store, and the repair for that deletes volumes, so act before the disk reaches zero.</p>
+<h2 id="prune-in-this-order">Prune in this order</h2>
+<table>
+<thead><tr><th>Command</th><th>What it removes</th><th>Risk</th></tr></thead>
+<tbody>
+<tr><td><code>docker builder prune -f</code></td><td>Build cache</td><td>Next build is slower</td></tr>
+<tr><td><code>docker image prune -f</code></td><td>Dangling images (untagged)</td><td>Low</td></tr>
+<tr><td><code>docker container prune -f</code></td><td>Stopped containers</td><td>Low, but you lose their filesystem</td></tr>
+<tr><td><code>docker system prune -af</code></td><td>All unused images, containers, networks, cache</td><td>Pulls everything again</td></tr>
+<tr><td><code>docker system prune -af --volumes</code></td><td>The above plus unused volumes</td><td>Can delete database data</td></tr>
+</tbody>
+</table>
+<blockquote><p>A volume that no container uses right now still counts as "unused". If your database container is stopped, its volume is a candidate for <code>--volumes</code>. List volumes with <code>docker volume ls</code> before you prune them.</p></blockquote>
+<p>Package manager caches outside Docker also take space: <code>npm cache clean --force</code>, <code>bun pm cache rm</code> and <code>brew cleanup -s</code> are common ones.</p>
+<p>A habit that avoids most emergencies is to prune the build cache on a schedule you choose, for example once a week, and to remove images of projects you no longer work on. Stale images from old branches are rarely worth keeping. Check <code>docker system df</code> after a large dependency change too, because a new base image can double the size of the image layer list.</p>
+<h2 id="how-flisk-helps">How Flisk helps</h2>
+<p>Before <code>flisk up</code> starts a Docker run, it checks free disk space. Below 5 GiB it stops with <code>DISK_SPACE_LOW</code>. Between 5 and 15 GiB it warns. When Docker runs in a VM such as Colima, it reads the smaller of the host and VM figures. Three environment variables adjust the limits:</p>
+<ul>
+<li><code>FLISK_DISK_MIN_GIB</code> sets the level where it stops.</li>
+<li><code>FLISK_DISK_WARN_GIB</code> sets the level where it warns.</li>
+<li><code>FLISK_BUILD_CACHE_MAX_GIB</code> sets the build cache warning limit, 20 by default. <code>0</code> turns it off.</li>
+</ul>
+<p><code>flisk doctor</code> reports the same numbers, along with cleanup commands and a warning when the build cache is over its limit. A trimmed example of what it prints:</p>
+<pre><code>⚠ 12.6 GiB free on this machine: image builds may fail below 5 GiB
+  docker builder prune -f
+  docker image prune -f</code></pre>
+<p>To clean up from the project, use <code>flisk down</code> with an option:</p>
+<pre><code>flisk down --dry-run
+flisk down --prune-cache
+flisk down --prune-cache --cache-until 168h
+flisk down --purge</code></pre>
+<ul>
+<li><code>--dry-run</code> shows what would happen. Use it first.</li>
+<li><code>--prune-cache</code> also prunes Docker build cache older than 24 hours by default. <code>--cache-until</code> sets another age. The cache is shared by every project on the machine, not only this one.</li>
+<li><code>--purge</code> removes the project's volumes, networks and images. That includes your local database data. Use it when you want a clean start, not to free space.</li>
+</ul>
+<p><code>flisk down</code> prints the sizes of the images and cache it keeps, so you can see what is left to prune.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Pruning images forces a full rebuild next time. That is slow on a weak connection, so schedule it.</li>
+<li>Do not delete files inside Docker's data folder by hand. Use the Docker commands.</li>
+<li>A VM disk does not shrink on its own after you free space inside it. The host may still show it as full until the VM releases the blocks. How to do that depends on your VM tool, so check its documentation.</li>
+<li>If you need the data in a volume, dump it first. For databases see <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a>.</li>
+</ul>
+<p>To catch a low disk before it breaks a build, run a readiness check as the first step of your day: <a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/">check your machine before starting the stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is docker system prune safe?</summary><p>Without extra flags it removes stopped containers, unused networks, dangling images and build cache, but not volumes. Adding -a also removes every image not used by a container, and --volumes removes unused volumes, which can delete database data.</p></details><details><summary>Why is my disk full when df shows space free?</summary><p>With Colima or Docker Desktop, Docker lives in a VM with its own disk. The VM can be full while the host has space. Check both.</p></details><details><summary>How do I clear the Docker build cache with Flisk?</summary><p>Run flisk down --prune-cache. By default it removes cache older than 24h. Use --cache-until to pick another age, such as 168h.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/"><span class="lbl">Guide</span><b>Check your machine before starting a local stack: a checklist</b><span>Five minutes of failed builds cost more than a five-second check. Run the preflight first, in a script or with one command.</span></a><a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/"><span class="lbl">Guide</span><b>Works on my machine: find why a local stack differs</b><span>The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</span></a><a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/"><span class="lbl">Guide</span><b>Why a Docker container keeps restarting, and how to find out</b><span>A restart policy turns a crash into a loop. The loop is a symptom: the exit code and the first log lines before it tell you the cause.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

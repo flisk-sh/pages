@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why a *.localhost subdomain does not resolve, and the fix</title>
+<meta name="description" content="A name like api.myapp.localhost should reach your machine with no hosts file entry. When it does not, check the error type, the port and the project name.">
+<meta name="keywords" content="localhost subdomain not resolving, *.localhost not working, api.localhost 404, traefik localhost host rule, local dev domain without hosts file">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why a *.localhost subdomain does not resolve, and the fix">
+<meta property="og:description" content="A name like api.myapp.localhost should reach your machine with no hosts file entry. When it does not, check the error type, the port and the project name.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why a *.localhost subdomain does not resolve, and the fix","description":"A name like api.myapp.localhost should reach your machine with no hosts file entry. When it does not, check the error type, the port and the project name.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/","keywords":"localhost subdomain not resolving, *.localhost not working, api.localhost 404, traefik localhost host rule, local dev domain without hosts file","wordCount":763,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Why a *.localhost subdomain does not resolve, and the fix","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need to edit /etc/hosts for *.localhost?","acceptedAnswer":{"@type":"Answer","text":"Normally not. Names ending in .localhost are reserved for the local machine, and browsers and most system resolvers send them to 127.0.0.1. If yours does not, call the service on a URL with an explicit Host header, or use the 127.0.0.1 address."}},{"@type":"Question","name":"Why do I get 404 instead of a connection error?","acceptedAnswer":{"@type":"Answer","text":"A 404 means the name resolved and the proxy answered, but it has no route for that host. Check the project name in the host and whether the service started."}},{"@type":"Question","name":"Do local-process services use *.localhost?","acceptedAnswer":{"@type":"Answer","text":"No. Without Docker there is no Traefik gateway. Use http://localhost:\u003cport> with the port from service.json."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Why a *.localhost subdomain does not resolve, and the fix</h1><p class="dek">A browser error, a curl error and a 404 from the proxy look alike but mean different things. Tell them apart first, then fix the right layer.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#three-symptoms-three-causes">Three symptoms, three causes</a></li><li><a href="#check-the-resolver-without-any-tool">Check the resolver without any tool</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Any name ending in <code>.localhost</code>, such as <code>api.myapp.localhost</code>, is meant to point to your own machine with no hosts file entry. When it does not work, first read the symptom: a DNS error means the name did not resolve, while a 404 or 502 means it resolved and the proxy answered. They have different fixes.</p>
+<h2 id="three-symptoms-three-causes">Three symptoms, three causes</h2>
+<table>
+<thead><tr><th>What you see</th><th>What it means</th></tr></thead>
+<tbody>
+<tr><td>"Could not resolve host" or "server not found"</td><td>Your resolver does not map <code>.localhost</code> to <code>127.0.0.1</code>.</td></tr>
+<tr><td>"Connection refused"</td><td>The name resolved, but nothing listens on that port.</td></tr>
+<tr><td>404 from the proxy</td><td>The proxy is up, but no route matches this host name or the service is not started.</td></tr>
+<tr><td>502, 503 or 504</td><td>The proxy found the route, but the container behind it is not answering.</td></tr>
+</tbody>
+</table>
+<h2 id="check-the-resolver-without-any-tool">Check the resolver without any tool</h2>
+<p>RFC 6761 reserves <code>.localhost</code> for loopback, so most systems resolve it themselves. Test it in two steps:</p>
+<pre><code>ping -c 1 anything.localhost
+curl -sS -o /dev/null -w "%{http_code}
+" http://127.0.0.1:8081/</code></pre>
+<p>If the ping fails, the resolver is the problem. If the second command gets a response but the host name does not, the problem is the name. Two ways around a resolver that will not cooperate:</p>
+<ul>
+<li>Send the host name yourself: <code>curl --resolve api.myapp.localhost:8081:127.0.0.1 http://api.myapp.localhost:8081/</code> or <code>curl -H "Host: api.myapp.localhost" http://127.0.0.1:8081/</code>.</li>
+<li>Add a line to your hosts file for the exact names you use. A hosts file cannot hold a wildcard, so each name needs its own line.</li>
+</ul>
+<h2 id="with-flisk">With Flisk</h2>
+<p>In Docker mode, Flisk puts a Traefik gateway in front of your services and serves each one at a name built from the service and the project, for example <code>http://api.&lt;project&gt;.localhost:8081/api/orders</code>. Do not build the name by hand. Print it:</p>
+<pre><code>flisk networks
+flisk networks --json</code></pre>
+<p>The command shows every URL, with the port Flisk chose. That matters because the gateway does not always get port 80. It tries 80 and 443 first, then 8080 to 8180 and 8443 to 8543. To see the choice before starting, use <code>flisk up --dry-run</code>, which prints something like <code>HTTP: wanted 80, using 8081 (selected from fallback range 8080-8180)</code>. To force a port, set <code>FLISK_HTTP_PORT=80 flisk up</code>. A value you set is used as given and fails if the port is busy.</p>
+<p>The usual reasons a <code>.localhost</code> URL fails in a Flisk project:</p>
+<ul>
+<li><strong>The port is missing.</strong> <code>http://api.myapp.localhost/</code> goes to port 80. If Flisk chose 8081, you need <code>:8081</code> in the URL.</li>
+<li><strong>The project name differs from what you typed.</strong> The host is built from the project folder name. Rename the folder and the host changes. Copy the URL from <code>flisk networks</code>.</li>
+<li><strong>A 404 from Traefik.</strong> No running container is registered for that URL. Either it is still building or it has not started, or it never turns healthy. See <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">a service that will not start</a>.</li>
+<li><strong>A 502, 503 or 504.</strong> The route exists and the container does not answer. Read its logs with <code>flisk logs --service &lt;name&gt;</code>.</li>
+<li><strong>The ports are held by something else.</strong> <code>flisk doctor</code> reports when another container already owns the gateway ports. See <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix "port already in use"</a>.</li>
+</ul>
+<h3>Windows</h3>
+<p>On Windows, <code>flisk doctor</code> warns when the system does not resolve <code>*.flisk.localhost</code> to <code>127.0.0.1</code>. The suggested way out is to use the <code>127.0.0.1</code> URLs that <code>flisk networks</code> prints. Windows setup is covered in <a href="/@odykyi/team-dev-environments/windows-local-dev-setup/">local development on Windows</a>.</p>
+<h3>macOS with Colima</h3>
+<p>If the port is correct and the connection is refused or hangs, the port forwarder of the VM may be stuck. Check who listens with <code>lsof -nP -iTCP:80 -sTCP:LISTEN</code> (use the port Flisk chose), and restart the VM with <code>colima restart</code> if it shows nothing. More in <a href="/@odykyi/team-dev-environments/mac-local-dev-with-colima/">local development on Mac with Colima</a>.</p>
+<h3>No Docker, no gateway</h3>
+<p>Services that run as local processes have no Traefik and no <code>.localhost</code> names. Open <code>http://localhost:&lt;port&gt;</code> with the port from the service's <code>service.json</code>.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000
+}</code></pre>
+<p>This one is at <code>http://localhost:4000/</code>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A browser may remember a failed lookup or redirect to HTTPS. Test with <code>curl</code> before you blame the stack.</li>
+<li>A VPN or a DNS filter can intercept names. If <code>ping anything.localhost</code> fails only on that network, the cause is the network, not the project.</li>
+<li>Do not hard-code a port or host in the frontend. Take it from the generated configuration, as explained in <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of ports</a>.</li>
+</ul>
+<p>If the URL works for you but not for a teammate, the next step is <a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/">why it works on my machine</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need to edit /etc/hosts for *.localhost?</summary><p>Normally not. Names ending in .localhost are reserved for the local machine, and browsers and most system resolvers send them to 127.0.0.1. If yours does not, call the service on a URL with an explicit Host header, or use the 127.0.0.1 address.</p></details><details><summary>Why do I get 404 instead of a connection error?</summary><p>A 404 means the name resolved and the proxy answered, but it has no route for that host. Check the project name in the host and whether the service started.</p></details><details><summary>Do local-process services use *.localhost?</summary><p>No. Without Docker there is no Traefik gateway. Use http://localhost:&lt;port&gt; with the port from service.json.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/"><span class="lbl">Guide</span><b>How to debug a service that will not start locally</b><span>Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</span></a><a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/"><span class="lbl">Guide</span><b>Works on my machine: find why a local stack differs</b><span>The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</span></a><a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/"><span class="lbl">Guide</span><b>Check your machine before starting a local stack: a checklist</b><span>Five minutes of failed builds cost more than a five-second check. Run the preflight first, in a script or with one command.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

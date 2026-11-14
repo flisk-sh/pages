@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Check your machine before starting a local stack: a checklist</title>
+<meta name="description" content="A short preflight catches a stopped Docker, a full disk, a taken port and an old tool before a slow start fails. Use a script or flisk doctor to run it.">
+<meta name="keywords" content="check environment before docker compose up, local dev preflight check, flisk doctor, verify docker running script, dev machine readiness check">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Check your machine before starting a local stack: a checklist">
+<meta property="og:description" content="A short preflight catches a stopped Docker, a full disk, a taken port and an old tool before a slow start fails. Use a script or flisk doctor to run it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Check your machine before starting a local stack: a checklist","description":"A short preflight catches a stopped Docker, a full disk, a taken port and an old tool before a slow start fails. Use a script or flisk doctor to run it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/","keywords":"check environment before docker compose up, local dev preflight check, flisk doctor, verify docker running script, dev machine readiness check","wordCount":763,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Check your machine before starting a local stack: a checklist","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk doctor change anything on my machine?","acceptedAnswer":{"@type":"Answer","text":"Not by default. It reports. The --fix option can repair some problems, and --dry-run shows what it would do first."}},{"@type":"Question","name":"Can I run flisk doctor in CI?","acceptedAnswer":{"@type":"Answer","text":"Yes. Use flisk doctor --no-ping in a job so it does not try to reach services, and combine it with flisk config verify."}},{"@type":"Question","name":"Does flisk up check anything itself?","acceptedAnswer":{"@type":"Answer","text":"Yes. It checks the disk, ports and Docker before starting. flisk up --dry-run prints the ports it would use without starting anything."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Check your machine before starting a local stack: a checklist</h1><p class="dek">Five minutes of failed builds cost more than a five-second check. Run the preflight first, in a script or with one command.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-five-checks-and-why-they-matter">The five checks and why they matter</a></li><li><a href="#a-plain-script">A plain script</a></li><li><a href="#with-flisk-doctor">With flisk doctor</a></li><li><a href="#where-to-use-it">Where to use it</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Check five things before you start a local stack: Docker answers, there is enough disk space, the ports you need are free, your tool versions are recent enough, and your configuration files are in sync. You can script this in a few lines, or run <code>flisk doctor</code>, which does the same and more.</p>
+<h2 id="the-five-checks-and-why-they-matter">The five checks and why they matter</h2>
+<ol>
+<li><strong>Docker is running.</strong> <code>docker info</code> fails fast when the daemon is down. Starting a build against a stopped daemon wastes the wait.</li>
+<li><strong>Disk space.</strong> Image builds fail halfway when the disk fills. Look at the host and, with Colima or Docker Desktop, at the VM.</li>
+<li><strong>Ports.</strong> A stack that needs 80, 443 or 5432 cannot start when another process holds one.</li>
+<li><strong>Versions.</strong> Compose, Docker and your language runtimes must support what the project uses.</li>
+<li><strong>Files in sync.</strong> Generated files must match their source. Otherwise the stack runs a different config than the one in review.</li>
+</ol>
+<h2 id="a-plain-script">A plain script</h2>
+<p>Nothing here needs special tools. A shell script that fails on the first problem is enough for a small project:</p>
+<pre><code>set -u
+docker info &gt;/dev/null 2&gt;&amp;1 || { echo "Docker is not running"; exit 1; }
+free_gb=$(df -g . | awk 'NR==2 {print $4}')
+[ "$free_gb" -ge 5 ] || { echo "Less than 5 GB free"; exit 1; }
+for p in 80 443 5432; do
+  lsof -nP -iTCP:$p -sTCP:LISTEN &gt;/dev/null &amp;&amp; echo "Port $p is in use"
+done
+docker compose version</code></pre>
+<p>The <code>df -g</code> flag is macOS. On Linux use <code>df -BG .</code>. The limits here are examples, not recommendations: set them for your own images. This kind of script grows by one line per incident, which is fair. The cost is that every project ends up with its own slightly different copy.</p>
+<h2 id="with-flisk-doctor">With flisk doctor</h2>
+<p>Install Flisk with <code>npm install -g @flisk-sh/flisk</code> and run:</p>
+<pre><code>flisk doctor</code></pre>
+<p>It checks the Docker daemon, the Engine and Compose versions, the Tilt version, free disk space, the ports Flisk wants (HTTP, HTTPS and Postgres), the project's service files, environment values and secrets, and whether generated files exist. A trimmed run looks like this:</p>
+<pre><code>✓ HTTP 8081, HTTPS 8444, Postgres 15434
+✓ Docker daemon is running
+⚠ 12.6 GiB free on this machine: image builds may fail below 5 GiB</code></pre>
+<p>A warning shows the commands that would fix it. A failure makes the command exit with status 1, so scripts and CI can stop on it. Useful options:</p>
+<ul>
+<li><code>--all</code> shows every check, including the passing ones.</li>
+<li><code>--json</code> prints machine-readable output.</li>
+<li><code>--strict</code> turns warnings into failures.</li>
+<li><code>--no-ping</code>, <code>--no-gateway</code> and <code>--no-database</code> skip the checks that reach services.</li>
+<li><code>--fix</code> repairs what it can. Add <code>--dry-run</code> to see the changes first, and <code>--scope project</code> or <code>--scope machine</code> to limit them. <code>--yes</code> skips the prompts.</li>
+</ul>
+<p>Doctor and <code>flisk config verify</code> are different on purpose. Doctor checks the environment and the services. <code>config verify</code> checks that the generated files are consistent with your <code>service.json</code> files. Run both.</p>
+<h3>See the ports before you start</h3>
+<p><code>flisk up --dry-run</code> starts nothing, and prints the URLs and the host ports it would use:</p>
+<pre><code>flisk up --dry-run</code></pre>
+<p>When port 80 is busy it says so, for example <code>HTTP: wanted 80, using 8081 (selected from fallback range 8080-8180)</code>. It also tells you how to force a port: <code>FLISK_HTTP_PORT=80 flisk up</code>. Postgres uses a range starting at 15432 in the same way.</p>
+<h3>Built-in gates in flisk up</h3>
+<p>You do not have to remember any of this, because <code>flisk up</code> runs its own checks before it starts. If Docker is not running it stops with <code>Cold start blocked</code> and tells you to start Docker Desktop, OrbStack or Colima. If Tilt is missing it says so. Disk space below 5 GiB stops the run with <code>DISK_SPACE_LOW</code>, and between 5 and 15 GiB it warns.</p>
+<h2 id="where-to-use-it">Where to use it</h2>
+<ul>
+<li><strong>First day on a project.</strong> Run <code>flisk doctor</code> before your first <code>flisk up</code>.</li>
+<li><strong>When something breaks.</strong> It is the first command in <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">a service that will not start</a>.</li>
+<li><strong>In CI.</strong> Add <code>flisk doctor --no-ping</code> and <code>flisk config verify</code> as a job, as described in <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">check config drift in CI</a>.</li>
+</ul>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A warning is not an error. A disk with 12 GiB free passes, but one large build can use that.</li>
+<li>Do not run <code>--fix</code> without <code>--dry-run</code> the first time. Some repairs change machine settings.</li>
+<li>Doctor cannot know your VM limits are too low for your workload. It reports what it can measure.</li>
+</ul>
+<p>When the report is clean and your teammate still sees something different, compare both machines as shown in <a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/">works on my machine</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk doctor change anything on my machine?</summary><p>Not by default. It reports. The --fix option can repair some problems, and --dry-run shows what it would do first.</p></details><details><summary>Can I run flisk doctor in CI?</summary><p>Yes. Use flisk doctor --no-ping in a job so it does not try to reach services, and combine it with flisk config verify.</p></details><details><summary>Does flisk up check anything itself?</summary><p>Yes. It checks the disk, ports and Docker before starting. flisk up --dry-run prints the ports it would use without starting anything.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/"><span class="lbl">Guide</span><b>Docker disk full: how to free space without losing data</b><span>Free the build cache first, then unused images. Leave volumes alone until you know what is in them.</span></a><a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/"><span class="lbl">Guide</span><b>Works on my machine: find why a local stack differs</b><span>The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</span></a><a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/"><span class="lbl">Guide</span><b>How to debug a service that will not start locally</b><span>Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
