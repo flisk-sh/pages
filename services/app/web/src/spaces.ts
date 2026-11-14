@@ -39,6 +39,22 @@ export interface Space extends SpaceGit {
 export const spacePath = (s: { handle: string; slug: string }) =>
 	`@${s.handle}/${s.slug}/`;
 
+/** Sub-pages of a space for the sitemap: `<folder>/index.html` one level down, at most 100, sorted. */
+export const subPages = (s: { dir: string; kind: string }): string[] => {
+	if (s.kind !== "html" || !existsSync(s.dir)) return [];
+	return readdirSync(s.dir, { withFileTypes: true })
+		.filter(
+			(e) =>
+				e.isDirectory() &&
+				!e.name.startsWith(".") &&
+				/^[\w-]+$/.test(e.name) &&
+				existsSync(join(s.dir, e.name, "index.html")),
+		)
+		.map((e) => `${e.name}/`)
+		.sort()
+		.slice(0, 100);
+};
+
 export const branchOf = (s: { handle: string; slug: string }) =>
 	`space/${s.handle}/${s.slug}`;
 

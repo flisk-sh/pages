@@ -104,7 +104,7 @@ describe("files for crawlers", () => {
 			"<loc>https://tool.test/@sam/gpu-explainer/</loc><lastmod>2026-10-27</lastmod>",
 		);
 		expect(xml.match(/<url>/g)).toHaveLength(
-			2 + 1 + spaces.filter((s) => !s.unlisted).length,
+			2 + 1 + spaces.filter((s) => !s.unlisted).length + 1, // + sam/gpu-explainer/part-two/
 		);
 	});
 
