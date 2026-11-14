@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test queue consumer retries and dead letters locally</title>
+<meta name="description" content="Make a queue consumer fail on purpose and watch it retry: acknowledgements, redelivery limits and dead letters, shown with NATS JetStream and a local worker.">
+<meta name="keywords" content="queue consumer retries, dead letter queue local, nats jetstream retry, test message redelivery, poison message handling">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/workers-and-queues/queue-consumer-retries-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test queue consumer retries and dead letters locally">
+<meta property="og:description" content="Make a queue consumer fail on purpose and watch it retry: acknowledgements, redelivery limits and dead letters, shown with NATS JetStream and a local worker.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/workers-and-queues/queue-consumer-retries-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test queue consumer retries and dead letters locally","description":"Make a queue consumer fail on purpose and watch it retry: acknowledgements, redelivery limits and dead letters, shown with NATS JetStream and a local worker.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/workers-and-queues/queue-consumer-retries-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/workers-and-queues/queue-consumer-retries-locally/","keywords":"queue consumer retries, dead letter queue local, nats jetstream retry, test message redelivery, poison message handling","wordCount":762,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Background jobs and queues locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/"},{"@type":"ListItem","position":3,"name":"How to test queue consumer retries and dead letters locally","item":"https://pages.flisk.si/@odykyi/workers-and-queues/queue-consumer-retries-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I make a queue consumer fail on purpose?","acceptedAnswer":{"@type":"Answer","text":"Publish a message that your handler rejects, such as a payload with a missing field, and have the handler raise. Then watch the logs for repeated attempts and check the consumer's pending counts."}},{"@type":"Question","name":"What is a dead letter queue?","acceptedAnswer":{"@type":"Answer","text":"It is a place where a message goes after it fails too many times, so it stops looping and you can inspect it. In RabbitMQ it is a dead-letter exchange. In JetStream you cap deliveries and publish the last failure to a separate subject."}},{"@type":"Question","name":"Why is my message delivered twice when nothing failed?","acceptedAnswer":{"@type":"Answer","text":"The acknowledgement did not arrive before the wait time ended, usually because the job is slower than the ack wait. Raise the wait or acknowledge sooner, and keep the handler safe to repeat."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/workers-and-queues/">Background jobs and queues locally</a></div>
+<section class="hero"><div><div class="lbl">Background jobs and queues locally</div><h1>How to test queue consumer retries and dead letters locally</h1><p class="dek">A retry path that you have never run is a retry path that does not work. Here is how to force failures on your laptop and watch what the queue does.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-retries-work-in-a-queue">How retries work in a queue</a></li><li><a href="#a-consumer-with-a-delivery-limit">A consumer with a delivery limit</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To test retries locally, publish a message your consumer is guaranteed to fail on, then watch the queue redeliver it. You need to see three things: the message comes back after a failure, it stops coming back after a set number of attempts, and the final failure lands somewhere you can inspect instead of disappearing.</p>
+
+<h2 id="how-retries-work-in-a-queue">How retries work in a queue</h2>
+<p>A consumer takes a message, does the work and acknowledges it. If it never acknowledges, because it crashed or took too long, the queue assumes the work was lost and delivers the message again. That is called at-least-once delivery, and it has two consequences for your code.</p>
+<ul>
+<li><strong>Handlers must be safe to run twice.</strong> A retry after a half-finished job repeats the first half. Use an idempotency key, or make the work a single database transaction.</li>
+<li><strong>Retries need a limit.</strong> A message that can never succeed (a poison message) would otherwise loop forever. After a set number of attempts, move it aside.</li>
+</ul>
+<p>RabbitMQ does this with a dead-letter exchange plus a message TTL or a reject. JetStream does it with consumer settings, and a few lines in your handler.</p>
+
+<h2 id="a-consumer-with-a-delivery-limit">A consumer with a delivery limit</h2>
+<p>This uses Python and the <code>nats-py</code> package against the NATS server from <a href="/@odykyi/workers-and-queues/nats-for-local-development/">the NATS article</a>. The consumer gets at most four deliveries, waits ten seconds for an acknowledgement, and sends the last failure to a dead subject.</p>
+<pre><code>import asyncio, os, json
+import nats
+from nats.js.api import ConsumerConfig
+from nats.errors import TimeoutError as FetchTimeout
+
+MAX = 4
+
+async def main():
+    nc = await nats.connect(os.environ["NATS_URL"])
+    js = nc.jetstream()
+    await js.add_stream(name="JOBS", subjects=["jobs.&gt;"])
+    sub = await js.pull_subscribe(
+        "jobs.email", durable="mailer",
+        config=ConsumerConfig(max_deliver=MAX, ack_wait=10),
+    )
+    while True:
+        try:
+            msgs = await sub.fetch(1, timeout=5)
+        except FetchTimeout:
+            continue
+        for msg in msgs:
+            attempt = msg.metadata.num_delivered
+            try:
+                handle(json.loads(msg.data))
+                await msg.ack()
+            except Exception as err:
+                print(f"attempt {attempt} failed: {err}", flush=True)
+                if attempt &gt;= MAX:
+                    await js.publish("jobs.dead.email", msg.data)
+                    await msg.term()      # stop redelivery
+                else:
+                    await msg.nak(delay=2)  # retry in 2 seconds
+
+asyncio.run(main())</code></pre>
+<p>The dead subject <code>jobs.dead.email</code> is inside the <code>jobs.&gt;</code> stream, so the stored message stays visible, and the consumer's filter on <code>jobs.email</code> keeps it from being picked up again.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Create the queue and make the worker depend on it:</p>
+<pre><code>flisk resource bus --type queue --stack shop --yes</code></pre>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "mailer",
+  "appType": "worker",
+  "command": "python3 worker.py",
+  "dependsOn": ["bus"]
+}</code></pre>
+<p>The worker needs the client library, so run <code>pip install nats-py</code> in the environment that <code>python3</code> uses. Check the config with <code>flisk config verify</code>, then start the stack with <code>flisk up shop</code>. The <code>bus</code> service provides <code>NATS_URL</code> to services that depend on it, as described in the Flisk BYO docs. I wrote the worker mode above from the documentation and have not run this exact stack, so if <code>NATS_URL</code> is missing in your worker, print the environment and compare it with the docs.</p>
+<p>Now run three experiments:</p>
+<ol>
+<li><strong>A normal failure.</strong> Publish a message that makes <code>handle()</code> raise. Watch <code>flisk logs --service mailer --since 2m</code>. You should see attempts one to four, spaced by the delay, then a dead message.</li>
+<li><strong>A crash mid-job.</strong> Publish a slow job, and run <code>flisk restart mailer</code> while it works. The message was not acknowledged, so it returns after the acknowledgement wait. This is the redelivery that handlers must survive.</li>
+<li><strong>Inspect the leftovers.</strong> With the <code>nats</code> CLI, <code>nats consumer info JOBS mailer</code> shows how many messages are pending and how many are waiting for acknowledgement, and <code>nats stream ls</code> shows the stream sizes.</li>
+</ol>
+<p>The CLI needs the server port on your host. Publish it with <code>extraPorts</code> as shown in the NATS article, or run the CLI from another container.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A short acknowledgement wait causes duplicates.</strong> If a job normally takes 20 seconds and <code>ack_wait</code> is 10, the queue redelivers while the first attempt is still running. Set the wait longer than your slowest honest job.</li>
+<li><strong>Retries without a delay hammer your dependency.</strong> Use a delay, and make it grow for real services.</li>
+<li><strong>Leftover state.</strong> The stream data lives in a volume, so old failed messages come back in the next run. Purge the stream between experiments.</li>
+<li><strong>The scaffolded worker does not retry for you.</strong> The Flisk worker template reads a retry count into its config but logs a failed job and moves on, so retry logic is yours to write.</li>
+<li><strong>When not to bother.</strong> If a lost job costs nothing, core NATS without JetStream is simpler, and so is a plain function call.</li>
+</ul>
+
+<p>When a job is not failing but simply never finishes, the checks are different. <a href="/@odykyi/workers-and-queues/debug-a-stuck-job/">Debugging a stuck job</a> walks through them.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I make a queue consumer fail on purpose?</summary><p>Publish a message that your handler rejects, such as a payload with a missing field, and have the handler raise. Then watch the logs for repeated attempts and check the consumer&#39;s pending counts.</p></details><details><summary>What is a dead letter queue?</summary><p>It is a place where a message goes after it fails too many times, so it stops looping and you can inspect it. In RabbitMQ it is a dead-letter exchange. In JetStream you cap deliveries and publish the last failure to a separate subject.</p></details><details><summary>Why is my message delivered twice when nothing failed?</summary><p>The acknowledgement did not arrive before the wait time ended, usually because the job is slower than the ack wait. Raise the wait or acknowledge sooner, and keep the handler safe to repeat.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Background jobs and queues locally</span></div>
+<div class="rgrid"><a href="/@odykyi/workers-and-queues/nats-for-local-development/"><span class="lbl">Guide</span><b>How to run NATS with JetStream for local development</b><span>One NATS container, JetStream turned on, and a connection string every service can read. Here is the plain way and the Flisk way.</span></a><a href="/@odykyi/workers-and-queues/debug-a-stuck-job/"><span class="lbl">Guide</span><b>How to debug a background job that never finishes</b><span>A stuck job is silent. Work through the same short list each time and you will find the cause faster than by guessing.</span></a><a href="/@odykyi/workers-and-queues/rabbitmq-for-local-development/"><span class="lbl">Guide</span><b>How to run RabbitMQ for local development with a management UI</b><span>RabbitMQ is a good fit when you need routing rules, per-message TTLs or dead-letter exchanges. Here is how to run it locally and look inside it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
