@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to control service startup order in local development</title>
+<meta name="description" content="Make service B wait for service A in local dev: dependsOn, readiness versus started, health checks, migrators, and what to do when a dependency dies later.">
+<meta name="keywords" content="service startup order, wait for service to be ready, depends_on healthcheck, microservices startup dependencies">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/microservices-local-dev/service-startup-order/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to control service startup order in local development">
+<meta property="og:description" content="Make service B wait for service A in local dev: dependsOn, readiness versus started, health checks, migrators, and what to do when a dependency dies later.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/microservices-local-dev/service-startup-order/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to control service startup order in local development","description":"Make service B wait for service A in local dev: dependsOn, readiness versus started, health checks, migrators, and what to do when a dependency dies later.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/microservices-local-dev/service-startup-order/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/microservices-local-dev/service-startup-order/","keywords":"service startup order, wait for service to be ready, depends_on healthcheck, microservices startup dependencies","wordCount":774,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Run microservices on your laptop","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/"},{"@type":"ListItem","position":3,"name":"How to control service startup order in local development","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/service-startup-order/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does depends_on wait for a service to be ready?","acceptedAnswer":{"@type":"Answer","text":"In Docker Compose, plain depends_on only waits for the container to start. Add a healthcheck and use condition: service_healthy to wait until the service reports healthy."}},{"@type":"Question","name":"What happens if a dependency crashes after startup?","acceptedAnswer":{"@type":"Answer","text":"Startup ordering does not cover it. In Flisk, dependsOn is only local startup ordering and does not make a service retry or wait if a dependency stops later. Add retries with backoff in the client code."}},{"@type":"Question","name":"How do I run database migrations before the API starts?","acceptedAnswer":{"@type":"Answer","text":"Run them in a one-shot job that the API depends on, and start the API only after the job exits with code 0. Do not run migrations from the API's start script."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/microservices-local-dev/">Run microservices on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Run microservices on your laptop</div><h1>How to control service startup order in local development</h1><p class="dek">Starting in the right order is half of it. The other half is waiting until the first service is actually ready, not just launched.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#started-is-not-the-same-as-ready">Started is not the same as ready</a></li><li><a href="#order-local-processes-with-dependson">Order local processes with dependsOn</a></li><li><a href="#order-containers-and-one-shot-jobs">Order containers and one-shot jobs</a></li><li><a href="#what-ordering-does-not-give-you">What ordering does not give you</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To control startup order, declare which service each one needs, and make the tool wait for readiness, not just for the process to launch. A service that has started is not a service that is ready: it may still be opening its port, connecting to a database or running migrations. Order by readiness, and add retries in the client for the cases ordering cannot cover.</p>
+
+<h2 id="started-is-not-the-same-as-ready">Started is not the same as ready</h2>
+<p>A process can exist for several seconds before it accepts connections. If the web app starts the moment the API process exists, its first request fails. That is why the common pattern has three parts: a dependency list, a readiness check for each service, and a start that waits for the check.</p>
+<p>In Docker Compose that is <code>depends_on</code> with <code>condition: service_healthy</code> plus a <code>healthcheck</code> on the dependency. Without the condition, Compose only waits for the container to start. The details are in <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">depends_on and healthchecks</a>.</p>
+
+<h2 id="order-local-processes-with-dependson">Order local processes with dependsOn</h2>
+<p>In Flisk, each service lists what must be ready first:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "node server.js",
+  "port": 3000,
+  "dependsOn": ["api"]
+}</code></pre>
+<p>For a local process, "ready" means:</p>
+<ul>
+<li>the health URL answers with a status below 400, when the service sets <code>healthCheckPath</code>;</li>
+<li>otherwise, the port accepts connections;</li>
+<li>otherwise, the process is still running after a second.</li>
+</ul>
+<p>Flisk waits up to 60 seconds per service. You can change what "ready" means with the <code>healthCheck</code> field: <code>path</code>, a TCP <code>port</code>, or a <code>command</code> that must exit 0 (for example <code>pg_isready</code> for a database). Setting <code>healthCheck</code> to <code>false</code> counts a service as ready while its process runs.</p>
+<p>The graph is checked before anything starts. Two mistakes are reported with a clear message:</p>
+<pre><code>circular dependency api -&gt; web -&gt; api
+service "api" dependsOn "ghost", which is not a service in this project.</code></pre>
+
+<h2 id="order-containers-and-one-shot-jobs">Order containers and one-shot jobs</h2>
+<p>In the container setup, <code>dependsOn</code> becomes a Tilt dependency, and entries can carry a Compose-style condition:</p>
+<pre><code>"dependsOn": [
+  { "name": "shop-db", "condition": "service_healthy" },
+  { "name": "orders-api-migrator", "condition": "service_completed_successfully" }
+]</code></pre>
+<p><code>service_healthy</code> is for long-running services. <code>service_completed_successfully</code> is for one-shot jobs such as migrations. Flisk rejects a mismatch, for example <code>service_healthy</code> on a job that exits. The usual chain is Postgres, then a migrator, then the API. If the migrator fails, the services after it do not start. Keep the migration command in the migrator, not in the API's start command, so restarting the API does not run migrations again. The scaffold <code>flisk resource orders-api --type backend --stack shop --feature prisma</code> creates the API and its migrator as a pair.</p>
+
+<h2 id="what-ordering-does-not-give-you">What ordering does not give you</h2>
+<p>This is the part people miss. Ordering applies at startup only. In Flisk, <code>dependsOn</code> does not make a service retry or wait if a dependency stops later. If the API restarts while the web app is running, the web app sees failed requests for a moment. Plan for it:</p>
+<ul>
+<li>Retry outgoing calls with backoff in the client, at least for startup.</li>
+<li>Reconnect to the database after a lost connection instead of crashing.</li>
+<li>Expose a real health endpoint that checks what the service needs, not one that always returns 200.</li>
+</ul>
+<p>Also note that a crashed local process is restarted after 1, 2, 4 and 8 seconds. After five quick exits in a row Flisk stops restarting it and says so. A service that exits on purpose (a one-shot job) should set <code>"restart": "no"</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A health endpoint that lies.</strong> If <code>/health</code> returns 200 before the database connection is up, dependents start too early. Make it check the real dependencies, or use <code>healthCheck.command</code>.</li>
+<li><strong>Too long a wait.</strong> A service that needs more than 60 seconds to become ready is reported as failed. Find out why it is slow first.</li>
+<li><strong>Cycles.</strong> A cycle means two services each need the other first. Break it by moving what they share into a third service.</li>
+</ul>
+
+<p>Look at an order before you rely on it. <code>flisk up --dry-run</code> prints the plan, and a service with dependencies shows them after its command, for example <code>web: node server.js (after api)</code>. Read it once after each change to <code>dependsOn</code>. It is much quicker than finding a wrong order through a failing request. If a service is missing from the plan, check whether it sits behind a profile, which keeps it out of a plain <code>flisk up</code>. A cycle or a missing name stops the run before anything starts, so you find those mistakes early.</p>
+
+<p>If a service never becomes ready, <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">service will not start</a> walks through the checks. To start a smaller graph, see <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">start only the services you need</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does depends_on wait for a service to be ready?</summary><p>In Docker Compose, plain depends_on only waits for the container to start. Add a healthcheck and use condition: service_healthy to wait until the service reports healthy.</p></details><details><summary>What happens if a dependency crashes after startup?</summary><p>Startup ordering does not cover it. In Flisk, dependsOn is only local startup ordering and does not make a service retry or wait if a dependency stops later. Add retries with backoff in the client code.</p></details><details><summary>How do I run database migrations before the API starts?</summary><p>Run them in a one-shot job that the API depends on, and start the API only after the job exits with code 0. Do not run migrations from the API&#39;s start script.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Run microservices on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/"><span class="lbl">Guide</span><b>How to start only the services you need in local development</b><span>A full stack on a laptop eats memory and time. Most days you touch one or two services.</span></a><a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/"><span class="lbl">Guide</span><b>How to run a frontend and an API together locally</b><span>Two processes, two ports, one browser. The usual failures are a wrong API URL and a CORS error. Here is how to avoid both.</span></a><a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/"><span class="lbl">Guide</span><b>How to run microservices locally on your laptop</b><span>You do not need Kubernetes to work on five services. You need each one running on a known port, started in the right order, with logs you can read.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
