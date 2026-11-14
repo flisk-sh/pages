@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a Mastra agent locally next to a database and tools</title>
+<meta name="description" content="Run a Mastra agent on your laptop next to other services: wrap mastra dev in a container, set the port and health path, and keep memory across restarts.">
+<meta name="keywords" content="mastra local development, run mastra agent locally, mastra dev docker, mastra agent postgres local, mastra playground port 4111">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/mastra-agent-local-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a Mastra agent locally next to a database and tools">
+<meta property="og:description" content="Run a Mastra agent on your laptop next to other services: wrap mastra dev in a container, set the port and health path, and keep memory across restarts.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/mastra-agent-local-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a Mastra agent locally next to a database and tools","description":"Run a Mastra agent on your laptop next to other services: wrap mastra dev in a container, set the port and health path, and keep memory across restarts.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/mastra-agent-local-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/mastra-agent-local-stack/","keywords":"mastra local development, run mastra agent locally, mastra dev docker, mastra agent postgres local, mastra playground port 4111","wordCount":721,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"How to run a Mastra agent locally next to a database and tools","item":"https://pages.flisk.si/@odykyi/ai-agents-local/mastra-agent-local-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Flisk have a Mastra template?","acceptedAnswer":{"@type":"Answer","text":"No. There is no Mastra scaffold. Flisk includes a checked bring-your-own example that runs a real create-mastra project in a container, and you can wrap your own Mastra project the same way."}},{"@type":"Question","name":"Which port does the Mastra dev server use?","acceptedAnswer":{"@type":"Answer","text":"4111 by default. The Flisk example also sets PORT, which the dev server reads, so the project file and the process agree."}},{"@type":"Question","name":"Why is the first start of the Mastra container slow?","acceptedAnswer":{"@type":"Answer","text":"The dev server bundles the project on start. The Flisk example took about 45 seconds in its own check, so give the first health check a long wait."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>How to run a Mastra agent locally next to a database and tools</h1><p class="dek">Mastra serves agents with one command. Putting that command next to Postgres and other services is where a project file saves time. This is the container route, with its traps.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-you-are-running">What you are running</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#wrapping-a-mastra-project-with-flisk">Wrapping a Mastra project with Flisk</a></li><li><a href="#what-only-a-real-run-shows">What only a real run shows</a></li><li><a href="#keep-mastra-s-memory-across-restarts">Keep Mastra&#39;s memory across restarts</a></li><li><a href="#when-not-to-use-this">When not to use this</a></li></ol></nav></aside>
+<article><p>A Mastra agent runs locally with <code>mastra dev</code>, which serves your agents over HTTP on port 4111 by default. To run it next to a database and other services, put it in a container (or a plain local process) and let a project file handle ports, health checks and start order. Flisk has no Mastra scaffold of its own, so this article uses its bring-your-own resource type, which wraps any Dockerfile.</p>
+
+<h2 id="what-you-are-running">What you are running</h2>
+<p>Mastra is a TypeScript framework for agents, tools, workflows and memory. Its dev server bundles your project and serves it, which takes a while on a cold start (the Flisk team measured about 45 seconds in its own check, so expect a slow first boot). Out of the box the agent has no stack around it: no Postgres, no queue, no other service to call. Anything beyond a single script needs those pieces to come up in a known order, which is where a project file helps.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<p>Run <code>npm create mastra@latest</code>, then <code>npm run dev</code>, and open the playground at <code>http://localhost:4111</code>. For one agent that is all you need. Once the agent talks to other services you also run those yourself, export their URLs as environment variables and remember which terminal each lives in. A Compose file works too; see <a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/">alternatives to Compose for local development</a>.</p>
+
+<h2 id="wrapping-a-mastra-project-with-flisk">Wrapping a Mastra project with Flisk</h2>
+<p>Flisk's repository includes a checked example, <code>examples/byo/create-mastra</code>, that runs a real <code>create-mastra</code> project in a container. Its Dockerfile shows the shape. The part worth copying is the end: the dev server listens beyond loopback, reads <code>PORT</code>, and a health check probes the port.</p>
+<pre><code>FROM node:22-alpine
+WORKDIR /work/app
+COPY . .
+RUN npm ci
+USER node
+EXPOSE 4111
+CMD ["npm", "run", "dev"]</code></pre>
+<p>That is a sketch built from the example, not a copy of it: the example scaffolds the project during <code>docker build</code>, while here you copy your own source. Put the Mastra project in the resource folder, then register it:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk resource mastra-agent --type bring-your-own --stack agents --port 4111 --yes
+# replace services/agents/mastra-agent/Dockerfile with your own and add your source
+flisk up agents</code></pre>
+<p><code>flisk resource</code> writes a placeholder Nginx Dockerfile and a <code>service.json</code> like this one. You keep the manifest and replace the Dockerfile:</p>
+<pre><code>{
+  "appName": "mastra-agent",
+  "appType": "bring-your-own",
+  "stack": "agents",
+  "port": 4111,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile"
+}</code></pre>
+<p>The Flisk example is checked against <code>/health</code> on a Mastra dev server. If your Mastra version answers elsewhere, change <code>healthCheckPath</code> to a path that returns 2xx.</p>
+
+<h2 id="what-only-a-real-run-shows">What only a real run shows</h2>
+<p>Flisk's bring-your-own notes list traps found by running examples through a full <code>flisk up</code>. Three matter for agents:</p>
+<ul>
+<li><strong>The route is a path prefix.</strong> A routed resource is served at <code>http://api.&lt;project&gt;.localhost/api/mastra-agent</code> and Flisk strips the prefix before the request reaches the container. An API under that prefix works. The Mastra playground is a web UI that serves assets from <code>/</code>, so set <code>"webUi": true</code> in <code>service.json</code> to give it its own host name instead.</li>
+<li><strong>A Postgres <code>DATABASE_URL</code> is injected</strong> into every bring-your-own container, even when the app does not use a database. If a Mastra storage setting reads <code>DATABASE_URL</code> and you meant something else, set your own variable with a different name.</li>
+<li><strong>The Host header is <code>api.&lt;project&gt;.localhost</code>.</strong> A dev server with a host allow list can refuse it. Allow that host, or the request fails with a message about blocked hosts.</li>
+</ul>
+
+<h2 id="keep-mastra-s-memory-across-restarts">Keep Mastra's memory across restarts</h2>
+<p>If Mastra's storage is a file inside the container, it disappears when the container is recreated. Either point storage at Postgres (see <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally</a>) or mount a named volume on the folder that holds the file. A bring-your-own <code>service.json</code> takes a <code>volumes</code> list of <code>source</code> and <code>target</code> pairs, the same way Flisk's NATS resource keeps its data:</p>
+<pre><code>"volumes": [{ "source": "mastra-data", "target": "/work/app/.data" }]</code></pre>
+<p>Check where your Mastra storage config writes before choosing the target path.</p>
+
+<h2 id="when-not-to-use-this">When not to use this</h2>
+<p>If your agent is a single process with no neighbours, <code>npm run dev</code> is simpler and faster to iterate on. Use the wrapper when the agent needs other services started with it. For the session and checkpoint side, read <a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/">durable agent sessions and checkpoints</a>, which applies to any framework.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Flisk have a Mastra template?</summary><p>No. There is no Mastra scaffold. Flisk includes a checked bring-your-own example that runs a real create-mastra project in a container, and you can wrap your own Mastra project the same way.</p></details><details><summary>Which port does the Mastra dev server use?</summary><p>4111 by default. The Flisk example also sets PORT, which the dev server reads, so the project file and the process agree.</p></details><details><summary>Why is the first start of the Mastra container slow?</summary><p>The dev server bundles the project on start. The Flisk example took about 45 seconds in its own check, so give the first health check a long wait.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/langgraph-agent-local-stack/"><span class="lbl">Guide</span><b>Run a LangGraph agent locally with tools and resumable runs</b><span>LangGraph supplies checkpoints and replay. The rest of a local stack is a tool server, a start order and an HTTP wrapper. This is a working setup you can break on purpose.</span></a><a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"><span class="lbl">Guide</span><b>Durable AI agent sessions: save checkpoints that survive restarts</b><span>An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</span></a><a href="/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/"><span class="lbl">Guide</span><b>How to run a multi-agent system on your laptop with retries</b><span>A multi-agent system is a queue with opinions. Run the coordinator and the workers as real processes and the failure modes show up while they are still cheap to fix.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

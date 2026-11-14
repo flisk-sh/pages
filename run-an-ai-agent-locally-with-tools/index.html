@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run an AI agent locally with MCP tools and a mock model</title>
+<meta name="description" content="Run a tool-using AI agent on your laptop: an agent loop, an MCP tool server and a mock model, started together, offline, with no API key until you want one.">
+<meta name="keywords" content="run ai agent locally, ai agent with tools local, mcp tool server local, mock llm for development, agent tool loop">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run an AI agent locally with MCP tools and a mock model">
+<meta property="og:description" content="Run a tool-using AI agent on your laptop: an agent loop, an MCP tool server and a mock model, started together, offline, with no API key until you want one.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run an AI agent locally with MCP tools and a mock model","description":"Run a tool-using AI agent on your laptop: an agent loop, an MCP tool server and a mock model, started together, offline, with no API key until you want one.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/","keywords":"run ai agent locally, ai agent with tools local, mcp tool server local, mock llm for development, agent tool loop","wordCount":848,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"How to run an AI agent locally with MCP tools and a mock model","item":"https://pages.flisk.si/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I run an AI agent without an API key?","acceptedAnswer":{"@type":"Answer","text":"Yes, for the loop itself. Point the SDK's base URL at a local mock that returns scripted tool calls and a final answer. That tests your tool wiring, but it is not a model, so test against a real model before you ship."}},{"@type":"Question","name":"Does the tool-loop starter need Docker?","acceptedAnswer":{"@type":"Answer","text":"No. Every service declares a command, so flisk up starts them as local processes. Docker is only needed for container resources such as the agent resource type."}},{"@type":"Question","name":"How do I check that my tool server speaks MCP?","acceptedAnswer":{"@type":"Answer","text":"Run flisk mcp check \u003cresource> to check initialize, tools and error handling, and add --call to also call the tools."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>How to run an AI agent locally with MCP tools and a mock model</h1><p class="dek">An agent with tools is three processes and two URLs. Here is how to run all of them on your machine, test the loop offline, and switch to a real model later.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-an-agent-with-tools-is-made-of">What an agent with tools is made of</a></li><li><a href="#the-plain-way-without-any-orchestrator">The plain way, without any orchestrator</a></li><li><a href="#the-flisk-way-the-tool-loop-starter">The Flisk way: the tool-loop starter</a></li><li><a href="#switching-to-a-real-model">Switching to a real model</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-this-is-not-the-right-shape">When this is not the right shape</a></li></ol></nav></aside>
+<article><p>To run an AI agent locally with tools, start three small processes: the agent loop, a tool server that speaks MCP, and a model endpoint. Point the agent at the model with a base URL and at the tools with another URL. While you build the loop, a local mock model lets you run it offline with no API key, then you switch the base URL to the real API.</p>
+
+<h2 id="what-an-agent-with-tools-is-made-of">What an agent with tools is made of</h2>
+<p>Every agent framework wraps the same loop. You send the model a question and a list of tools. The model either answers or asks to call a tool. You run the tool, append the result to the conversation, and ask again. You stop when the model answers in plain text. That is all a tool-using agent is, and it is easier to debug when you can see each piece running on its own port.</p>
+<p>Locally that means three pieces:</p>
+<ul>
+<li><strong>The agent</strong>, an HTTP service with the loop in it.</li>
+<li><strong>The tool server</strong>, which lists tools (<code>tools/list</code>) and runs them (<code>tools/call</code>). MCP, the Model Context Protocol, is the common format, so the same server also works with coding assistants.</li>
+<li><strong>The model</strong>, which is a hosted API in real use, but can be a fake during development.</li>
+</ul>
+
+<h2 id="the-plain-way-without-any-orchestrator">The plain way, without any orchestrator</h2>
+<p>You can do this with three terminals. Start the tool server on one port, start the agent on another with <code>TOOLS_URL=http://localhost:4501</code>, and set your SDK's base URL to the model. The official Anthropic and OpenAI SDKs both let you override the base URL, usually through an environment variable. A mock that returns scripted tool calls and then a final answer is enough to test the loop without spending tokens.</p>
+<p>It works, but you now manage ordering (the tool server must be up before the agent calls it), restarts, and three sets of logs by hand. See <a href="/@odykyi/microservices-local-dev/service-startup-order/">service startup order</a> for the general problem.</p>
+
+<h2 id="the-flisk-way-the-tool-loop-starter">The Flisk way: the tool-loop starter</h2>
+<p>Flisk ships a starter called <code>tool-loop</code> that is exactly this setup. It uses the Anthropic SDK's tool runner as the loop, an MCP tool server with a <code>lookup</code> tool over a tiny offline knowledge base, and a local mock of the Messages API. Everything runs as plain local processes, so Docker is not needed. Install Flisk first with <code>npm install -g @flisk-sh/flisk</code>, then:</p>
+<pre><code>flisk project tool-loop --path tool-loop-demo --yes
+cd tool-loop-demo
+flisk up
+curl -X POST localhost:4500/ask -H 'content-type: application/json' \
+  -d '{"question":"what is mcp and flisk"}'
+flisk mcp check tools --call --no-icon</code></pre>
+<p>The last command connects to the tool server as an MCP client, checks the protocol, and with <code>--call</code> calls the tools. The project has four services, each with its own <code>service.json</code>. This is the agent's:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "agent",
+  "appType": "backend",
+  "command": "node server.mjs",
+  "port": 4500,
+  "healthCheckPath": "/health",
+  "env": {
+    "TOOLS_URL": "http://localhost:4501",
+    "ANTHROPIC_BASE_URL": "http://localhost:4502",
+    "ANTHROPIC_API_KEY": "mock-model-no-key-needed"
+  },
+  "dependsOn": ["setup", "tools", "model"]
+}</code></pre>
+<p>A <code>command</code> field makes the service a local process. <code>dependsOn</code> sets the start order: <code>setup</code> is a one-shot job that runs <code>npm install</code> for the SDK and must exit 0 first, then the tool server and the mock model start, then the agent.</p>
+
+<h2 id="switching-to-a-real-model">Switching to a real model</h2>
+<p>The mock in <code>model/</code> follows one fixed strategy: look up each topic, then answer from the results. It is not a model and will not reason about anything else. To use Claude, delete the <code>ANTHROPIC_BASE_URL</code> and <code>ANTHROPIC_API_KEY</code> lines from <code>agent/service.json</code>, put your key in <code>.env</code> as <code>ANTHROPIC_API_KEY=...</code>, and run <code>flisk up</code> again. Keep the key out of <code>service.json</code> and out of git. If you would rather use an open model on your own machine, Flisk has an <code>inference</code> resource type that runs an OpenAI-compatible server (Ollama by default), described in its bring-your-own docs.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Tools are the dangerous part.</strong> A model decides when to call them. Start with read-only tools, validate every argument on the tool server, and keep any write behind an explicit step you control.</li>
+<li><strong>Retry on the right layer.</strong> The starter's SDK client retries failed connections (<code>maxRetries: 4</code>) and the agent retries tool server calls with backoff, so a service that is restarting is waited for. Do not retry a tool that has side effects without an idempotency key.</li>
+<li><strong>The mock hides real failures.</strong> A real model returns malformed arguments, calls tools you did not expect, and loops. Test against the real API before you trust the loop.</li>
+<li><strong>No session memory here.</strong> This starter answers one question at a time. If a conversation must survive a restart, you need checkpoints, which is the next topic.</li>
+</ul>
+
+<h2 id="when-this-is-not-the-right-shape">When this is not the right shape</h2>
+<p>If you already use a framework with its own graph and state, keep it and run it next to the same tool server. The framework owns the loop; Flisk only starts and wires the processes. For conversations that must resume after a restart, read <a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/">durable agent sessions and checkpoints</a>. To expose the same tool server to a coding assistant, see <a href="/@odykyi/mcp-local-dev/build-an-mcp-server-locally/">building an MCP server locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I run an AI agent without an API key?</summary><p>Yes, for the loop itself. Point the SDK&#39;s base URL at a local mock that returns scripted tool calls and a final answer. That tests your tool wiring, but it is not a model, so test against a real model before you ship.</p></details><details><summary>Does the tool-loop starter need Docker?</summary><p>No. Every service declares a command, so flisk up starts them as local processes. Docker is only needed for container resources such as the agent resource type.</p></details><details><summary>How do I check that my tool server speaks MCP?</summary><p>Run flisk mcp check &lt;resource&gt; to check initialize, tools and error handling, and add --call to also call the tools.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"><span class="lbl">Guide</span><b>Durable AI agent sessions: save checkpoints that survive restarts</b><span>An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</span></a><a href="/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/"><span class="lbl">Guide</span><b>How to run a multi-agent system on your laptop with retries</b><span>A multi-agent system is a queue with opinions. Run the coordinator and the workers as real processes and the failure modes show up while they are still cheap to fix.</span></a><a href="/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/"><span class="lbl">Guide</span><b>How to give an AI agent a database and a job queue locally</b><span>An agent that answers inside the request breaks the first time a model call takes a minute. Put the state in a database and the slow work behind a queue.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

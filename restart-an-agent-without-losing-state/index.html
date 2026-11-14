@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to restart an AI agent without losing conversation state</title>
+<meta name="description" content="Keep agent sessions across restarts: save checkpoints to a volume or Postgres before replying, drain on SIGTERM, test it with curl and know what purge deletes.">
+<meta name="keywords" content="restart ai agent keep state, agent state survives restart, agent checkpoint volume, graceful shutdown ai agent, flisk restart agent">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to restart an AI agent without losing conversation state">
+<meta property="og:description" content="Keep agent sessions across restarts: save checkpoints to a volume or Postgres before replying, drain on SIGTERM, test it with curl and know what purge deletes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to restart an AI agent without losing conversation state","description":"Keep agent sessions across restarts: save checkpoints to a volume or Postgres before replying, drain on SIGTERM, test it with curl and know what purge deletes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/","keywords":"restart ai agent keep state, agent state survives restart, agent checkpoint volume, graceful shutdown ai agent, flisk restart agent","wordCount":767,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"How to restart an AI agent without losing conversation state","item":"https://pages.flisk.si/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk restart delete agent sessions?","acceptedAnswer":{"@type":"Answer","text":"No. The checkpoints are on a named volume or in Postgres, and both outlive the container. Only flisk down --purge or removing the volume deletes them."}},{"@type":"Question","name":"What happens to a turn that is running when the agent restarts?","acceptedAnswer":{"@type":"Answer","text":"The agent drains for up to 10 seconds by default. A turn still running after that is cut off, its reply is never sent or saved, and the client should send it again."}},{"@type":"Question","name":"How do I check that state really survived?","acceptedAnswer":{"@type":"Answer","text":"Send a turn, restart the agent, wait for /ready, send a second turn with the same x-session-id and check that the reply reports turns 2."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>How to restart an AI agent without losing conversation state</h1><p class="dek">Restarting an agent should cost you a few seconds, not a conversation. This is how to make that true and how to prove it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-restart-really-destroys">What a restart really destroys</a></li><li><a href="#where-the-flisk-agent-keeps-its-state">Where the Flisk agent keeps its state</a></li><li><a href="#test-it-do-not-assume-it">Test it, do not assume it</a></li><li><a href="#what-happens-during-the-restart">What happens during the restart</a></li><li><a href="#how-to-delete-state-when-you-want-to">How to delete state when you want to</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>An agent survives a restart when its conversation is saved outside the process before each reply is sent, and when the storage outlives the container. The Flisk agent does both: it writes a checkpoint per session to a named Docker volume (or to Postgres) and saves before it answers. <code>flisk restart assistant</code> and <code>flisk down</code> keep the volume. Only <code>flisk down --purge</code> or removing the volume deletes sessions.</p>
+
+<h2 id="what-a-restart-really-destroys">What a restart really destroys</h2>
+<p>When a container stops, everything in its writable layer and in process memory is gone. For an agent that includes the conversation history if you kept it in a variable, any cache of tool results, and any turn that was still running. So there are three places state can live, and only some of them survive:</p>
+<ul>
+<li><strong>Process memory.</strong> Lost on every restart. Fine for caches, wrong for conversations.</li>
+<li><strong>The container filesystem.</strong> Lost when the container is removed and recreated, which Compose does when the image or configuration changes.</li>
+<li><strong>A volume or a database.</strong> Kept. This is where checkpoints belong.</li>
+</ul>
+<p>The same rule applies with plain Docker Compose: mount a named volume, or use a database service. The details of volume lifetimes are in <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keeping volumes between runs</a>.</p>
+
+<h2 id="where-the-flisk-agent-keeps-its-state">Where the Flisk agent keeps its state</h2>
+<p>An agent made with <code>flisk resource assistant --type agent --stack shop --yes</code> uses the <code>files</code> option by default. Each session is a JSON file at <code>/var/lib/flisk-agent/&lt;sessionId&gt;.json</code> (the path comes from <code>AGENT_STATE_DIR</code>), on a named volume called <code>&lt;project&gt;-&lt;stack&gt;-autogenerated_&lt;resource&gt;-agent-state</code>. Writes go to a temporary file first and are renamed over the old one, so a crash in the middle of a save does not leave a half-written checkpoint. With <code>--durability postgres</code> the same data is a row in <code>flisk_agent_sessions</code>.</p>
+<p>The order inside a turn is what makes this safe. The agent loads the checkpoint, adds your message, runs the turn, adds the reply, saves, and only then responds. A reply you received has been stored.</p>
+
+<h2 id="test-it-do-not-assume-it">Test it, do not assume it</h2>
+<p>With the stack up, create a conversation and restart the agent:</p>
+<pre><code>curl -s -X POST http://localhost:4000/turn \
+  -H 'x-session-id: demo' -H 'content-type: application/json' \
+  -d '{"input":"first"}'
+
+flisk restart assistant
+
+until curl -fs http://localhost:4000/ready > /dev/null; do sleep 1; done
+curl -s -X POST http://localhost:4000/turn \
+  -H 'x-session-id: demo' -H 'content-type: application/json' \
+  -d '{"input":"second"}'</code></pre>
+<p>Use the URL that <code>flisk status</code> prints if your agent is behind the local router. The second reply should report <code>"turns":2</code>, not 1. You can also run <code>flisk agent sessions assistant --session-id demo</code> and see both messages, see <a href="/@odykyi/ai-agents-local/inspect-agent-sessions/">inspect agent sessions</a>. Put this check into a test that runs in CI, because it is the one that catches a missing volume.</p>
+
+<h2 id="what-happens-during-the-restart">What happens during the restart</h2>
+<p>On SIGTERM the agent drains: it refuses new turns with 503, lets running turns finish, and exits with code 0, by default within 10 seconds (<code>DRAIN_TIMEOUT_MS</code>). Wait for <code>/ready</code> to return 200 before sending the next turn, as in the loop above. A turn that is still running when the time limit passes is cut off. Its reply was never sent and never saved, so the client should treat a dropped connection as "not done" and send the turn again.</p>
+<p>That retry is why turns should be safe to repeat. If a tool call has a side effect, such as sending an email, put an idempotency key on it, because a retried turn will call it again.</p>
+
+<h2 id="how-to-delete-state-when-you-want-to">How to delete state when you want to</h2>
+<ul>
+<li><strong>One session:</strong> <code>DELETE /session</code> with the <code>x-session-id</code> header. It answers 409 <code>turn_in_flight</code> if a turn is running.</li>
+<li><strong>Old sessions:</strong> an idle sweep removes sessions untouched for 24 hours, set by <code>SESSION_IDLE_TIMEOUT_MS</code>, checked every hour by default (<code>SESSION_CLEANUP_INTERVAL_MS</code>). It skips a session with a turn in flight.</li>
+<li><strong>Everything:</strong> <code>flisk down --purge</code> deletes the project's Docker volumes. To remove only the agent's volume, use <code>docker volume rm</code> with the volume name.</li>
+</ul>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A volume is not a backup.</strong> It lives on one machine, and a disk problem takes it with it.</li>
+<li><strong>Do not rename the volume casually.</strong> A different name is a different volume, and the old sessions stay behind.</li>
+<li><strong>Memory caches reset.</strong> If your <code>runTurn</code> keeps something in memory that the next turn needs, move it into the checkpoint.</li>
+<li><strong>Frameworks differ.</strong> If you wrap a framework such as a LangGraph or Mastra agent, its own storage setting decides what survives, not the generated one. See <a href="/@odykyi/ai-agents-local/langgraph-agent-local-stack/">a LangGraph agent stack</a>.</li>
+</ul>
+
+<p>Next, look at what the agent exposes to know when it is back, in <a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">health and readiness endpoints</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk restart delete agent sessions?</summary><p>No. The checkpoints are on a named volume or in Postgres, and both outlive the container. Only flisk down --purge or removing the volume deletes them.</p></details><details><summary>What happens to a turn that is running when the agent restarts?</summary><p>The agent drains for up to 10 seconds by default. A turn still running after that is cut off, its reply is never sent or saved, and the client should send it again.</p></details><details><summary>How do I check that state really survived?</summary><p>Send a turn, restart the agent, wait for /ready, send a second turn with the same x-session-id and check that the reply reports turns 2.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"><span class="lbl">Guide</span><b>Durable AI agent sessions: save checkpoints that survive restarts</b><span>An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</span></a><a href="/@odykyi/ai-agents-local/inspect-agent-sessions/"><span class="lbl">Guide</span><b>How to inspect AI agent sessions and checkpoints locally</b><span>You cannot debug what an agent remembers if you cannot see it. One command lists every session and prints any checkpoint.</span></a><a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/"><span class="lbl">Guide</span><b>Health vs readiness endpoints for an AI agent service</b><span>Liveness tells you the process is up. Readiness tells you it can save a conversation. An agent that mixes them up either restarts for no reason or loses replies.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to give an AI agent a database and a job queue locally</title>
+<meta name="description" content="Add Postgres checkpoints and a NATS JetStream queue to a local AI agent so slow work runs in a worker. Commands, service.json and the code you still write.">
+<meta name="keywords" content="ai agent with database and queue, agent background jobs nats, agent postgres checkpoints, local agent job queue, jetstream worker agent">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to give an AI agent a database and a job queue locally">
+<meta property="og:description" content="Add Postgres checkpoints and a NATS JetStream queue to a local AI agent so slow work runs in a worker. Commands, service.json and the code you still write.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to give an AI agent a database and a job queue locally","description":"Add Postgres checkpoints and a NATS JetStream queue to a local AI agent so slow work runs in a worker. Commands, service.json and the code you still write.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/","keywords":"ai agent with database and queue, agent background jobs nats, agent postgres checkpoints, local agent job queue, jetstream worker agent","wordCount":837,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"How to give an AI agent a database and a job queue locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the generated agent publish to the queue by itself?","acceptedAnswer":{"@type":"Answer","text":"No. It stores checkpoints in Postgres when you choose --durability postgres, and a queue resource provides NATS_URL to services that list it in dependsOn. The publishing code and the worker are yours to write."}},{"@type":"Question","name":"Where do queued messages live?","acceptedAnswer":{"@type":"Answer","text":"In the jobs-data volume mounted at /data in the NATS container, so they survive a restart. flisk down --purge removes the project's Docker volumes."}},{"@type":"Question","name":"Can I use Redis instead of NATS?","acceptedAnswer":{"@type":"Answer","text":"Yes, the pattern is the same. The queue resource Flisk scaffolds is NATS with JetStream, so another broker means a bring-your-own resource of your own."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>How to give an AI agent a database and a job queue locally</h1><p class="dek">An agent that answers inside the request breaks the first time a model call takes a minute. Put the state in a database and the slow work behind a queue.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-an-agent-wants-both">Why an agent wants both</a></li><li><a href="#create-the-three-parts">Create the three parts</a></li><li><a href="#what-you-write-yourself">What you write yourself</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-add-a-queue">When not to add a queue</a></li></ol></nav></aside>
+<article><p>Give an agent a database for what it must remember and a queue for work that takes too long to do inside a request. In Flisk that is three commands: an agent with <code>--durability postgres</code>, a queue resource that runs NATS with JetStream, and a worker that reads the queue. The agent stores conversations in Postgres, hands slow jobs to NATS, and answers the caller right away.</p>
+
+<h2 id="why-an-agent-wants-both">Why an agent wants both</h2>
+<p>Most useful agent work is slow. A turn may call a model several times, run a tool that takes a minute, or wait on an external API. If the HTTP request waits for all of that, you meet timeouts, dropped connections and double submissions. The usual fix has two parts.</p>
+<ul>
+<li><strong>A database</strong> keeps state that must survive a restart: the conversation, the status of each job, the result. Postgres is the common answer, and any other store works the same way.</li>
+<li><strong>A queue</strong> separates "accept the work" from "do the work". The agent writes a message and returns. A worker takes the message, does the job and writes the result to the database. The caller polls, or gets a callback.</li>
+</ul>
+<p>A queue also gives you retries and a place to put a limit on how many model calls run at once. NATS JetStream stores messages on disk and redelivers a message when a consumer does not acknowledge it, which is the behaviour you want when a worker crashes in the middle of a job. Redis, RabbitMQ or a table with <code>SELECT ... FOR UPDATE SKIP LOCKED</code> would also do the job. NATS is what Flisk scaffolds.</p>
+
+<h2 id="create-the-three-parts">Create the three parts</h2>
+<p>Start from a project with a stack called <code>shop</code>. The agent needs Docker, because it is a container resource:</p>
+<pre><code>flisk resource assistant --type agent --stack shop --durability postgres --yes
+flisk resource jobs --type queue --stack shop --yes</code></pre>
+<p>The agent's <code>service.json</code> contains <code>"appType": "agent"</code> and <code>"agent": { "runtime": "custom", "durability": "postgres" }</code>. Its source reads <code>DATABASE_URL</code>, which Flisk injects, and keeps one row per session in a table called <code>flisk_agent_sessions</code>. When you create a project, Flisk enables a shared Postgres for it, and <code>flisk config verify</code> says so ("Postgres will start because database-management is enabled"). If you do not want that, use <code>--no-database</code> when you create the project.</p>
+<p>The queue resource writes this into <code>services/shop/jobs/service.json</code>:</p>
+<pre><code>{
+  "appName": "jobs",
+  "appType": "bring-your-own",
+  "framework": "nats",
+  "port": 4222,
+  "image": "nats:2.11.8-alpine",
+  "container": { "command": ["-js", "-sd", "/data", "-m", "8222"] },
+  "volumes": [{ "source": "jobs-data", "target": "/data" }],
+  "provides": { "NATS_URL": "nats://jobs:4222" }
+}</code></pre>
+<p>It is plain NATS with JetStream turned on, storing data in the <code>jobs-data</code> volume, so queued messages survive a restart of the queue. The <code>provides</code> entry is the important part. The CLI says that any service that lists <code>jobs</code> in <code>dependsOn</code> gets <code>NATS_URL=nats://jobs:4222</code>. Add it to your agent's manifest:</p>
+<pre><code>"dependsOn": ["jobs"]</code></pre>
+<p>Run <code>flisk config verify</code> to confirm the generated files are in sync, then <code>flisk up shop</code>. For more on running NATS by itself, see <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>, and for the database side <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally</a>.</p>
+
+<h2 id="what-you-write-yourself">What you write yourself</h2>
+<p>Be clear about the boundary. The generated agent talks to Postgres for its checkpoints. It does not talk to NATS. You add the publishing code and the worker. A sketch with the <code>nats</code> package for Node and Bun, which you should check against the version you install:</p>
+<pre><code>import { connect } from "nats";
+
+const nc = await connect({ servers: process.env.NATS_URL });
+const jsm = await nc.jetstreamManager();
+await jsm.streams.add({ name: "TASKS", subjects: ["tasks.*"] });
+
+// in the agent, after saving the user message:
+const js = nc.jetstream();
+await js.publish("tasks.run", JSON.stringify({ sessionId, input }));</code></pre>
+<p>The worker is another resource, with its own <code>service.json</code> and <code>"dependsOn": ["jobs"]</code>. It creates a durable consumer on the <code>TASKS</code> stream, does the work, writes the result to Postgres and only then acknowledges the message. Acknowledging last is what makes a crash safe: the message comes back and the job runs again.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Make jobs idempotent.</strong> Redelivery means a job can run twice. Key results by job ID and use an upsert.</li>
+<li><strong>Do not share the agent's table.</strong> Keep <code>flisk_agent_sessions</code> for the agent. Put job results in your own table, created by a migrator resource, not by the start script.</li>
+<li><strong>Set a retry limit.</strong> An infinite redelivery loop with a paid model is expensive. Limit attempts on the consumer.</li>
+<li><strong>Keep the volume in mind.</strong> The <code>jobs-data</code> volume survives <code>flisk down</code>. <code>flisk down --purge</code> removes the project's Docker volumes, including the queue's messages.</li>
+</ul>
+
+<h2 id="when-not-to-add-a-queue">When not to add a queue</h2>
+<p>If a turn finishes in a second or two, a queue is extra moving parts. Start with the database alone, and add the queue when requests start to time out. If the work is a fixed set of steps with retries, a framework with built-in checkpoints may fit better, see <a href="/@odykyi/ai-agents-local/langgraph-agent-local-stack/">a LangGraph agent stack</a>.</p>
+
+<p>Next, check that stopping the whole stack does not lose a conversation in <a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/">restart an agent without losing state</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the generated agent publish to the queue by itself?</summary><p>No. It stores checkpoints in Postgres when you choose --durability postgres, and a queue resource provides NATS_URL to services that list it in dependsOn. The publishing code and the worker are yours to write.</p></details><details><summary>Where do queued messages live?</summary><p>In the jobs-data volume mounted at /data in the NATS container, so they survive a restart. flisk down --purge removes the project&#39;s Docker volumes.</p></details><details><summary>Can I use Redis instead of NATS?</summary><p>Yes, the pattern is the same. The queue resource Flisk scaffolds is NATS with JetStream, so another broker means a bring-your-own resource of your own.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/"><span class="lbl">Guide</span><b>How to restart an AI agent without losing conversation state</b><span>Restarting an agent should cost you a few seconds, not a conversation. This is how to make that true and how to prove it.</span></a><a href="/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/"><span class="lbl">Guide</span><b>How to run a multi-agent system on your laptop with retries</b><span>A multi-agent system is a queue with opinions. Run the coordinator and the workers as real processes and the failure modes show up while they are still cheap to fix.</span></a><a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"><span class="lbl">Guide</span><b>Durable AI agent sessions: save checkpoints that survive restarts</b><span>An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
