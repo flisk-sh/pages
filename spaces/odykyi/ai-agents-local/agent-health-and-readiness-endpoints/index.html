@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Health vs readiness endpoints for an AI agent service</title>
+<meta name="description" content="Why an AI agent needs both /health and /ready, what each should check, how draining on SIGTERM fits in, and how the generated Flisk agent behaves.">
+<meta name="keywords" content="agent health check endpoint, liveness vs readiness, ai agent readiness probe, /ready endpoint checkpoint store, graceful shutdown agent">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Health vs readiness endpoints for an AI agent service">
+<meta property="og:description" content="Why an AI agent needs both /health and /ready, what each should check, how draining on SIGTERM fits in, and how the generated Flisk agent behaves.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Health vs readiness endpoints for an AI agent service","description":"Why an AI agent needs both /health and /ready, what each should check, how draining on SIGTERM fits in, and how the generated Flisk agent behaves.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/","keywords":"agent health check endpoint, liveness vs readiness, ai agent readiness probe, /ready endpoint checkpoint store, graceful shutdown agent","wordCount":881,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"Health vs readiness endpoints for an AI agent service","item":"https://pages.flisk.si/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between /health and /ready in the Flisk agent?","acceptedAnswer":{"@type":"Answer","text":"/health only says the process is alive and never touches the store. /ready returns 200 when the checkpoint store is writable or reachable, and 503 when it is not or while the agent is draining."}},{"@type":"Question","name":"Should a readiness check call the model provider?","acceptedAnswer":{"@type":"Answer","text":"No. It costs money, can be rate limited, and a provider outage should not mark your own service as broken. Check your own dependencies, such as the store."}},{"@type":"Question","name":"What does the agent do on SIGTERM?","acceptedAnswer":{"@type":"Answer","text":"It stops taking new turns, lets turns in flight finish and exits with code 0, by default within 10 seconds. While draining, /ready and POST /turn return 503."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>Health vs readiness endpoints for an AI agent service</h1><p class="dek">Liveness tells you the process is up. Readiness tells you it can save a conversation. An agent that mixes them up either restarts for no reason or loses replies.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#liveness-and-readiness-are-not-the-same-thing">Liveness and readiness are not the same thing</a></li><li><a href="#the-two-endpoints-in-the-generated-agent">The two endpoints in the generated agent</a></li><li><a href="#how-flisk-uses-the-health-path">How Flisk uses the health path</a></li><li><a href="#draining-on-shutdown">Draining on shutdown</a></li><li><a href="#if-you-write-your-own-agent">If you write your own agent</a></li><li><a href="#when-this-is-too-much">When this is too much</a></li></ol></nav></aside>
+<article><p>An agent service should answer two different questions over HTTP. <code>/health</code> says the process is alive, and <code>/ready</code> says it can do real work, which for an agent means its checkpoint store works. Keep them separate: a restart helps when the process is stuck, but it does nothing when the database is down. The agent that <code>flisk resource --type agent</code> generates exposes both.</p>
+
+<h2 id="liveness-and-readiness-are-not-the-same-thing">Liveness and readiness are not the same thing</h2>
+<p>The two terms come from container orchestration, and they apply on a laptop too.</p>
+<ul>
+<li><strong>Liveness</strong> asks whether the process should be killed and restarted. It must be cheap and must not depend on anything outside the process. If liveness checks your database, a database outage makes every agent restart in a loop, which hides the real problem.</li>
+<li><strong>Readiness</strong> asks whether the service should receive traffic right now. It is the place to check dependencies: the store, a model gateway, a queue.</li>
+</ul>
+<p>For an agent the distinction matters more than for a plain API. An agent keeps a conversation per session. If it accepts a turn while its store is unreachable, the reply is produced and then lost, so the user sees an answer that the agent will not remember. Failing readiness before that happens is cheaper than repairing a half-saved session.</p>
+<p>In plain Docker Compose you get the same effect with a <code>healthcheck</code> on the container and <code>depends_on</code> with <code>condition: service_healthy</code>. The mechanism is covered in <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a>. What Compose does not give you is the endpoint itself, so you write it.</p>
+
+<h2 id="the-two-endpoints-in-the-generated-agent">The two endpoints in the generated agent</h2>
+<p>Create an agent in a project that already has a stack:</p>
+<pre><code>flisk resource assistant --type agent --stack shop --yes</code></pre>
+<p>The scaffold is a small Bun HTTP service. Its contract has these two checks:</p>
+<ul>
+<li><code>GET /health</code> returns <code>{"status":"ok","service":"assistant","draining":false}</code>. It is liveness only and never touches the store.</li>
+<li><code>GET /ready</code> returns <code>{"ready":true,"durability":"files"}</code> with status 200 when the store is writable (the <code>files</code> option) or reachable (the <code>postgres</code> option). It returns 503 when the store is not usable, and also while the agent is draining.</li>
+</ul>
+<p>Try them against a running agent. Use the URL that <code>flisk status</code> prints for the resource, or the port from its <code>service.json</code> if you run it as a local process:</p>
+<pre><code>curl -i http://localhost:4000/health
+curl -i http://localhost:4000/ready</code></pre>
+<p>The first call should be 200 whatever the store is doing. The second is the one to watch while you break things. Stop the Postgres your agent depends on, if you chose the <code>postgres</code> option, and <code>/ready</code> turns to 503 while <code>/health</code> stays 200. The agent is alive, but not ready.</p>
+
+<h2 id="how-flisk-uses-the-health-path">How Flisk uses the health path</h2>
+<p>The generated <code>service.json</code> for an agent sets <code>healthCheckPath</code> to <code>/health</code>:</p>
+<pre><code>{
+  "appName": "assistant",
+  "appType": "agent",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "agent": { "runtime": "custom", "durability": "files" }
+}</code></pre>
+<p>Flisk uses <code>healthCheckPath</code> for the Docker health check it generates for the container, and <code>flisk status</code> shows whether each resource is healthy. The readiness endpoint is part of the agent's contract, so use it in your own scripts, your tests and any load balancer in front of the service. A good pattern in a test setup is to poll <code>/ready</code> before the first turn:</p>
+<pre><code>until curl -fs http://localhost:4000/ready > /dev/null; do sleep 1; done
+echo ready</code></pre>
+<p>If you want an overview of unhealthy resources, <code>flisk status --unhealthy</code> lists only those, and <code>flisk status --json</code> gives the same data for scripts.</p>
+
+<h2 id="draining-on-shutdown">Draining on shutdown</h2>
+<p>Both endpoints include the draining state. When the agent receives SIGTERM it stops accepting new turns, lets turns that are in flight finish, and exits with code 0, by default within 10 seconds (<code>DRAIN_TIMEOUT_MS</code>). During that window <code>/health</code> reports <code>"draining":true</code>, <code>/ready</code> returns 503, and <code>POST /turn</code> returns 503. That is what a router needs to stop sending new requests before the process goes away. The checkpoint is saved before each reply is sent, so a turn that completed is never lost by a shutdown.</p>
+
+<h2 id="if-you-write-your-own-agent">If you write your own agent</h2>
+<p>The same contract works for an agent you build with any framework, including one you wrap with a Dockerfile of your own. Keep these rules:</p>
+<ul>
+<li>Make <code>/health</code> do no I/O. Return a fixed body.</li>
+<li>Make <code>/ready</code> do one real, small operation on the store, such as writing and deleting a marker, not just opening a connection that may be cached.</li>
+<li>Use a short timeout in <code>/ready</code>. A check that hangs is worse than one that fails.</li>
+<li>Flip <code>/ready</code> to 503 as soon as shutdown starts.</li>
+<li>Do not call the model provider in either check. It costs money, it can be rate limited, and a provider outage should not mark your agent as broken.</li>
+</ul>
+<p>Some frameworks only expose one route. In that case point <code>healthCheckPath</code> at it, and add a second route in front of the framework for readiness.</p>
+
+<h2 id="when-this-is-too-much">When this is too much</h2>
+<p>A throwaway script that calls a model once does not need two endpoints. The split pays off when the agent keeps state, runs next to other services that wait for it, or sits behind a router. For the ordering side of that, see <a href="/@odykyi/microservices-local-dev/service-startup-order/">service startup order</a>.</p>
+
+<p>Next, see what the agent has stored with <a href="/@odykyi/ai-agents-local/inspect-agent-sessions/">inspect agent sessions</a>, or test the shutdown path by following <a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/">restart an agent without losing state</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between /health and /ready in the Flisk agent?</summary><p>/health only says the process is alive and never touches the store. /ready returns 200 when the checkpoint store is writable or reachable, and 503 when it is not or while the agent is draining.</p></details><details><summary>Should a readiness check call the model provider?</summary><p>No. It costs money, can be rate limited, and a provider outage should not mark your own service as broken. Check your own dependencies, such as the store.</p></details><details><summary>What does the agent do on SIGTERM?</summary><p>It stops taking new turns, lets turns in flight finish and exits with code 0, by default within 10 seconds. While draining, /ready and POST /turn return 503.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/"><span class="lbl">Guide</span><b>How to restart an AI agent without losing conversation state</b><span>Restarting an agent should cost you a few seconds, not a conversation. This is how to make that true and how to prove it.</span></a><a href="/@odykyi/ai-agents-local/inspect-agent-sessions/"><span class="lbl">Guide</span><b>How to inspect AI agent sessions and checkpoints locally</b><span>You cannot debug what an agent remembers if you cannot see it. One command lists every session and prints any checkpoint.</span></a><a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"><span class="lbl">Guide</span><b>Durable AI agent sessions: save checkpoints that survive restarts</b><span>An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

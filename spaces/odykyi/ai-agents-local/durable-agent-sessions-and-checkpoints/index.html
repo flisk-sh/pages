@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Durable AI agent sessions: save checkpoints that survive restarts</title>
+<meta name="description" content="How to keep an AI agent&#39;s session state across restarts: one checkpoint per session id, written atomically to a volume or Postgres, with a local example.">
+<meta name="keywords" content="agent checkpoints, durable agent sessions, persist ai agent state, agent session storage, ai agent memory across restarts">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Durable AI agent sessions: save checkpoints that survive restarts">
+<meta property="og:description" content="How to keep an AI agent&#39;s session state across restarts: one checkpoint per session id, written atomically to a volume or Postgres, with a local example.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Durable AI agent sessions: save checkpoints that survive restarts","description":"How to keep an AI agent's session state across restarts: one checkpoint per session id, written atomically to a volume or Postgres, with a local example.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/","keywords":"agent checkpoints, durable agent sessions, persist ai agent state, agent session storage, ai agent memory across restarts","wordCount":812,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"Durable AI agent sessions: save checkpoints that survive restarts","item":"https://pages.flisk.si/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Where does Flisk store agent checkpoints?","acceptedAnswer":{"@type":"Answer","text":"With files durability, in /var/lib/flisk-agent/\u003csessionId>.json on a named Docker volume that survives flisk down. With postgres durability, in a flisk_agent_sessions table."}},{"@type":"Question","name":"Does flisk down delete my agent's sessions?","acceptedAnswer":{"@type":"Answer","text":"No. The named volume stays. flisk down --purge deletes the project's Docker volumes, and docker volume rm removes just the agent's volume."}},{"@type":"Question","name":"Can I use LangGraph or Mastra checkpoints instead?","acceptedAnswer":{"@type":"Answer","text":"Yes. The custom runtime is a plain HTTP service with no model or framework dependency, so you can call a framework inside runTurn and use its own checkpointer."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>Durable AI agent sessions: save checkpoints that survive restarts</h1><p class="dek">An agent that forgets everything when its process restarts is hard to develop against. Save a checkpoint per session before every reply and the problem goes away.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-checkpoint-has-to-contain">What a checkpoint has to contain</a></li><li><a href="#where-to-store-it-locally">Where to store it locally</a></li><li><a href="#the-flisk-agent-resource">The Flisk agent resource</a></li><li><a href="#try-it-a-turn-a-restart-the-same-session">Try it: a turn, a restart, the same session</a></li><li><a href="#cleanup-and-limits">Cleanup and limits</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A durable agent session saves the conversation state after every turn, in a place that outlives the process, so a restart continues where it stopped instead of starting over. The usual way is one checkpoint per session id, written atomically (write a temp file, then rename it) or committed in a database transaction, before the reply is sent.</p>
+
+<h2 id="what-a-checkpoint-has-to-contain">What a checkpoint has to contain</h2>
+<p>A checkpoint is whatever the next turn needs to behave as if nothing happened. At minimum that is the message history. For an agent with tools it may also hold tool results, a plan, a step counter or a scratchpad. Two rules keep it honest:</p>
+<ul>
+<li>Save before you answer. If you reply first and crash before saving, the caller believes a turn happened that the agent has forgotten.</li>
+<li>Make a turn a function of the checkpoint plus the new input. If the agent also keeps state in memory, that state is lost on every restart and the replay differs from the original.</li>
+</ul>
+<p>Frameworks such as LangGraph and Mastra define their own checkpoint formats and replay logic. This is where you pick a store for them, not a replacement for them.</p>
+
+<h2 id="where-to-store-it-locally">Where to store it locally</h2>
+<p>There are two sensible local choices. Files on a volume are the simplest: one JSON file per session, nothing extra to run. A Postgres row per session is better when several processes touch the same state, when you want to query sessions with SQL, or when you want local behaviour close to a production database. A container's own filesystem is not a choice, because it disappears when the container is recreated.</p>
+
+<h2 id="the-flisk-agent-resource">The Flisk agent resource</h2>
+<p>Flisk has an <code>agent</code> resource type that scaffolds a small Bun HTTP service with this contract already in place. It runs in Docker, so you need Docker and Tilt installed. Create a project, add the agent and start the stack:</p>
+<pre><code>flisk project --yes
+flisk resource bot --type agent --stack shop --yes
+flisk up shop</code></pre>
+<p>The generated <code>service.json</code> has the durability choice in an <code>agent</code> block:</p>
+<pre><code>{
+  "appName": "bot",
+  "appType": "agent",
+  "stack": "shop",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "agent": {
+    "runtime": "custom",
+    "durability": "files"
+  }
+}</code></pre>
+<p>With <code>files</code> (the default), checkpoints are written to <code>/var/lib/flisk-agent/&lt;sessionId&gt;.json</code> inside the container, on a named Docker volume called <code>&lt;project&gt;-&lt;stack&gt;-autogenerated_&lt;resource&gt;-agent-state</code>. A named volume survives <code>flisk down</code> and container recreation. Each write goes to a temporary file and is renamed into place, so a kill in the middle of a write leaves the previous checkpoint intact.</p>
+<p>With <code>--durability postgres</code> (or <code>"durability": "postgres"</code>) the agent reads <code>DATABASE_URL</code>, creates a <code>flisk_agent_sessions</code> table if it is missing, and upserts one row per session. Either way you only edit <code>runTurn(checkpoint, input)</code> in <code>src/index.ts</code>. The default body just echoes the input, so replace it with your model call and tools.</p>
+
+<h2 id="try-it-a-turn-a-restart-the-same-session">Try it: a turn, a restart, the same session</h2>
+<p>Get the agent's URL from <code>flisk status</code> (it has the form <code>http://api.&lt;project&gt;.localhost/api/bot</code>; the port can differ) and send two turns for one session id:</p>
+<pre><code>BOT=http://api.myproject.localhost:8080/api/bot   # use the URL flisk status prints
+curl -s -X POST "$BOT/turn" -H 'content-type: application/json' \
+  -H 'x-session-id: demo' -d '{"input":"hello"}'
+flisk restart bot
+curl -s -X POST "$BOT/turn" -H 'content-type: application/json' \
+  -H 'x-session-id: demo' -d '{"input":"still there?"}'</code></pre>
+<p>The second reply reports turn 2 in the default scaffold, because the checkpoint with the first exchange was loaded from the volume. A request without a non-empty string <code>input</code> gets a 400 and writes nothing. A body over 1 MiB gets a 413 (change the limit with <code>AGENT_MAX_TURN_BODY_BYTES</code>).</p>
+
+<h2 id="cleanup-and-limits">Cleanup and limits</h2>
+<ul>
+<li><strong>Old sessions are swept.</strong> A timer drops sessions idle for longer than <code>SESSION_IDLE_TIMEOUT_MS</code> (default 24 hours), checked every <code>SESSION_CLEANUP_INTERVAL_MS</code> (default 1 hour). A session with a turn in flight is never swept. Set either variable on the resource to change it.</li>
+<li><strong>Delete one session.</strong> <code>DELETE</code> on <code>/session</code> with the <code>x-session-id</code> header drops it, or answers 409 while a turn is running.</li>
+<li><strong>Delete all of them.</strong> Remove the volume yourself with <code>docker volume rm</code> and the volume name above. <code>flisk down --purge</code> also deletes the project's Docker volumes.</li>
+<li><strong>Concurrency is limited.</strong> The scaffold queues turns per session, but Flisk's own docs list known races in its counters, which affect the <code>active</code> or <code>idle</code> label in the session list and the drain timing. Use Postgres durability and your own locking if many callers share a session.</li>
+<li><strong>Model memory is yours.</strong> A checkpoint of messages does not replay a half-finished tool call with side effects. Make tools idempotent.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once sessions persist, you will want to look at them. <a href="/@odykyi/ai-agents-local/inspect-agent-sessions/">Inspect agent sessions</a> shows how to list and read checkpoints from the CLI, and <a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/">restart an agent without losing state</a> covers what happens to a turn that is running when the process stops. For the volume mechanics in general, see <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keeping volumes between runs</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Where does Flisk store agent checkpoints?</summary><p>With files durability, in /var/lib/flisk-agent/&lt;sessionId&gt;.json on a named Docker volume that survives flisk down. With postgres durability, in a flisk_agent_sessions table.</p></details><details><summary>Does flisk down delete my agent&#39;s sessions?</summary><p>No. The named volume stays. flisk down --purge deletes the project&#39;s Docker volumes, and docker volume rm removes just the agent&#39;s volume.</p></details><details><summary>Can I use LangGraph or Mastra checkpoints instead?</summary><p>Yes. The custom runtime is a plain HTTP service with no model or framework dependency, so you can call a framework inside runTurn and use its own checkpointer.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/inspect-agent-sessions/"><span class="lbl">Guide</span><b>How to inspect AI agent sessions and checkpoints locally</b><span>You cannot debug what an agent remembers if you cannot see it. One command lists every session and prints any checkpoint.</span></a><a href="/@odykyi/ai-agents-local/restart-an-agent-without-losing-state/"><span class="lbl">Guide</span><b>How to restart an AI agent without losing conversation state</b><span>Restarting an agent should cost you a few seconds, not a conversation. This is how to make that true and how to prove it.</span></a><a href="/@odykyi/ai-agents-local/langgraph-agent-local-stack/"><span class="lbl">Guide</span><b>Run a LangGraph agent locally with tools and resumable runs</b><span>LangGraph supplies checkpoints and replay. The rest of a local stack is a tool server, a start order and an HTTP wrapper. This is a working setup you can break on purpose.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
