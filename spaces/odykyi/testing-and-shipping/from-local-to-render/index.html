@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to go from a local stack to a Render Blueprint</title>
+<meta name="description" content="Generate a render.yaml from your service.json files, see what it covers and what it skips (databases, secrets, migrations), then deploy it on Render.">
+<meta name="keywords" content="render.yaml blueprint, deploy docker app to render, flisk export render, render environment variables sync false, local to production deploy">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/from-local-to-render/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to go from a local stack to a Render Blueprint">
+<meta property="og:description" content="Generate a render.yaml from your service.json files, see what it covers and what it skips (databases, secrets, migrations), then deploy it on Render.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/from-local-to-render/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to go from a local stack to a Render Blueprint","description":"Generate a render.yaml from your service.json files, see what it covers and what it skips (databases, secrets, migrations), then deploy it on Render.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/from-local-to-render/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/from-local-to-render/","keywords":"render.yaml blueprint, deploy docker app to render, flisk export render, render environment variables sync false, local to production deploy","wordCount":822,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to go from a local stack to a Render Blueprint","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/from-local-to-render/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk export render deploy anything?","acceptedAnswer":{"@type":"Answer","text":"No. It writes a render.yaml file and stops. It does not call the Render API, create services or write secret values. You commit the file and create the Blueprint yourself in the Render dashboard."}},{"@type":"Question","name":"Why are my secrets missing from render.yaml?","acceptedAnswer":{"@type":"Answer","text":"By design. Only the keys listed under env in service.json are written, each as an entry that Render asks you to fill in. Names under secrets and params are not exported, so add the ones your service needs by hand."}},{"@type":"Question","name":"Is the generated Dockerfile ready for production?","acceptedAnswer":{"@type":"Answer","text":"Not necessarily. A scaffolded Dockerfile is a starting point for local work. Build the image the way Render will, run it once, and review the base image, the user it runs as and what it copies in before you ship it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to go from a local stack to a Render Blueprint</h1><p class="dek">Your local stack already describes ports, health checks and environment names. A generated starting file saves retyping them, as long as you know what it skips.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-general-approach">The general approach</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#what-you-add-by-hand">What you add by hand</a></li><li><a href="#deploy-it">Deploy it</a></li><li><a href="#pitfalls-and-when-not-to-use-it">Pitfalls and when not to use it</a></li></ol></nav></aside>
+<article><p>To move a local stack to Render, write a <code>render.yaml</code> Blueprint at the root of your git repository, push it, and create the Blueprint in the Render dashboard. If your services are described by <code>service.json</code> files, <code>flisk export render</code> generates the first version for you: one web service per resource, with the Docker paths, port, health check and environment variable names filled in. The file is a starting point. You still add the database, the secrets and the migration step.</p>
+
+<h2 id="the-general-approach">The general approach</h2>
+<p>Render reads a Blueprint file called <code>render.yaml</code> from the repository root and creates the services in it. For each service you give it a type, a runtime (Docker or a language runtime), build and start settings, a health check path and environment variables. Writing that by hand for four services is tedious and easy to get slightly wrong, such as a port that does not match what the app listens on. People usually copy a sample and edit it, which works until the local setup and the deploy file drift apart.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk's exporter reads your <code>service.json</code> files and writes the Blueprint. It writes a file and nothing else: no deploy, no API call, no secret values. Run it from the repository root:</p>
+<pre><code>flisk export render --dry-run   # print the file, write nothing
+flisk export render             # write render.yaml at the git root</code></pre>
+<p>Useful flags are <code>--resource &lt;name&gt;</code> to export a subset, <code>--out</code> to choose the location, and <code>--force</code> to overwrite an existing file. For an API with a Dockerfile, a Postgres URL and a log level, the output looks like this:</p>
+<pre><code>services:
+  - type: web
+    name: "api"
+    runtime: docker
+    dockerfilePath: "./services/shop/api/Dockerfile"
+    dockerContext: "./services/shop/api"
+    healthCheckPath: "/health"
+    envVars:
+      - key: PORT
+        value: "4000"
+      - key: DATABASE_URL
+        sync: false
+      - key: LOG_LEVEL
+        sync: false</code></pre>
+<p>Things to notice:</p>
+<ul>
+<li><strong>The port becomes a <code>PORT</code> variable</strong> with the value from <code>service.json</code>, so the app must read <code>PORT</code>.</li>
+<li><strong>Names only.</strong> Each key under <code>env</code> is written as <code>sync: false</code>. Render then asks for the value when you create the Blueprint, and no value is stored in git. That includes plain values like <code>LOG_LEVEL</code>, so you enter them in the dashboard.</li>
+<li><strong>Docker or Node.</strong> A resource with a Dockerfile becomes a Docker service. One with only a <code>package.json</code> becomes a Node service with <code>npm install &amp;&amp; npm run build</code> as the build command and <code>npm start</code> as the start command. A resource with only an <code>image</code> and neither file is refused with an error.</li>
+<li><strong>Health check.</strong> It uses <code>healthCheckPath</code> from <code>service.json</code>, or <code>/health</code> when not set. Make sure the deployed app really answers there.</li>
+</ul>
+
+<h2 id="what-you-add-by-hand">What you add by hand</h2>
+<ol>
+<li><strong>The database.</strong> The exporter writes services only. Add a <code>databases:</code> block and point <code>DATABASE_URL</code> at it, or create the database in the dashboard and paste its internal URL into the prompt. Check the current Blueprint reference on Render's site for the exact fields.</li>
+<li><strong>Secrets.</strong> Entries under <code>secrets</code> and <code>params</code> are not exported. If the API needs <code>SESSION_SECRET</code>, add it to <code>envVars</code> as a <code>sync: false</code> entry yourself.</li>
+<li><strong>Migrations.</strong> Locally you may run them as a separate one-shot resource. On Render, run them as a pre-deploy command or a job rather than from the API start script. See <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a> for the pattern.</li>
+<li><strong>Region, plan and scaling.</strong> Choose them in the file or the dashboard. The local manifests do not know about them.</li>
+</ol>
+
+<h2 id="deploy-it">Deploy it</h2>
+<ol>
+<li>Review the generated file and edit it.</li>
+<li>Commit <code>render.yaml</code> at the repository root and push it to GitHub or GitLab.</li>
+<li>In Render choose New, then Blueprint, select the repository and fill in every value Render asks for.</li>
+<li>Open each service URL and confirm the health check passes.</li>
+</ol>
+<p>When you change a manifest later, run <code>flisk export render --force</code> again and review the diff before committing it. Anything you added by hand is overwritten by <code>--force</code>, so keep hand-written additions in a separate file you merge, or re-add them from the diff.</p>
+
+<h2 id="pitfalls-and-when-not-to-use-it">Pitfalls and when not to use it</h2>
+<ul>
+<li><strong>The image has to build there.</strong> Render builds from the Dockerfile in a clean environment. Run the same build locally with <code>docker build</code> first, and check the container runs as a non-root user and does not copy <code>.env</code> into the image.</li>
+<li><strong>Frontends in Docker are not always the best fit.</strong> A static site may be cheaper and faster on a static hosting plan. Treat the exported entry as a default, not a recommendation.</li>
+<li><strong>No state.</strong> A container filesystem is not durable. Keep files and data in the database or object storage.</li>
+<li><strong>Do not paste values into the file.</strong> If a secret ends up in git, rotate it.</li>
+<li><strong>Not your tool?</strong> If you deploy with another platform, the same manifests can produce a standalone Compose file instead. See <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file to a VPS</a>.</li>
+</ul>
+
+<p>Next, read how the names-only rule works across all three exporters in <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk export render deploy anything?</summary><p>No. It writes a render.yaml file and stops. It does not call the Render API, create services or write secret values. You commit the file and create the Blueprint yourself in the Render dashboard.</p></details><details><summary>Why are my secrets missing from render.yaml?</summary><p>By design. Only the keys listed under env in service.json are written, each as an entry that Render asks you to fill in. Names under secrets and params are not exported, so add the ones your service needs by hand.</p></details><details><summary>Is the generated Dockerfile ready for production?</summary><p>Not necessarily. A scaffolded Dockerfile is a starting point for local work. Build the image the way Render will, run it once, and review the base image, the user it runs as and what it copies in before you ship it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/"><span class="lbl">Guide</span><b>How to keep env var names, not values, in committed config</b><span>The repository should say which settings exist. It should never say what the production password is.</span></a><a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/"><span class="lbl">Guide</span><b>How to deploy a standalone Compose file to a VPS</b><span>A small server with Docker is enough for many apps. The export gives you a Compose file with no dependency on your development tool.</span></a><a href="/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/"><span class="lbl">Guide</span><b>How to generate a wrangler.toml from service.json</b><span>A Worker needs a name, an entry file, a compatibility date and a list of secrets. Most of that already sits in your manifest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

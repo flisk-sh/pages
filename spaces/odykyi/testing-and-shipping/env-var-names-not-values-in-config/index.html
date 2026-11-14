@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep env var names, not values, in committed config</title>
+<meta name="description" content="Commit the list of variables your services need and keep the values in .env or a secret store. How required, optional and plain config differ, and common leaks.">
+<meta name="keywords" content="env vars not committed to git, secrets in docker compose, env example file names only, vite public env secrets leak, required secrets compose">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep env var names, not values, in committed config">
+<meta property="og:description" content="Commit the list of variables your services need and keep the values in .env or a secret store. How required, optional and plain config differ, and common leaks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep env var names, not values, in committed config","description":"Commit the list of variables your services need and keep the values in .env or a secret store. How required, optional and plain config differ, and common leaks.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/","keywords":"env vars not committed to git, secrets in docker compose, env example file names only, vite public env secrets leak, required secrets compose","wordCount":737,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to keep env var names, not values, in committed config","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I commit .env.example?","acceptedAnswer":{"@type":"Answer","text":"Yes, with names and harmless placeholder values. It documents what a new developer must set. The real .env stays out of git. A manifest that lists required names does the same job and can be checked by tools."}},{"@type":"Question","name":"What is the difference between params and secrets in a service.json?","acceptedAnswer":{"@type":"Answer","text":"In Flisk, params are plain non-secret strings that are committed and written to a generated env file. secrets lists names only, and the values come from the project .env at run time. Required names stop the start when they are missing."}},{"@type":"Question","name":"Is a NEXT_PUBLIC or VITE variable a safe place for a key?","acceptedAnswer":{"@type":"Answer","text":"Only for keys meant for browsers, such as a publishable key. These variables are inlined into the JavaScript bundle at build time, so anyone can read them. Keep real credentials in server-side variables."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to keep env var names, not values, in committed config</h1><p class="dek">The repository should say which settings exist. It should never say what the production password is.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-names-belong-in-git">Why names belong in git</a></li><li><a href="#the-general-approach-with-compose">The general approach with Compose</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#names-carry-through-to-deploy-files">Names carry through to deploy files</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Commit the names of your configuration, not the values. List every variable a service needs in a manifest or an example file, keep the real values in an untracked <code>.env</code> or a secret store, and make the start fail loudly when a required name is missing. That way a new developer sees what to fill in, CI can check the list, and a leaked repository does not leak production.</p>
+
+<h2 id="why-names-belong-in-git">Why names belong in git</h2>
+<p>Values do not: they change per machine and per environment, and anything committed stays in history even after you delete it. Names do: they are part of how the service works. Without a list, the knowledge lives in someone's head, and the first sign of a missing variable is a runtime error in production. There are three kinds of setting, and they need different homes:</p>
+<table>
+<thead><tr><th>Kind</th><th>Example</th><th>Where it lives</th></tr></thead>
+<tbody>
+<tr><td>Plain config</td><td>log level, feature flag, public URL</td><td>Committed, in the manifest or a defaults file</td></tr>
+<tr><td>Secret</td><td>database password, API key, signing secret</td><td>Name committed, value in <code>.env</code> or a secret store</td></tr>
+<tr><td>Per-environment value</td><td>the database host in production</td><td>Set by the platform or the deploy step</td></tr>
+</tbody>
+</table>
+
+<h2 id="the-general-approach-with-compose">The general approach with Compose</h2>
+<p>Docker Compose substitutes <code>${NAME}</code> from a <code>.env</code> file or the shell. Two forms make the list enforceable:</p>
+<pre><code>services:
+  api:
+    environment:
+      LOG_LEVEL: "${LOG_LEVEL:-info}"      # default when unset
+      SESSION_SECRET: "${SESSION_SECRET:?set SESSION_SECRET in .env}"</code></pre>
+<p>The <code>:-</code> form gives a default for plain config. The <code>:?</code> form makes Compose refuse to start, with your message, when the variable is unset or empty. Add a <code>.env.example</code> with the same names and placeholders, and put <code>.env</code> in <code>.gitignore</code>.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk gives each kind a field in <code>service.json</code>:</p>
+<pre><code>{
+  "env": { "LOG_LEVEL": "info", "DATABASE_URL": "${DATABASE_URL}" },
+  "params": { "FEATURE_X": "on" },
+  "secrets": {
+    "required": ["SESSION_SECRET"],
+    "optional": ["SENTRY_DSN"]
+  }
+}</code></pre>
+<ul>
+<li><strong><code>params</code></strong> are non-secret strings. They are committed and written to a generated env file for the resource.</li>
+<li><strong><code>secrets.required</code></strong> is injected as <code>${NAME:?...}</code>. Compose refuses to start the resource and names the missing variable.</li>
+<li><strong><code>secrets.optional</code></strong> is injected as <code>${NAME:-}</code>, so the resource starts with the variable empty.</li>
+<li><strong>The values</strong> live in the project <code>.env</code>, which Flisk gitignores. Generated files are checked by <code>flisk config verify</code> and are meant to be committed, and nothing secret is written into them.</li>
+</ul>
+<p>For one-off runs, <code>flisk up --env-file &lt;path&gt;</code> uses another file in place of <code>.env</code> for that run. The file replaces the default one. It is not merged with it, and it must hold the keys Flisk needs, such as <code>DB_PASSWORD</code> and <code>JWT_SECRET</code>. Do not put a real credential in a file you plan to commit.</p>
+
+<h2 id="names-carry-through-to-deploy-files">Names carry through to deploy files</h2>
+<p>The same rule runs through the exporters, which makes the habit worth keeping:</p>
+<ul>
+<li><code>flisk export render</code> writes each key under <code>env</code> as a <code>sync: false</code> entry, which Render prompts for. Names under <code>secrets</code> and <code>params</code> are not exported, so add those by hand. See <a href="/@odykyi/testing-and-shipping/from-local-to-render/">from local to Render</a>.</li>
+<li><code>flisk export wrangler</code> lists the names in a comment and tells you to run <code>wrangler secret put &lt;NAME&gt;</code>. See <a href="/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/">the wrangler config guide</a>.</li>
+<li><code>flisk export compose</code> writes <code>${NAME}</code> for every required secret, so the server needs an <code>.env</code> that defines it. See <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file</a>.</li>
+</ul>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Public prefixes expose values.</strong> Next.js <code>NEXT_PUBLIC_*</code> and Vite <code>VITE_*</code> variables are inlined into the browser bundle at build time. <code>flisk doctor</code> warns when it finds a secret-looking value in them, for example a Stripe secret key. A publishable key is fine.</li>
+<li><strong>Do not set <code>jwtSecret</code> in <code>service.json</code>.</strong> It is ignored and <code>flisk doctor</code> warns about it. The signing secret comes from <code>JWT_SECRET</code> in <code>.env</code>.</li>
+<li><strong>A committed secret is a leaked secret.</strong> Deleting the file does not remove it from history. Rotate the credential, then clean the history if you need to.</li>
+<li><strong>Changing a password later.</strong> A new <code>DB_PASSWORD</code> does not change a Postgres volume that already exists. Reset the volume or alter the role. More in <a href="/@odykyi/local-database-guide/reset-a-local-database/">reset a local database</a>.</li>
+<li><strong>Do not paste secrets into logs or tickets.</strong> Show names, not values, when asking for help.</li>
+<li><strong>A secret store is not always needed.</strong> For a solo project, a protected <code>.env</code> on the server may be enough. Move to a store when several people or systems need the values.</li>
+</ul>
+
+<p>Next, look at how the file those names feed into becomes a deployment: <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file to a VPS</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I commit .env.example?</summary><p>Yes, with names and harmless placeholder values. It documents what a new developer must set. The real .env stays out of git. A manifest that lists required names does the same job and can be checked by tools.</p></details><details><summary>What is the difference between params and secrets in a service.json?</summary><p>In Flisk, params are plain non-secret strings that are committed and written to a generated env file. secrets lists names only, and the values come from the project .env at run time. Required names stop the start when they are missing.</p></details><details><summary>Is a NEXT_PUBLIC or VITE variable a safe place for a key?</summary><p>Only for keys meant for browsers, such as a publishable key. These variables are inlined into the JavaScript bundle at build time, so anyone can read them. Keep real credentials in server-side variables.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/from-local-to-render/"><span class="lbl">Guide</span><b>How to go from a local stack to a Render Blueprint</b><span>Your local stack already describes ports, health checks and environment names. A generated starting file saves retyping them, as long as you know what it skips.</span></a><a href="/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/"><span class="lbl">Guide</span><b>How to generate a wrangler.toml from service.json</b><span>A Worker needs a name, an entry file, a compatibility date and a list of secrets. Most of that already sits in your manifest.</span></a><a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/"><span class="lbl">Guide</span><b>How to deploy a standalone Compose file to a VPS</b><span>A small server with Docker is enough for many apps. The export gives you a Compose file with no dependency on your development tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

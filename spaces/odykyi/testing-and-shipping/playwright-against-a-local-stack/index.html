@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Playwright tests against a local multi-service stack</title>
+<meta name="description" content="Run Playwright end-to-end tests against a frontend, API and database running locally: start and wait, find the URL, handle CORS and cookies, collect traces.">
+<meta name="keywords" content="playwright local stack, playwright baseURL environment variable, e2e tests local docker, playwright against localhost services, playwright test setup api and frontend">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/playwright-against-a-local-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Playwright tests against a local multi-service stack">
+<meta property="og:description" content="Run Playwright end-to-end tests against a frontend, API and database running locally: start and wait, find the URL, handle CORS and cookies, collect traces.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/playwright-against-a-local-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Playwright tests against a local multi-service stack","description":"Run Playwright end-to-end tests against a frontend, API and database running locally: start and wait, find the URL, handle CORS and cookies, collect traces.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/playwright-against-a-local-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/playwright-against-a-local-stack/","keywords":"playwright local stack, playwright baseURL environment variable, e2e tests local docker, playwright against localhost services, playwright test setup api and frontend","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to run Playwright tests against a local multi-service stack","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/playwright-against-a-local-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use Playwright's webServer option to start the stack?","acceptedAnswer":{"@type":"Answer","text":"It is built for one long-running dev server. A multi-service stack is easier to start in a separate step, because a command like flisk up --wait or docker compose up --wait exits when the stack is ready, which does not fit a process that webServer expects to keep running. Start the stack in your script or CI step, then run npx playwright test."}},{"@type":"Question","name":"Why do my browser tests fail with CORS errors on a local stack?","acceptedAnswer":{"@type":"Answer","text":"When the frontend and API run on different origins, the browser enforces CORS even on localhost. The API must allow the frontend origin. Check the response headers in the trace or network log before debugging the test."}},{"@type":"Question","name":"Does Flisk generate a Playwright config?","acceptedAnswer":{"@type":"Answer","text":"There is an optional playwright feature that writes a generated configuration, but the project documentation lists Playwright configuration among the features that need a license key. You do not need it: a normal playwright.config.ts with a baseURL from an environment variable works with any stack."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to run Playwright tests against a local multi-service stack</h1><p class="dek">Browser tests are only as stable as the stack under them. Start the whole thing first, give Playwright one base URL, and keep the data predictable.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#start-the-stack-outside-playwright">Start the stack outside Playwright</a></li><li><a href="#give-playwright-one-base-url">Give Playwright one base URL</a></li><li><a href="#make-the-data-predictable">Make the data predictable</a></li><li><a href="#things-that-break-browser-tests-on-a-multi-service-stack">Things that break browser tests on a multi-service stack</a></li><li><a href="#collect-evidence-when-it-fails">Collect evidence when it fails</a></li><li><a href="#when-not-to-use-real-browser-tests">When not to use real browser tests</a></li></ol></nav></aside>
+<article><p>To run Playwright against a local stack, start all services and wait for their health checks, read the frontend URL from your stack tool instead of hard-coding it, pass it to Playwright as <code>baseURL</code>, and make the test data deterministic before the first test starts. Playwright itself is the easy part. The stack under it decides whether the suite is stable.</p>
+
+<h2 id="start-the-stack-outside-playwright">Start the stack outside Playwright</h2>
+<p>Playwright has a <code>webServer</code> option that starts a command and waits for a URL. It fits one dev server that keeps running. A multi-service stack is different: the command that starts it often exits once everything is up. Using <code>flisk up --wait</code> or <code>docker compose up --wait</code> as the <code>webServer</code> command would look like a server that died, so start the stack in a script and run Playwright after it:</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+trap 'flisk down || true' EXIT
+
+flisk up --wait --wait-timeout 900
+export WEB_URL="http://app.my-shop.localhost/shop-web"
+npx playwright test</code></pre>
+<p>With Compose, replace the first command with <code>docker compose up -d --wait</code> and the trap with <code>docker compose down -v</code>. The principle is the same: block until healthy, then test, then clean up whatever happens.</p>
+
+<h2 id="give-playwright-one-base-url">Give Playwright one base URL</h2>
+<p>Read the URL from an environment variable so the same config works on your laptop, in CI and against a shared environment:</p>
+<pre><code>// playwright.config.ts
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e',
+  retries: process.env.CI ? 1 : 0,
+  use: {
+    baseURL: process.env.WEB_URL ?? 'http://localhost:3000',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+});</code></pre>
+<p>When the stack runs under Flisk with the gateway, each service has a hostname such as <code>app.my-shop.localhost</code>. Ask Flisk for the real URLs with <code>flisk networks --raw</code>, because the gateway moves to another port when port 80 is taken. If the stack is only local processes (a service with a <code>command</code> in its <code>service.json</code>), the URL is <code>http://localhost:&lt;port&gt;</code> as printed by <code>flisk up</code>. Chromium resolves <code>*.localhost</code> names to your machine without an <code>/etc/hosts</code> entry; check other browsers before relying on it.</p>
+<p>Careful with relative paths: a <code>baseURL</code> that includes a path prefix, such as <code>/shop-web</code>, changes how <code>page.goto('/login')</code> resolves. Put the full path in the <code>goto</code> calls, or make the frontend serve from <code>/</code> on its own hostname.</p>
+
+<h2 id="make-the-data-predictable">Make the data predictable</h2>
+<p>Browser tests that depend on whatever is in the database are the number one source of flaky suites. Pick one of these and stick to it:</p>
+<ul>
+<li><strong>Seed before the suite.</strong> Run a seed command once in <code>globalSetup</code> or in the script. With Flisk: <code>flisk run orders-api -- bun run seed</code>.</li>
+<li><strong>Create what you need through the API</strong> in a fixture, with unique values, and delete it afterwards.</li>
+<li><strong>Log in once and reuse the session.</strong> Use Playwright's <code>storageState</code> so only one test pays for the login flow.</li>
+</ul>
+<p>More on resetting data in <a href="/@odykyi/local-database-guide/reset-a-local-database/">reset a local database</a>.</p>
+
+<h2 id="things-that-break-browser-tests-on-a-multi-service-stack">Things that break browser tests on a multi-service stack</h2>
+<ul>
+<li><strong>CORS.</strong> The frontend on <code>app.my-shop.localhost</code> calls an API on a different hostname, so the API must allow that origin. Add an explicit rule for the frontend origin in your API.</li>
+<li><strong>Cookies.</strong> A cookie set for one host is not sent to another. Test the login flow once end to end, and check <code>SameSite</code> and <code>Secure</code> attributes if the session is lost between pages.</li>
+<li><strong>Readiness.</strong> The frontend can be healthy while the API is still running migrations. Wait on the API too; with <code>--wait</code> every service must be healthy before the command returns.</li>
+<li><strong>Slow first load.</strong> A dev server may compile on the first request. Either test the production build or add one warm-up request before the suite.</li>
+<li><strong>Browsers in CI.</strong> Install them with <code>npx playwright install --with-deps chromium</code> on the runner.</li>
+</ul>
+
+<h2 id="collect-evidence-when-it-fails">Collect evidence when it fails</h2>
+<p>A browser failure message rarely names the real cause. Keep the Playwright trace, and also the server side: <code>flisk logs --service orders-api --since 5m</code> prints recent logs for one service. In CI, upload both as artifacts. The workflow in <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">run the stack in GitHub Actions</a> has a diagnostics step you can copy.</p>
+
+<h2 id="when-not-to-use-real-browser-tests">When not to use real browser tests</h2>
+<p>Do not test every validation rule through a browser. Cover logic with unit and API tests, and use Playwright for the handful of journeys that matter: sign in, the main purchase or save flow, and one failure path. They are the slowest layer, so keep that layer thin.</p>
+
+<p>If the stack does not start reliably in CI yet, fix that first with <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>, then add the browser layer on top.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use Playwright&#39;s webServer option to start the stack?</summary><p>It is built for one long-running dev server. A multi-service stack is easier to start in a separate step, because a command like flisk up --wait or docker compose up --wait exits when the stack is ready, which does not fit a process that webServer expects to keep running. Start the stack in your script or CI step, then run npx playwright test.</p></details><details><summary>Why do my browser tests fail with CORS errors on a local stack?</summary><p>When the frontend and API run on different origins, the browser enforces CORS even on localhost. The API must allow the frontend origin. Check the response headers in the trace or network log before debugging the test.</p></details><details><summary>Does Flisk generate a Playwright config?</summary><p>There is an optional playwright feature that writes a generated configuration, but the project documentation lists Playwright configuration among the features that need a license key. You do not need it: a normal playwright.config.ts with a baseURL from an environment variable works with any stack.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/"><span class="lbl">Guide</span><b>How to run integration tests against a real local stack</b><span>An integration test that talks to a fake database proves little. Here is how to run the same tests against the services you actually ship, locally and in CI.</span></a><a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/"><span class="lbl">Guide</span><b>How to run a multi-service stack in GitHub Actions</b><span>Two jobs: a cheap one that catches config drift on every pull request, and a heavier one that actually starts your services.</span></a><a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/"><span class="lbl">Guide</span><b>Mock or run the real service in tests? A practical rule</b><span>Mocks are fast and lie. Real services are honest and slow. The useful question is which dependencies deserve which.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

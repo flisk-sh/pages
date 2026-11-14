@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to generate a wrangler.toml from service.json</title>
+<meta name="description" content="Use flisk export wrangler to write a Cloudflare Workers config for one resource. What it checks, which flags matter, and why it refuses Docker services.">
+<meta name="keywords" content="wrangler.toml generate, cloudflare workers config, flisk export wrangler, wrangler secret put, hono cloudflare workers deploy">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to generate a wrangler.toml from service.json">
+<meta property="og:description" content="Use flisk export wrangler to write a Cloudflare Workers config for one resource. What it checks, which flags matter, and why it refuses Docker services.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to generate a wrangler.toml from service.json","description":"Use flisk export wrangler to write a Cloudflare Workers config for one resource. What it checks, which flags matter, and why it refuses Docker services.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/","keywords":"wrangler.toml generate, cloudflare workers config, flisk export wrangler, wrangler secret put, hono cloudflare workers deploy","wordCount":727,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to generate a wrangler.toml from service.json","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does flisk export wrangler deploy my Worker?","acceptedAnswer":{"@type":"Answer","text":"No. It writes wrangler.toml next to the resource and stops. It does not run wrangler deploy, create DNS records or call the Cloudflare API. You deploy with the wrangler command yourself."}},{"@type":"Question","name":"Why does the exporter refuse my service?","acceptedAnswer":{"@type":"Answer","text":"It checks that the resource looks like a Worker. A resource with a Dockerfile, or one without a wrangler, @cloudflare/workers-types or hono dependency, is refused unless you pass --allow-non-worker. For Docker or Node services the error suggests flisk export render."}},{"@type":"Question","name":"Where do secret values go?","acceptedAnswer":{"@type":"Answer","text":"Into Cloudflare, with wrangler secret put NAME. The generated file lists the variable names in a comment and never contains values."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to generate a wrangler.toml from service.json</h1><p class="dek">A Worker needs a name, an entry file, a compatibility date and a list of secrets. Most of that already sits in your manifest.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-general-approach">The general approach</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#the-worker-check">The Worker check</a></li><li><a href="#secrets-and-deploy">Secrets and deploy</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To create a Cloudflare Workers config from a Flisk project, run <code>flisk export wrangler --resource &lt;name&gt;</code>. It writes a <code>wrangler.toml</code> next to that resource, with the Worker name, the entry file, a compatibility date and, if you ask for one, a custom domain route. Secret values are never written. You set them in Cloudflare with <code>wrangler secret put</code>, then deploy with the wrangler command.</p>
+
+<h2 id="the-general-approach">The general approach</h2>
+<p>A Worker is configured by <code>wrangler.toml</code> (or <code>wrangler.jsonc</code>). The minimum is a <code>name</code>, a <code>main</code> entry file and a <code>compatibility_date</code> that pins the runtime behaviour. Routes, bindings and variables are added as you need them. You can write this file by hand in a minute; the cost shows up later when the local manifest and the deploy file disagree about the entry file or which variables exist.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>The exporter needs to know which resource is the Worker, so <code>--resource</code> is required:</p>
+<pre><code>flisk export wrangler --resource edge --dry-run
+flisk export wrangler --resource edge --route api.example.com</code></pre>
+<p>With <code>--dry-run</code> it prints the file and writes nothing. A real run for a Hono service produces:</p>
+<pre><code># Written by `flisk export wrangler` from service.json. Nothing was deployed and no DNS record was created.
+name = "edge"
+main = "src/index.ts"
+compatibility_date = "2026-11-14"
+
+routes = [{ pattern = "api.example.com", custom_domain = true }]
+
+# Environment from service.json, by name only. Set each one with `wrangler secret put &lt;NAME&gt;`:
+#   API_TOKEN
+#   ORIGIN_URL</code></pre>
+<p>How each line is decided:</p>
+<ul>
+<li><strong><code>name</code></strong> comes from the resource name.</li>
+<li><strong><code>main</code></strong> comes from <code>main</code> in the resource's <code>package.json</code>, or else the first file that exists from <code>src/index.ts</code>, <code>src/index.js</code>, <code>src/worker.ts</code>, <code>src/worker.js</code>, <code>index.ts</code> and <code>index.js</code>.</li>
+<li><strong><code>compatibility_date</code></strong> is the day you run the export. That pins the runtime to today's behaviour, so re-running the export later changes it. Review the date in the diff.</li>
+<li><strong><code>routes</code></strong> appears only when you pass <code>--route</code>. It writes a custom domain route. Wildcard patterns are refused.</li>
+<li><strong>Environment names</strong> appear as a comment, one per variable. Names only.</li>
+</ul>
+<p>The file is written in the resource's folder, for example <code>services/shop/edge/wrangler.toml</code>, so run wrangler from there.</p>
+
+<h2 id="the-worker-check">The Worker check</h2>
+<p>Not every service can run on Workers. The exporter looks at the resource and refuses one that has a Dockerfile, or that has no <code>wrangler</code>, <code>@cloudflare/workers-types</code> or <code>hono</code> dependency. In that case the message points you to <code>flisk export render</code> for Docker or Node services. If you know what you are doing, <code>--allow-non-worker</code> overrides the check. That is the flag you need for a service that Flisk scaffolded with a Dockerfile for local use but whose code is Worker-compatible.</p>
+<p>An important detail for Hono: the local server and the Worker use different entry shapes. The scaffolded Hono service ends with <code>export default { port, fetch: app.fetch }</code>, which is a fetch handler and also what a Worker expects. Anything that touches Node-only APIs (the file system, native modules, long-lived sockets) will still fail on the Workers runtime. Test with <code>wrangler dev</code> before you deploy.</p>
+
+<h2 id="secrets-and-deploy">Secrets and deploy</h2>
+<ol>
+<li>Install wrangler and log in: <code>npx wrangler login</code>.</li>
+<li>For each name in the comment run <code>npx wrangler secret put API_TOKEN</code>. Wrangler asks for the value on the terminal, and it is stored in Cloudflare, not in a file.</li>
+<li>Check locally with <code>npx wrangler dev</code>.</li>
+<li>Deploy with <code>npx wrangler deploy</code>.</li>
+</ol>
+<p>The listed names are all keys under <code>env</code> in <code>service.json</code>, including harmless ones such as a URL or a log level. Plain, non-secret values can instead go in a <code>[vars]</code> block in <code>wrangler.toml</code>, which you write yourself. Use <code>wrangler secret put</code> for anything sensitive.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The custom domain needs a Cloudflare zone.</strong> The exporter does not create DNS records. Add the domain to your Cloudflare account first.</li>
+<li><strong>Bindings are not exported.</strong> KV, D1, R2 and queues need entries you write by hand, and the local database is not a D1 database.</li>
+<li><strong>Re-running overwrites.</strong> Use <code>--force</code> only when you have nothing hand-edited in the file, or copy your additions back from the diff.</li>
+<li><strong>Not every service belongs on Workers.</strong> A service with a long-running connection to Postgres, or one that needs a full Node runtime, is usually simpler on a container host. See <a href="/@odykyi/testing-and-shipping/from-local-to-render/">from local to Render</a>.</li>
+</ul>
+
+<p>Before you ship, apply the same naming rule to every environment variable: <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does flisk export wrangler deploy my Worker?</summary><p>No. It writes wrangler.toml next to the resource and stops. It does not run wrangler deploy, create DNS records or call the Cloudflare API. You deploy with the wrangler command yourself.</p></details><details><summary>Why does the exporter refuse my service?</summary><p>It checks that the resource looks like a Worker. A resource with a Dockerfile, or one without a wrangler, @cloudflare/workers-types or hono dependency, is refused unless you pass --allow-non-worker. For Docker or Node services the error suggests flisk export render.</p></details><details><summary>Where do secret values go?</summary><p>Into Cloudflare, with wrangler secret put NAME. The generated file lists the variable names in a comment and never contains values.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/from-local-to-render/"><span class="lbl">Guide</span><b>How to go from a local stack to a Render Blueprint</b><span>Your local stack already describes ports, health checks and environment names. A generated starting file saves retyping them, as long as you know what it skips.</span></a><a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/"><span class="lbl">Guide</span><b>How to keep env var names, not values, in committed config</b><span>The repository should say which settings exist. It should never say what the production password is.</span></a><a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/"><span class="lbl">Guide</span><b>How to deploy a standalone Compose file to a VPS</b><span>A small server with Docker is enough for many apps. The export gives you a Compose file with no dependency on your development tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

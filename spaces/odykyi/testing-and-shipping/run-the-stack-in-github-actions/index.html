@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a multi-service stack in GitHub Actions</title>
+<meta name="description" content="A GitHub Actions workflow that checks generated config without containers, then boots the full stack, waits for health, uploads logs and always shuts down.">
+<meta name="keywords" content="github actions docker compose stack, run services in github actions, ci integration tests docker, flisk github actions, wait for healthy services ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a multi-service stack in GitHub Actions">
+<meta property="og:description" content="A GitHub Actions workflow that checks generated config without containers, then boots the full stack, waits for health, uploads logs and always shuts down.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a multi-service stack in GitHub Actions","description":"A GitHub Actions workflow that checks generated config without containers, then boots the full stack, waits for health, uploads logs and always shuts down.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/","keywords":"github actions docker compose stack, run services in github actions, ci integration tests docker, flisk github actions, wait for healthy services ci","wordCount":876,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to run a multi-service stack in GitHub Actions","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do GitHub-hosted runners have Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes, ubuntu-latest runners include Docker and the Compose plugin. They do not include Tilt, which Flisk's container stacks use, so install it in the workflow. The runner image can also have its own Postgres listening on port 5432, which clashes with a stack that publishes that port."}},{"@type":"Question","name":"Why split the workflow into a verify job and a boot job?","acceptedAnswer":{"@type":"Answer","text":"Verification needs no containers and finishes quickly, so it can run on every push and fail early on config drift. Booting the stack is slow and uses more minutes, so it runs only when the cheap job passes."}},{"@type":"Question","name":"Is it safe to publish from the CI stack?","acceptedAnswer":{"@type":"Answer","text":"A CI stack is a throwaway test environment. It is not a deployment path. Build and publish images in a separate release workflow."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to run a multi-service stack in GitHub Actions</h1><p class="dek">Two jobs: a cheap one that catches config drift on every pull request, and a heavier one that actually starts your services.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-ci-stack-is-for">What a CI stack is for</a></li><li><a href="#a-workflow">A workflow</a></li><li><a href="#why-each-part-is-there">Why each part is there</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-boot-the-stack-in-ci">When not to boot the stack in CI</a></li></ol></nav></aside>
+<article><p>To run a multi-service stack in GitHub Actions, check out the repository, install the tools the stack needs, start it in the background and wait for every health check, run your tests, upload the logs when something fails, and always stop the stack at the end. Splitting this into a cheap verification job and a heavier boot job gives you fast feedback on most mistakes and keeps runner minutes down.</p>
+
+<h2 id="what-a-ci-stack-is-for">What a CI stack is for</h2>
+<p>CI is a throwaway machine. You are not deploying anything, you are proving that a clean checkout can start and pass its tests. Everything that works only because of something on your laptop (a populated <code>.env</code>, a cached image, a running database) will fail here, which is the point. Plain Docker Compose works well for this: <code>docker compose up -d --wait</code>, run the tests, <code>docker compose down -v</code>.</p>
+<p>If your stack is managed with Flisk, the same pattern applies with <code>flisk</code> commands. Flisk's own CI runs <code>flisk up</code> on hosted runners, and its documentation includes a copy-paste workflow adapted from those files. The version below is a shortened one.</p>
+
+<h2 id="a-workflow">A workflow</h2>
+<pre><code>name: stack
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stack-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLISK_VERSION: "1.4.57"   # use the version your team runs
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install Tilt
+        run: |
+          curl -fsSL -o tilt.tar.gz https://github.com/tilt-dev/tilt/releases/download/v0.37.8/tilt.0.37.8.linux.x86_64.tar.gz
+          echo "e39513f958705d30524d55f68b1d46fbef2b46a0da568efd00e6383dee6be44f  tilt.tar.gz" | sha256sum -c -
+          sudo tar -xzf tilt.tar.gz -C /usr/local/bin tilt
+      - name: Install flisk
+        run: npm install --global "@flisk-sh/flisk@${FLISK_VERSION}"
+      # A fresh clone has no git-ignored .env and no generated folders
+      - run: flisk project --yes
+      - run: flisk doctor --no-ping
+      - run: flisk config verify
+
+  boot:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Install Tilt
+        run: |
+          curl -fsSL -o tilt.tar.gz https://github.com/tilt-dev/tilt/releases/download/v0.37.8/tilt.0.37.8.linux.x86_64.tar.gz
+          echo "e39513f958705d30524d55f68b1d46fbef2b46a0da568efd00e6383dee6be44f  tilt.tar.gz" | sha256sum -c -
+          sudo tar -xzf tilt.tar.gz -C /usr/local/bin tilt
+      - name: Install flisk
+        run: npm install --global "@flisk-sh/flisk@${FLISK_VERSION}"
+      - run: flisk project --yes
+      - name: Start and wait for health
+        run: flisk up --wait --wait-timeout 1200
+      - name: Run the tests
+        run: npm test --prefix tests/integration
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          docker ps -a --format 'table {{.Names}}\t{{.Status}}' &gt; "$RUNNER_TEMP/logs/docker-ps.txt" 2&gt;&amp;1 || true
+          flisk status &gt; "$RUNNER_TEMP/logs/status.txt" 2&gt;&amp;1 || true
+          flisk logs --tail 300 &gt; "$RUNNER_TEMP/logs/flisk.txt" 2&gt;&amp;1 || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stack-logs
+          path: ${{ runner.temp }}/logs/
+          retention-days: 7
+      - name: Stop the stack
+        if: always()
+        run: flisk down || true</code></pre>
+
+<h2 id="why-each-part-is-there">Why each part is there</h2>
+<ul>
+<li><strong><code>flisk project --yes</code>.</strong> A fresh clone lacks the git-ignored <code>.env</code> (with the generated database password and JWT secret) and the generated <code>.flisk/</code> output. Without this step, <code>flisk config verify</code> reports them as missing. It writes files only and does not need Docker.</li>
+<li><strong><code>flisk config verify</code>.</strong> Exits non-zero when a generated file differs from what <code>.flisk/project.json</code> and the <code>service.json</code> files produce. It catches the classic "I edited the manifest and forgot to regenerate" mistake in seconds. More on that in <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">check config drift in CI</a>.</li>
+<li><strong><code>flisk up --wait</code>.</strong> Starts the stack in the background and returns when every service is healthy, or exits with an error on failure or after <code>--wait-timeout</code> seconds (default 1800).</li>
+<li><strong>Diagnostics with <code>if: always()</code>.</strong> When a health check fails, "timed out" tells you nothing. Container states and service logs do.</li>
+<li><strong>The stop step.</strong> On a hosted runner the machine disappears anyway, but a stop step keeps the workflow valid on self-hosted runners, where a leftover stack would break the next job.</li>
+<li><strong><code>concurrency</code>.</strong> Cancels the older run for the same pull request so you are not paying for results nobody will read.</li>
+</ul>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port 5432 is taken.</strong> The Ubuntu runner image can have Postgres installed and listening. If your stack publishes 5432, stop and mask the runner's Postgres service first, or publish the stack's database on another port.</li>
+<li><strong>Check the workflow on a throwaway branch.</strong> Flisk's documentation says plainly that its example <code>boot</code> job's exact script was not run on GitHub when it was written. Treat any copied workflow, including this one, as a starting point and run it once before you rely on it. The <code>--wait</code> flag in particular replaces a longer polling script in older examples.</li>
+<li><strong>Pin versions.</strong> A moving <code>latest</code> in CI is how a green build turns red with no code change. Pin the CLI version, and raise <code>minFliskVersion</code> in <code>.flisk/project.json</code> when you raise it.</li>
+<li><strong>Cost.</strong> The boot job builds images on every run. Run it on pull requests that touch services, or nightly, if minutes matter.</li>
+<li><strong>Secrets.</strong> Use repository secrets for real credentials, and test values for everything else. Never print <code>.env</code>.</li>
+</ul>
+
+<h2 id="when-not-to-boot-the-stack-in-ci">When not to boot the stack in CI</h2>
+<p>If your tests are unit tests with no network, a real stack adds minutes and gains nothing. Boot it when the thing you are testing is the wiring: services talking to each other, migrations, and browser journeys.</p>
+
+<p>Next, decide what the tests inside that job should assert: <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do GitHub-hosted runners have Docker?</summary><p>Yes, ubuntu-latest runners include Docker and the Compose plugin. They do not include Tilt, which Flisk&#39;s container stacks use, so install it in the workflow. The runner image can also have its own Postgres listening on port 5432, which clashes with a stack that publishes that port.</p></details><details><summary>Why split the workflow into a verify job and a boot job?</summary><p>Verification needs no containers and finishes quickly, so it can run on every push and fail early on config drift. Booting the stack is slow and uses more minutes, so it runs only when the cheap job passes.</p></details><details><summary>Is it safe to publish from the CI stack?</summary><p>A CI stack is a throwaway test environment. It is not a deployment path. Build and publish images in a separate release workflow.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/"><span class="lbl">Guide</span><b>How to run integration tests against a real local stack</b><span>An integration test that talks to a fake database proves little. Here is how to run the same tests against the services you actually ship, locally and in CI.</span></a><a href="/@odykyi/testing-and-shipping/playwright-against-a-local-stack/"><span class="lbl">Guide</span><b>How to run Playwright tests against a local multi-service stack</b><span>Browser tests are only as stable as the stack under them. Start the whole thing first, give Playwright one base URL, and keep the data predictable.</span></a><a href="/@odykyi/testing-and-shipping/from-local-to-render/"><span class="lbl">Guide</span><b>How to go from a local stack to a Render Blueprint</b><span>Your local stack already describes ports, health checks and environment names. A generated starting file saves retyping them, as long as you know what it skips.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

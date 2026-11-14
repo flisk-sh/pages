@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run integration tests against a real local stack</title>
+<meta name="description" content="Start your real services, wait until they are healthy, point the tests at them, and reset the data between runs. A script that works with Compose or Flisk.">
+<meta name="keywords" content="integration tests real services, run integration tests locally, test against docker stack, wait for services healthy tests, integration test environment">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run integration tests against a real local stack">
+<meta property="og:description" content="Start your real services, wait until they are healthy, point the tests at them, and reset the data between runs. A script that works with Compose or Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run integration tests against a real local stack","description":"Start your real services, wait until they are healthy, point the tests at them, and reset the data between runs. A script that works with Compose or Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/","keywords":"integration tests real services, run integration tests locally, test against docker stack, wait for services healthy tests, integration test environment","wordCount":900,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to run integration tests against a real local stack","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I make the test run wait until every service is ready?","acceptedAnswer":{"@type":"Answer","text":"Do not sleep for a fixed time. Use a command that returns only when all health checks pass. With Flisk, flisk up --wait starts the stack in the background and exits 0 once every service is healthy, or exits 1 if one fails or --wait-timeout passes. With Compose, docker compose up --wait does the same for services that have a healthcheck."}},{"@type":"Question","name":"How do I get a clean database for each test run?","acceptedAnswer":{"@type":"Answer","text":"Either create a throwaway database name per run, or stop the stack and delete its volumes. With Flisk, flisk down --purge deletes the project's Docker volumes, networks and images, so use it only when you want everything gone. For a lighter reset, run a truncate or seed command with flisk run."}},{"@type":"Question","name":"Should integration tests run in the same process as the services?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Run the services as they run in development, and let the test runner call them over HTTP. That keeps the test honest about ports, headers, serialization and startup order."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to run integration tests against a real local stack</h1><p class="dek">An integration test that talks to a fake database proves little. Here is how to run the same tests against the services you actually ship, locally and in CI.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-an-integration-test-should-cover">What an integration test should cover</a></li><li><a href="#the-shape-of-a-reliable-run">The shape of a reliable run</a></li><li><a href="#the-same-flow-with-flisk">The same flow with Flisk</a></li><li><a href="#keep-test-config-separate-from-development-config">Keep test config separate from development config</a></li><li><a href="#clean-data-between-runs">Clean data between runs</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run integration tests against a real stack, start every service the test needs, wait until each one reports healthy, run the tests with the service URLs in environment variables, and tear the stack down afterwards. The two steps people get wrong are the waiting (a fixed <code>sleep</code> is a flaky test waiting to happen) and the data (a test that leaves rows behind makes the next run fail for no visible reason).</p>
+
+<h2 id="what-an-integration-test-should-cover">What an integration test should cover</h2>
+<p>A unit test checks one function. An integration test checks that two or more pieces you own actually work together: your API and its database, a worker and its queue, a frontend and the API it calls. Mocks hide exactly the bugs you are looking for here: a column that does not exist, a header the gateway strips, a migration that was never applied.</p>
+<p>So run the real thing for everything you own, and decide separately what to fake. That second question is covered in <a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/">mock or run the real service</a>.</p>
+
+<h2 id="the-shape-of-a-reliable-run">The shape of a reliable run</h2>
+<ol>
+<li><strong>Start</strong> the stack from a clean state, or from a state you can describe.</li>
+<li><strong>Wait</strong> for health checks, not for time.</li>
+<li><strong>Prepare data</strong>: apply migrations, then load the fixtures your tests expect.</li>
+<li><strong>Run</strong> the tests against the real URLs.</li>
+<li><strong>Collect logs</strong> if anything failed, then <strong>stop</strong> the stack even when the tests failed.</li>
+</ol>
+<p>Plain Docker Compose can do all of this. <code>docker compose up -d --wait</code> blocks until services with a healthcheck are healthy, and a <code>trap</code> in your shell script makes sure <code>docker compose down -v</code> runs on the way out. If that is enough for your project, keep it. The rest of this article shows the same flow with Flisk, which helps when you have more than a couple of services or when some of them run as plain local processes.</p>
+
+<h2 id="the-same-flow-with-flisk">The same flow with Flisk</h2>
+<p>Flisk's <code>flisk up --wait</code> starts the stack in the background and returns once every service is healthy (exit 0), or when a service fails or <code>--wait-timeout</code> passes (exit 1). The stack keeps running until you call <code>flisk down</code>. The timeout is in seconds, from 1 to 21600, and defaults to 1800.</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+cleanup() { flisk down || true; }
+trap cleanup EXIT
+
+flisk up --wait --wait-timeout 900
+
+# Run a one-off command with the environment of the api service
+flisk run orders-api -- bun run seed
+
+# Where do the services answer?
+flisk networks --raw
+
+API_URL="http://api.my-shop.localhost/api/orders" bun test tests/integration</code></pre>
+<p><code>flisk run &lt;service&gt; -- &lt;command&gt;</code> runs the command with the environment the service has inside the stack (a <code>docker exec</code> into its running container, or on the host for a local process). Its exit code is the command's, so a failing seed stops the script because of <code>set -e</code>. Put <code>--</code> before any command that has flags of its own.</p>
+<p><code>flisk networks --raw</code> prints the gateway URLs, one per line. Treat the printed URLs as the source of truth instead of hard-coding them: if port 80 is taken, Flisk moves to another port and the URLs change.</p>
+
+<h2 id="keep-test-config-separate-from-development-config">Keep test config separate from development config</h2>
+<p>Tests often need different settings: another database name, a fake payment endpoint, a feature flag. Flisk can start the stack with another project env file for one run:</p>
+<pre><code>cp .env .env.integration
+printf '\nFEATURE_FLAGS=beta\n' &gt;&gt; .env.integration
+flisk up --env-file .env.integration --wait</code></pre>
+<p>Copy the project <code>.env</code> first. The selected file replaces <code>.env</code> for that run, it is not merged, and Flisk refuses a file that lacks <code>TILT_ENV</code>, <code>DB_PASSWORD</code> or <code>JWT_SECRET</code>. A stack that is already running keeps the env file it started with, so <code>flisk up --env-file</code> is refused until you run <code>flisk down</code> (or pass <code>--force</code>). Also note that changing <code>DB_PASSWORD</code> does not change an existing Postgres volume: the database keeps the password it was created with.</p>
+
+<h2 id="clean-data-between-runs">Clean data between runs</h2>
+<p>You have three options, from cheapest to most thorough:</p>
+<ul>
+<li><strong>Isolate inside the test.</strong> Create unique records per test (a random email, a new tenant) and never assert on counts of shared tables. This is the fastest and works against a long-running stack.</li>
+<li><strong>Reset with a command.</strong> Truncate and re-seed with <code>flisk run</code> before each suite.</li>
+<li><strong>Delete the volumes.</strong> <code>flisk down --purge</code> removes the project's Docker volumes, networks and images. It is the right reset for CI, and the wrong one on your laptop if you have data you care about.</li>
+</ul>
+<p>Migrations belong in their own one-shot step so the test run does not depend on an API start script. See <a href="/@odykyi/local-database-guide/database-migrations-in-local-dev/">database migrations in local dev</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Health is not readiness for your test.</strong> A service can answer <code>/health</code> before its migrations have run. Make the health endpoint check what the tests need, or order the work with <code>dependsOn</code>.</li>
+<li><strong>Port clashes.</strong> A stale stack from the last run holds the ports. Always stop in a <code>trap</code>. If it still happens, see <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">fix port already in use</a>.</li>
+<li><strong>Do not run this on every save.</strong> A real stack takes longer than a unit test. Run unit tests in the watch loop and the integration suite before you push and in CI.</li>
+<li><strong>Slow first run.</strong> The first <code>flisk up</code> builds images. Do not set a tight timeout for it.</li>
+</ul>
+
+<p>Once the script works on your machine, move it into CI: <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">run the stack in GitHub Actions</a> shows the same steps in a workflow.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I make the test run wait until every service is ready?</summary><p>Do not sleep for a fixed time. Use a command that returns only when all health checks pass. With Flisk, flisk up --wait starts the stack in the background and exits 0 once every service is healthy, or exits 1 if one fails or --wait-timeout passes. With Compose, docker compose up --wait does the same for services that have a healthcheck.</p></details><details><summary>How do I get a clean database for each test run?</summary><p>Either create a throwaway database name per run, or stop the stack and delete its volumes. With Flisk, flisk down --purge deletes the project&#39;s Docker volumes, networks and images, so use it only when you want everything gone. For a lighter reset, run a truncate or seed command with flisk run.</p></details><details><summary>Should integration tests run in the same process as the services?</summary><p>Usually not. Run the services as they run in development, and let the test runner call them over HTTP. That keeps the test honest about ports, headers, serialization and startup order.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/"><span class="lbl">Guide</span><b>Mock or run the real service in tests? A practical rule</b><span>Mocks are fast and lie. Real services are honest and slow. The useful question is which dependencies deserve which.</span></a><a href="/@odykyi/testing-and-shipping/playwright-against-a-local-stack/"><span class="lbl">Guide</span><b>How to run Playwright tests against a local multi-service stack</b><span>Browser tests are only as stable as the stack under them. Start the whole thing first, give Playwright one base URL, and keep the data predictable.</span></a><a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/"><span class="lbl">Guide</span><b>How to run a multi-service stack in GitHub Actions</b><span>Two jobs: a cheap one that catches config drift on every pull request, and a heavier one that actually starts your services.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
