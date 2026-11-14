@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to fix &quot;port already in use&quot; in local development</title>
+<meta name="description" content="Find the process that holds a port with lsof, ss or netstat, then free it or move your service. Includes how Flisk picks fallback gateway and Postgres ports.">
+<meta name="keywords" content="port already in use, address already in use, lsof port, docker port already allocated, fix port conflict localhost">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/fix-port-already-in-use/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to fix &quot;port already in use&quot; in local development">
+<meta property="og:description" content="Find the process that holds a port with lsof, ss or netstat, then free it or move your service. Includes how Flisk picks fallback gateway and Postgres ports.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/fix-port-already-in-use/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to fix \"port already in use\" in local development","description":"Find the process that holds a port with lsof, ss or netstat, then free it or move your service. Includes how Flisk picks fallback gateway and Postgres ports.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/fix-port-already-in-use/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/fix-port-already-in-use/","keywords":"port already in use, address already in use, lsof port, docker port already allocated, fix port conflict localhost","wordCount":762,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"How to fix \"port already in use\" in local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/fix-port-already-in-use/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I see what is using a port?","acceptedAnswer":{"@type":"Answer","text":"On macOS and Linux run lsof -nP -iTCP:PORT -sTCP:LISTEN. On Linux ss -ltnp also works. On Windows use netstat -ano | findstr :PORT."}},{"@type":"Question","name":"Why does Flisk use 15432 for Postgres?","acceptedAnswer":{"@type":"Answer","text":"So it does not collide with a Postgres already running on the host at 5432. If 15432 is busy, it picks another port between 15432 and 15532."}},{"@type":"Question","name":"Can I set the ports Flisk uses?","acceptedAnswer":{"@type":"Answer","text":"Yes. Set FLISK_HTTP_PORT, FLISK_HTTPS_PORT or FLISK_POSTGRES_PORT before flisk up. An explicit value that is already in use is an error, with no fallback."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>How to fix &quot;port already in use&quot; in local development</h1><p class="dek">The error is always the same: something else listens on the port you asked for. Here is how to find it and what to change.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#find-the-process-that-holds-the-port">Find the process that holds the port</a></li><li><a href="#change-the-port-in-compose">Change the port in Compose</a></li><li><a href="#what-flisk-does-with-busy-ports">What Flisk does with busy ports</a></li><li><a href="#services-that-run-as-local-processes">Services that run as local processes</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Find out what owns the port, then either stop that process or move your service to another port. On macOS and Linux, <code>lsof -nP -iTCP:5432 -sTCP:LISTEN</code> prints the program and its process ID. Flisk can also pick free ports for you: if 80, 443 or its Postgres port are busy, it chooses others and prints them.</p>
+
+<h2 id="find-the-process-that-holds-the-port">Find the process that holds the port</h2>
+<p>The error means something is already listening on the address your service wants. Often it is an old copy of your own app, a database installed on the host, or a container from another project. Use the tool for your system:</p>
+<pre><code># macOS and Linux
+lsof -nP -iTCP:5432 -sTCP:LISTEN
+
+# Linux, if lsof is missing
+ss -ltnp | grep ':5432'
+
+# Windows (cmd)
+netstat -ano | findstr :5432</code></pre>
+<p>If the owner is a stale process of yours, stop it. If it is a system service such as a Postgres you installed years ago, you can either stop that service or give your project another port. If the owner is a Docker proxy, a container has published the port, so list running containers with <code>docker ps</code> and stop the right one. Do not kill things you cannot name.</p>
+
+<h2 id="change-the-port-in-compose">Change the port in Compose</h2>
+<p>In a Compose file, the left side of <code>"5432:5432"</code> is the host port and the right side is the container port. Change only the left side:</p>
+<pre><code>services:
+  db:
+    image: postgres:17
+    ports:
+      - "5433:5432"</code></pre>
+<p>Containers on the same Compose network still reach the database on 5432, because that is the container side. Only your host tools need to use 5433. Remember to update any connection string on the host.</p>
+
+<h2 id="what-flisk-does-with-busy-ports">What Flisk does with busy ports</h2>
+<p>Flisk asks for ingress ports 80 and 443 and uses 15432 for its Postgres, so it does not collide with a host database on 5432. If its ports are taken, it picks free ones from fixed ranges and prints them: 8080 to 8180 for HTTP, 8443 to 8543 for HTTPS and 15432 to 15532 for Postgres.</p>
+<p>To choose yourself, set an environment variable before <code>flisk up</code>:</p>
+<pre><code>FLISK_HTTP_PORT=18080 FLISK_HTTPS_PORT=18443 FLISK_POSTGRES_PORT=15500 flisk up</code></pre>
+<p>An explicit value is not negotiated. If the port you named is busy, Flisk stops with a message such as <code>FLISK_HTTP_PORT=18777 is already in use. Choose a free host port and retry.</code> and does not fall back. If the whole Postgres range is full, you get <code>No available host port in 15432-15532 for postgres</code>, because the ranges are fixed.</p>
+<p>Other messages you may meet:</p>
+<ul>
+<li><code>Traefik cannot bind ingress ports because another container already owns them</code>: another container, often from a second stack, holds 80 or 443. Stop it or set the ports above.</li>
+<li><code>Ports Flisk needs are taken</code> from <code>flisk doctor</code>, with a <code>lsof</code> hint for the exact port.</li>
+<li>The Tilt UI port, 10350, moves to the next free port by itself.</li>
+</ul>
+<p>If you do not need the gateway at all, <code>flisk doctor --no-gateway</code> skips the 80 and 443 checks, and <code>flisk up --no-gateway</code> works when the project turns the gateway off in its capabilities.</p>
+
+<h2 id="services-that-run-as-local-processes">Services that run as local processes</h2>
+<p>For services with a <code>command</code> and no Docker, Flisk checks the port before it starts anything. It refuses to run and names the process:</p>
+<pre><code>Port 4000 for service "api" is already in use by node (pid 48211). Stop it, or change "port" in the service.json.</code></pre>
+<p>It also refuses when two services declare the same port. The fix is the one the message gives: stop the process, or edit <code>port</code> in that <code>service.json</code>. See <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a> for the rest of that mode.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two container services with the same <code>--port</code></strong> get no warning when you scaffold them, and the container path does not check it at <code>flisk up</code> either. Keep your own list when you create resources.</li>
+<li><strong>Colima.</strong> If <code>flisk up</code> reports <code>UP_URL_UNREACHABLE</code> or says nothing listens on the gateway port, the VM's port forwarder may have stalled. Run <code>colima restart</code>. Check port 80 with <code>lsof -nP -iTCP:80 -sTCP:LISTEN</code>; on Colima the listener shows as <code>limactl</code>.</li>
+<li><strong>Another Flisk project.</strong> Two stacks cannot both own port 80. Run one at a time, or let the second one pick from the fallback ranges.</li>
+<li><strong>Leftover networks.</strong> Docker can run out of address pools after many stacks. <code>flisk down --prune-networks</code> or <code>flisk doctor --fix</code> clears unused ones.</li>
+</ul>
+
+<p>Once the port is free, <code>flisk status</code> shows which URL each service answers on. If the cause was a stack you forgot about, read <a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/">how to stop and clean up a local stack</a> so the next session starts clean.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I see what is using a port?</summary><p>On macOS and Linux run lsof -nP -iTCP:PORT -sTCP:LISTEN. On Linux ss -ltnp also works. On Windows use netstat -ano | findstr :PORT.</p></details><details><summary>Why does Flisk use 15432 for Postgres?</summary><p>So it does not collide with a Postgres already running on the host at 5432. If 15432 is busy, it picks another port between 15432 and 15532.</p></details><details><summary>Can I set the ports Flisk uses?</summary><p>Yes. Set FLISK_HTTP_PORT, FLISK_HTTPS_PORT or FLISK_POSTGRES_PORT before flisk up. An explicit value that is already in use is an error, with no fallback.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/"><span class="lbl">Guide</span><b>Docker Compose alternative for local development</b><span>Docker Compose is a good default. This article shows where it runs out of road for local development and what a generated setup looks like.</span></a><a href="/@odykyi/docker-compose-guide/run-services-without-docker/"><span class="lbl">Guide</span><b>Run local services without Docker</b><span>If your services run fine on your laptop, you can skip the containers. Here is how to start them in order, wait for health and see the logs.</span></a><a href="/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/"><span class="lbl">Guide</span><b>Docker Desktop vs Colima vs Podman for local development</b><span>The runtime you pick decides your disk, ports and licence terms. This is a plain comparison, with the Flisk-specific notes you need.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

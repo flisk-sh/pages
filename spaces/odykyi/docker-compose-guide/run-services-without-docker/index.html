@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run local services without Docker</title>
+<meta name="description" content="Give each service a command and a port in service.json and run flisk up. Services start as local processes in order, with health waits and prefixed logs.">
+<meta name="keywords" content="run services without docker, local development without docker, run microservices without containers, process manager for local dev">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/run-services-without-docker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run local services without Docker">
+<meta property="og:description" content="Give each service a command and a port in service.json and run flisk up. Services start as local processes in order, with health waits and prefixed logs.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/run-services-without-docker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run local services without Docker","description":"Give each service a command and a port in service.json and run flisk up. Services start as local processes in order, with health waits and prefixed logs.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/run-services-without-docker/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/run-services-without-docker/","keywords":"run services without docker, local development without docker, run microservices without containers, process manager for local dev","wordCount":788,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"Run local services without Docker","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/run-services-without-docker/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I run a database without Docker in this mode?","acceptedAnswer":{"@type":"Answer","text":"Flisk can run a database image in Docker next to local processes, as a bring-your-own service. If you want no Docker at all, use a database that runs as a process or a file, such as SQLite."}},{"@type":"Question","name":"Can I mix local processes and Dockerfile builds?","acceptedAnswer":{"@type":"Answer","text":"No. A project cannot mix command services with services built from a Dockerfile, and Flisk reports MIXED_RUNTIME. A database image next to local processes is supported."}},{"@type":"Question","name":"Does it work on Windows?","acceptedAnswer":{"@type":"Answer","text":"Native Windows runs the local process mode. The Docker container path needs WSL2."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>Run local services without Docker</h1><p class="dek">If your services run fine on your laptop, you can skip the containers. Here is how to start them in order, wait for health and see the logs.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#when-plain-processes-are-enough">When plain processes are enough</a></li><li><a href="#a-two-service-example">A two-service example</a></li><li><a href="#start-watch-and-stop">Start, watch and stop</a></li><li><a href="#what-it-refuses-and-why-that-helps">What it refuses, and why that helps</a></li><li><a href="#databases-next-to-local-processes">Databases next to local processes</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Give each service a <code>command</code> and a <code>port</code> in its <code>service.json</code>, then run <code>flisk up</code>. Flisk starts the services as ordinary processes on your machine, in <code>dependsOn</code> order, waits until each one is ready, and prefixes every log line with the service name. There is no Docker, no image build and no Tilt in this mode.</p>
+
+<h2 id="when-plain-processes-are-enough">When plain processes are enough</h2>
+<p>Containers earn their keep when you need the same operating system and libraries as production, or a database image. For a Node, Python or Bun app that runs fine on your laptop, a container adds build time and file-sync trouble. Running the processes directly gives instant reload with the runtime's own watcher, simple debugging, and a machine that does not need Docker at all. That also helps on a laptop without Docker, and Flisk runs this mode on native Windows.</p>
+<p>The general recipe works with any tool: a script or a process manager that starts each program, a fixed port for each, and a health URL to wait on. Flisk packages that recipe and checks for the usual mistakes.</p>
+
+<h2 id="a-two-service-example">A two-service example</h2>
+<p>Create one folder per service, each with its own <code>service.json</code>. The API:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>A web service that depends on it and gets its address through an environment variable:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "node web.js",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "API_URL": "http://localhost:4000" }
+}</code></pre>
+<p>The <code>env</code> map accepts <code>${VAR}</code> and <code>${VAR:-default}</code>, so values can come from your shell or <code>.env</code>. For a one-off secret such as a signing key, <code>secrets.generate</code> can produce a random value (<code>hex:N</code> or <code>base64:N</code>) and append it to <code>.env</code>.</p>
+<p>If the repository is a plain Node project with a <code>package.json</code> that has <code>scripts.dev</code> or <code>scripts.start</code> and no <code>service.json</code>, Flisk can infer the service. Inferred state is stored in <code>~/.flisk/inferred/</code>, not in your repo.</p>
+
+<h2 id="start-watch-and-stop">Start, watch and stop</h2>
+<pre><code>flisk up --dry-run
+flisk up
+flisk status
+flisk logs --service api --tail 50
+flisk down</code></pre>
+<p>Use <code>--dry-run</code> first to see the plan. <code>flisk up --only web</code> starts one service and what it depends on, and <code>--json</code> gives machine-readable output. Ctrl+C stops everything.</p>
+<p>How readiness works: Flisk starts services in <code>dependsOn</code> order and waits up to 60 seconds for each. A service is ready when its health URL answers. With no health path, it is ready when the port accepts connections. With neither, it is ready if the process is still running after one second. Logs also go to <code>.flisk/native/logs/&lt;service&gt;.log</code>.</p>
+<p>If a process crashes, Flisk restarts it with a backoff of 1, 2, 4 and 8 seconds. After five quick exits it stops trying and says so. Set <code>"restart": "no"</code> on one-shot tasks.</p>
+
+<h2 id="what-it-refuses-and-why-that-helps">What it refuses, and why that helps</h2>
+<p>Flisk checks before it launches anything and stops with a clear message when:</p>
+<ul>
+<li>the program in <code>command</code> is not installed,</li>
+<li>a port is already in use, naming the process: <code>Port 4000 for service "api" is already in use by node (pid 48211). Stop it, or change "port" in the service.json.</code>,</li>
+<li>two services share one port, or</li>
+<li>a <code>dependsOn</code> name does not exist.</li>
+</ul>
+<p>The port message pairs with <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix "port already in use"</a>.</p>
+
+<h2 id="databases-next-to-local-processes">Databases next to local processes</h2>
+<p>You usually still want Postgres in a container, and Flisk supports that mix. Declare the database as a bring-your-own service with an <code>image</code>, a <code>port</code>, a <code>healthCheck.command</code> and a named volume. The processes run on the host and the database runs in Docker, published on 127.0.0.1. <code>flisk down</code> keeps the named volume.</p>
+<p>The restriction: one project cannot mix <code>command</code> services with services built from a Dockerfile. Flisk reports that as <code>MIXED_RUNTIME</code>. A database image is allowed, a Dockerfile build is not. If you do not want Docker at all, use a database that runs as a process or a local file such as SQLite.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>No isolation.</strong> Processes use your installed Node, Python or Go versions. "Works on my machine" is back, so pin versions in the repo.</li>
+<li><strong>Reload is the runtime's job.</strong> Use <code>node --watch</code>, <code>bun --watch</code> or <code>uvicorn --reload</code> in the <code>command</code>. See <a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/">Docker Compose hot reload</a> for the container side.</li>
+<li><strong>No gateway.</strong> You use <code>localhost:port</code> URLs, not <code>*.localhost</code> names behind Traefik.</li>
+<li><strong>Different from production.</strong> If production runs in containers, test the image before you ship.</li>
+</ul>
+
+<p>To see this mode without writing anything, run <code>npx @flisk-sh/flisk demo</code>. When Docker is not running, the demo falls back to a two-service app as local processes. For a broader view of running a service set on a laptop, read <a href="/@odykyi/microservices-local-dev/local-dev-without-kubernetes/">local development without Kubernetes</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I run a database without Docker in this mode?</summary><p>Flisk can run a database image in Docker next to local processes, as a bring-your-own service. If you want no Docker at all, use a database that runs as a process or a file, such as SQLite.</p></details><details><summary>Can I mix local processes and Dockerfile builds?</summary><p>No. A project cannot mix command services with services built from a Dockerfile, and Flisk reports MIXED_RUNTIME. A database image next to local processes is supported.</p></details><details><summary>Does it work on Windows?</summary><p>Native Windows runs the local process mode. The Docker container path needs WSL2.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/"><span class="lbl">Guide</span><b>How to fix &quot;port already in use&quot; in local development</b><span>The error is always the same: something else listens on the port you asked for. Here is how to find it and what to change.</span></a><a href="/@odykyi/docker-compose-guide/docker-compose-hot-reload/"><span class="lbl">Guide</span><b>Docker Compose hot reload: bind mounts, watch and alternatives</b><span>Reloading code in a container is easy to get almost right. Here is what each approach does, what breaks, and where Flisk has no live reload.</span></a><a href="/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/"><span class="lbl">Guide</span><b>Docker Desktop vs Colima vs Podman for local development</b><span>The runtime you pick decides your disk, ports and licence terms. This is a plain comparison, with the Flisk-specific notes you need.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

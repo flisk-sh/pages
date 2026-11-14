@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Compose hot reload: bind mounts, watch and alternatives</title>
+<meta name="description" content="Three ways to reload code without rebuilding: bind mounts with a watcher, docker compose watch, and Flisk&#39;s Tilt live sync. Includes what Flisk cannot reload.">
+<meta name="keywords" content="docker compose hot reload, docker compose watch, live reload docker, bind mount hot reload, tilt live_update">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/docker-compose-hot-reload/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker Compose hot reload: bind mounts, watch and alternatives">
+<meta property="og:description" content="Three ways to reload code without rebuilding: bind mounts with a watcher, docker compose watch, and Flisk&#39;s Tilt live sync. Includes what Flisk cannot reload.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/docker-compose-hot-reload/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker Compose hot reload: bind mounts, watch and alternatives","description":"Three ways to reload code without rebuilding: bind mounts with a watcher, docker compose watch, and Flisk's Tilt live sync. Includes what Flisk cannot reload.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-compose-hot-reload/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-compose-hot-reload/","keywords":"docker compose hot reload, docker compose watch, live reload docker, bind mount hot reload, tilt live_update","wordCount":791,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"Docker Compose hot reload: bind mounts, watch and alternatives","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-compose-hot-reload/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does docker compose watch replace bind mounts?","acceptedAnswer":{"@type":"Answer","text":"It can. It syncs, rebuilds or restarts on file changes without a bind mount. Your process still needs a watcher or dev server to pick up changed code."}},{"@type":"Question","name":"Does Flisk reload imported Compose services?","acceptedAnswer":{"@type":"Answer","text":"No. Services created with flisk import are bring-your-own containers. Flisk watches the manifest only, so rebuild from the Tilt UI or restart flisk up."}},{"@type":"Question","name":"How do I get live reload without Docker?","acceptedAnswer":{"@type":"Answer","text":"Run the service as a local process and use the runtime's watcher in its command, for example node --watch, bun --watch or uvicorn --reload."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>Docker Compose hot reload: bind mounts, watch and alternatives</h1><p class="dek">Reloading code in a container is easy to get almost right. Here is what each approach does, what breaks, and where Flisk has no live reload.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#option-1-bind-mount-and-an-in-container-watcher">Option 1: bind mount and an in-container watcher</a></li><li><a href="#option-2-docker-compose-watch">Option 2: docker compose watch</a></li><li><a href="#how-flisk-handles-it">How Flisk handles it</a></li><li><a href="#what-does-not-reload">What does not reload</a></li><li><a href="#choosing-between-them">Choosing between them</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>With Docker Compose, mount your source into the container and run a watcher inside it, or use <code>docker compose watch</code> to sync files on change. With Flisk, services it generates get live sync through Tilt. Services you imported or brought yourself get no live reload, so for those you rebuild or use the runtime's own watcher.</p>
+
+<h2 id="option-1-bind-mount-and-an-in-container-watcher">Option 1: bind mount and an in-container watcher</h2>
+<p>This is the oldest approach and still the most common. You mount the project folder into the container and run a tool that restarts the process when files change, such as <code>nodemon</code>, <code>node --watch</code>, <code>uvicorn --reload</code> or <code>air</code> for Go.</p>
+<pre><code>services:
+  api:
+    build: ./api
+    command: node --watch server.js
+    volumes:
+      - ./api:/app
+      - /app/node_modules
+    ports:
+      - "4000:4000"</code></pre>
+<p>The second volume, <code>/app/node_modules</code>, stops the bind mount from hiding the dependencies installed in the image. Without it you often get "module not found" on the first start.</p>
+<p>Known problems: on macOS and Windows, file change events cross a virtual machine boundary and can be slow or missing, so some watchers need polling mode (for example <code>CHOKIDAR_USEPOLLING=true</code> for chokidar-based tools). Bind mounts can also be slow for projects with huge dependency folders.</p>
+
+<h2 id="option-2-docker-compose-watch">Option 2: docker compose watch</h2>
+<p>Recent Compose 2 versions add a <code>develop.watch</code> section. Compose watches paths on the host and applies an action for each change: <code>sync</code> copies the file into the container, <code>rebuild</code> rebuilds the image, and <code>sync+restart</code> copies and restarts the service.</p>
+<pre><code>services:
+  web:
+    build: ./web
+    develop:
+      watch:
+        - action: sync
+          path: ./web/src
+          target: /app/src
+        - action: rebuild
+          path: ./web/package.json</code></pre>
+<p>Start it with <code>docker compose up --watch</code> or <code>docker compose watch</code>. It avoids the bind mount, which helps on macOS, and it handles the "dependencies changed, rebuild" case that a bind mount cannot. It still needs a watcher or a framework dev server inside the container if the process must reload code.</p>
+
+<h2 id="how-flisk-handles-it">How Flisk handles it</h2>
+<p>For services that Flisk generates, Tilt <code>live_update</code> syncs directories into the running container. The directories come from the <code>syncs</code> field in <code>service.json</code>. When you leave it out, backends sync <code>src</code> and <code>prisma</code>, and frontends sync <code>src</code> and <code>public</code>. You edit a file and Tilt copies it, without rebuilding the image for each change.</p>
+<p>Reload behaviour depends on the language:</p>
+<ul>
+<li><strong>Bun</strong> backends, workers, agents and MCP servers reload by default under <code>bun --watch</code> or <code>--hot</code>. Set <code>dev.liveReload</code> to <code>false</code> to turn that off.</li>
+<li><strong>Go</strong> services opt in with <code>dev.liveReload: true</code>, which compiles and reloads in the container through <code>flisk-go-watch</code>.</li>
+<li><strong>Python</strong> services can opt in to <code>dev.testOnSave</code>, which runs pytest when you save.</li>
+</ul>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "billing",
+  "appType": "backend",
+  "dev": { "liveReload": true }
+}</code></pre>
+<p>Treat the snippet as the shape of the <code>dev</code> block, not a complete Go service. Scaffold real services with <code>flisk resource &lt;name&gt; --type backend</code> and edit the generated <code>service.json</code>.</p>
+
+<h2 id="what-does-not-reload">What does not reload</h2>
+<ul>
+<li><strong>Bring-your-own containers</strong>, including everything created by <code>flisk import</code>. Flisk watches the manifest only. After a code change, rebuild from the Tilt UI or restart <code>flisk up</code>.</li>
+<li><strong>Local processes.</strong> A service with a <code>command</code> runs without Docker, so there is no sync step: the process reads your files directly. Use the runtime's own watcher in the <code>command</code>, such as <code>node --watch server.js</code>, <code>bun --watch server.ts</code> or <code>uvicorn app:app --reload</code>.</li>
+</ul>
+<p>If you only have bring-your-own services but still want live reload, the honest answer is to keep a <code>develop.watch</code> block in your own Compose file or to run that service as a local process.</p>
+
+<h2 id="choosing-between-them">Choosing between them</h2>
+<p>If you already have a working Compose file and the code is in one or two services, <code>compose watch</code> is usually the least change. If the whole stack is generated by Flisk, the Tilt sync is already on and you only choose the reload behaviour per language. If you want zero container overhead for the code you edit all day, run that one service as a local process and keep the database in a container. Flisk supports that mix when the container is a database image declared as bring-your-own, as long as the project does not also contain services built from a Dockerfile.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A new dependency needs a rebuild, not a sync. Changing a lockfile or <code>package.json</code> should trigger a rebuild.</li>
+<li>Syncing generated or ignored folders (<code>dist</code>, <code>.next</code>) can loop. Sync source, not output.</li>
+<li>If saves do nothing, check that the file is inside a synced directory first. The troubleshooting article on <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a> goes through the checks in order.</li>
+</ul>
+
+<p>For a frontend and an API that must both reload, see <a href="/@odykyi/microservices-local-dev/hot-reload-across-services/">hot reload across services</a>. If your services are plain processes, <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running without Docker</a> is the simplest way to get instant reload.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does docker compose watch replace bind mounts?</summary><p>It can. It syncs, rebuilds or restarts on file changes without a bind mount. Your process still needs a watcher or dev server to pick up changed code.</p></details><details><summary>Does Flisk reload imported Compose services?</summary><p>No. Services created with flisk import are bring-your-own containers. Flisk watches the manifest only, so rebuild from the Tilt UI or restart flisk up.</p></details><details><summary>How do I get live reload without Docker?</summary><p>Run the service as a local process and use the runtime&#39;s watcher in its command, for example node --watch, bun --watch or uvicorn --reload.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/run-services-without-docker/"><span class="lbl">Guide</span><b>Run local services without Docker</b><span>If your services run fine on your laptop, you can skip the containers. Here is how to start them in order, wait for health and see the logs.</span></a><a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/"><span class="lbl">Guide</span><b>Compose depends_on and healthchecks: wait for the database</b><span>Your API crashes because the database is not ready yet. This is how to order startup properly in Compose and in service.json.</span></a><a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/"><span class="lbl">Guide</span><b>Docker Compose alternative for local development</b><span>Docker Compose is a good default. This article shows where it runs out of road for local development and what a generated setup looks like.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

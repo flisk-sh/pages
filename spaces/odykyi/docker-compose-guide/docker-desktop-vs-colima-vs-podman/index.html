@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker Desktop vs Colima vs Podman for local development</title>
+<meta name="description" content="How to pick a container runtime for a laptop: Docker Desktop, Colima, OrbStack or Podman. Includes what Flisk checks and what has not been verified on Podman.">
+<meta name="keywords" content="docker desktop vs colima, colima vs podman, docker desktop alternative, best docker runtime for mac, orbstack vs docker desktop">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker Desktop vs Colima vs Podman for local development">
+<meta property="og:description" content="How to pick a container runtime for a laptop: Docker Desktop, Colima, OrbStack or Podman. Includes what Flisk checks and what has not been verified on Podman.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker Desktop vs Colima vs Podman for local development","description":"How to pick a container runtime for a laptop: Docker Desktop, Colima, OrbStack or Podman. Includes what Flisk checks and what has not been verified on Podman.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/","keywords":"docker desktop vs colima, colima vs podman, docker desktop alternative, best docker runtime for mac, orbstack vs docker desktop","wordCount":725,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker Compose for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/"},{"@type":"ListItem","position":3,"name":"Docker Desktop vs Colima vs Podman for local development","item":"https://pages.flisk.si/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Flisk work with Podman?","acceptedAnswer":{"@type":"Answer","text":"Flisk's doctor recognises a running Podman, but whether a whole Flisk stack runs on it has not been checked. Its docs name Docker Desktop, OrbStack and Colima."}},{"@type":"Question","name":"What does Flisk require from the container engine?","acceptedAnswer":{"@type":"Answer","text":"Docker Engine 25 or newer and Compose 2.20.2 or newer, plus Tilt, Node 22.12 or newer and Bun 1.2 or newer for the container path."}},{"@type":"Question","name":"Do I need Docker at all with Flisk?","acceptedAnswer":{"@type":"Answer","text":"No. Services with a command in service.json run as local processes with no Docker. A project cannot mix those with Dockerfile builds."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-compose-guide/">Docker Compose for local development</a></div>
+<section class="hero"><div><div class="lbl">Docker Compose for local development</div><h1>Docker Desktop vs Colima vs Podman for local development</h1><p class="dek">The runtime you pick decides your disk, ports and licence terms. This is a plain comparison, with the Flisk-specific notes you need.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-each-one-is">What each one is</a></li><li><a href="#how-to-choose">How to choose</a></li><li><a href="#what-flisk-expects">What Flisk expects</a></li><li><a href="#colima-notes">Colima notes</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Pick Docker Desktop if you want the easiest install and a GUI, and your company's licence terms allow it. Pick Colima on a Mac or Linux machine if you want a free, command-line Docker engine in a lightweight VM. Pick Podman if you need rootless, daemonless containers. Flisk's documentation names Docker Desktop, OrbStack and Colima. Whether a whole Flisk stack runs on Podman has not been checked, so this article does not claim it.</p>
+
+<h2 id="what-each-one-is">What each one is</h2>
+<p><strong>Docker Desktop</strong> is Docker's application for macOS, Windows and Linux. It bundles the engine, the <code>docker</code> CLI and Compose, and it manages a VM for you. It has a graphical dashboard. Docker's subscription terms require a paid plan for larger companies, so read the current terms before you roll it out to a team.</p>
+<p><strong>Colima</strong> is an open-source tool for macOS and Linux that runs a small Linux VM through Lima and exposes a Docker socket. You install the <code>docker</code> and <code>docker-compose</code> CLIs yourself. It is started from the terminal with <code>colima start</code>, and you can set CPU, memory and disk size when you create the VM.</p>
+<p><strong>OrbStack</strong> is a macOS app that runs Docker containers and is an alternative to Docker Desktop. Flisk's messages and docs list it next to the other two.</p>
+<p><strong>Podman</strong> is a container engine without a central daemon that can run rootless. On macOS and Windows it runs through a VM managed by <code>podman machine</code>. It can emulate the Docker API through a socket, and has <code>podman compose</code>, but compatibility with Compose files and tools that assume the Docker socket varies.</p>
+
+<h2 id="how-to-choose">How to choose</h2>
+<table>
+<thead><tr><th>You want</th><th>Likely choice</th></tr></thead>
+<tbody>
+<tr><td>Fewest steps, a GUI, works on Windows</td><td>Docker Desktop</td></tr>
+<tr><td>Free and scriptable on a Mac or Linux laptop</td><td>Colima</td></tr>
+<tr><td>An alternative Mac app to Docker Desktop</td><td>OrbStack</td></tr>
+<tr><td>Rootless containers, no daemon</td><td>Podman</td></tr>
+</tbody>
+</table>
+<p>Do not choose by benchmark posts. Memory and file-sharing behaviour depend on your project, your Mac and your versions. Try the candidate on your real project for a day.</p>
+
+<h2 id="what-flisk-expects">What Flisk expects</h2>
+<p>The container path needs a running Docker-compatible engine (Engine 25 or newer, Compose 2.20.2 or newer, per the README) plus Tilt, Node 22.12 or newer and Bun 1.2 or newer. If Docker is not reachable, <code>flisk doctor</code> tells you: its fix text says to start Docker Desktop, OrbStack or Colima. If Docker is down and Podman answers, the check prints "Podman is running", which shows Flisk sees it. That does not mean everything in a stack works on it.</p>
+<pre><code>flisk doctor
+flisk doctor --json</code></pre>
+<p>The JSON output reports the host kind (<code>local</code>, <code>wsl2</code>, <code>devcontainer</code>, <code>codespaces</code>, <code>webcontainer</code> or <code>native-windows</code>) and whether the container runtime is reachable.</p>
+<p>If you want no engine at all, <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run services without Docker</a>. Native Windows uses that mode, while the Docker path on Windows needs WSL2 with the project inside the Ubuntu home directory, not under <code>/mnt/c</code>.</p>
+
+<h2 id="colima-notes">Colima notes</h2>
+<ul>
+<li><strong>Bind mounts.</strong> Colima shares your home directory with the VM by default, so a project under <code>$HOME</code> works. A project under <code>/private/tmp</code> cannot be mounted, which trips up scratch-folder tests.</li>
+<li><strong>Disk.</strong> <code>flisk doctor</code> has a Colima Disk check. <code>flisk down --prune-cache</code> trims the VM and reports how much space went back to the Mac.</li>
+<li><strong>Stalled port forwarding.</strong> If URLs stop answering, <code>colima restart</code> is the usual fix. A stopped VM shows up as a clear message from <code>flisk doctor</code> with <code>colima start</code> as the fix.</li>
+<li><strong>Free space.</strong> Under 5 GiB free, <code>flisk up</code> stops. Under 15 GiB it warns. A full disk can damage the image store and the repair deletes volumes.</li>
+</ul>
+<p>The longer walkthrough is in <a href="/@odykyi/team-dev-environments/mac-local-dev-with-colima/">Mac local dev with Colima</a>, and the disk cases are in <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Switching engines changes where images and volumes live. Your old volumes do not move. Export data you need first.</li>
+<li>Only one engine should own the <code>docker</code> context at a time. Check with <code>docker context ls</code>.</li>
+<li>Resource limits on the VM are real. A stack that works on Docker Desktop with 8 GB may fail on a Colima VM created with less.</li>
+<li>Do not assume tools that mount <code>/var/run/docker.sock</code> work the same under Podman.</li>
+</ul>
+
+<p>Whichever you choose, run <code>flisk doctor</code> before the first <code>flisk up</code>. For the cases where the choice causes a port error, see <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">fixing "port already in use"</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Flisk work with Podman?</summary><p>Flisk&#39;s doctor recognises a running Podman, but whether a whole Flisk stack runs on it has not been checked. Its docs name Docker Desktop, OrbStack and Colima.</p></details><details><summary>What does Flisk require from the container engine?</summary><p>Docker Engine 25 or newer and Compose 2.20.2 or newer, plus Tilt, Node 22.12 or newer and Bun 1.2 or newer for the container path.</p></details><details><summary>Do I need Docker at all with Flisk?</summary><p>No. Services with a command in service.json run as local processes with no Docker. A project cannot mix those with Dockerfile builds.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker Compose for local development</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-compose-guide/run-services-without-docker/"><span class="lbl">Guide</span><b>Run local services without Docker</b><span>If your services run fine on your laptop, you can skip the containers. Here is how to start them in order, wait for health and see the logs.</span></a><a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/"><span class="lbl">Guide</span><b>How to fix &quot;port already in use&quot; in local development</b><span>The error is always the same: something else listens on the port you asked for. Here is how to find it and what to change.</span></a><a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/"><span class="lbl">Guide</span><b>Keep Docker Compose volumes between runs, or reset them</b><span>Your database should be there after a restart, and gone when you ask. Here is what decides which one you get.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
