@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to paginate order history without OFFSET in Postgres</title>
+<meta name="description" content="Use keyset pagination for order lists: a stable sort, a composite index, a row comparison on created_at and id, and an opaque cursor, with EXPLAIN checks.">
+<meta name="keywords" content="keyset pagination postgres, order history pagination, offset vs cursor pagination, paginate with created_at and id, cursor pagination api">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to paginate order history without OFFSET in Postgres">
+<meta property="og:description" content="Use keyset pagination for order lists: a stable sort, a composite index, a row comparison on created_at and id, and an opaque cursor, with EXPLAIN checks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to paginate order history without OFFSET in Postgres","description":"Use keyset pagination for order lists: a stable sort, a composite index, a row comparison on created_at and id, and an opaque cursor, with EXPLAIN checks.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/","keywords":"keyset pagination postgres, order history pagination, offset vs cursor pagination, paginate with created_at and id, cursor pagination api","wordCount":662,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to paginate order history without OFFSET in Postgres","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/paginate-order-history-without-offset/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is OFFSET ever fine?","acceptedAnswer":{"@type":"Answer","text":"Yes, for small tables or admin screens with filters that keep the result set small. The problems appear with deep pages on large tables."}},{"@type":"Question","name":"Why include id in the sort?","acceptedAnswer":{"@type":"Answer","text":"Many rows can share one created_at value. Without the id as a tie-breaker, pages can repeat or skip rows."}},{"@type":"Question","name":"Can I paginate backwards?","acceptedAnswer":{"@type":"Answer","text":"Yes. Flip the comparison and the sort, fetch the rows, then reverse them in code."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to paginate order history without OFFSET in Postgres</h1><p class="dek">OFFSET gets slower on every page and skips rows when new orders arrive. Keyset pagination reads a fixed amount each time and does not lose its place.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-is-wrong-with-offset">What is wrong with OFFSET</a></li><li><a href="#keyset-pagination-in-sql">Keyset pagination in SQL</a></li><li><a href="#the-cursor-in-your-api">The cursor in your API</a></li><li><a href="#check-the-plan-not-the-guess">Check the plan, not the guess</a></li><li><a href="#trade-offs">Trade-offs</a></li></ol></nav></aside>
+<article><p>Paginate with a cursor made of the last row's sort keys, not with <code>OFFSET</code>. For an order list sorted newest first, ask for rows where <code>(created_at, id)</code> is less than the cursor, ordered the same way, with a composite index that matches. Each page costs about the same however deep you go, and new orders arriving do not shift the pages.</p>
+
+<h2 id="what-is-wrong-with-offset">What is wrong with OFFSET</h2>
+<p>A query such as <code>ORDER BY created_at DESC LIMIT 20 OFFSET 10000</code> makes Postgres produce and discard 10,000 rows before returning 20. The cost grows with the page number. It also drifts: if a new order arrives while the customer is on page 2, every row moves one place and page 3 repeats the last row of page 2. For a customer with 30 orders none of this matters. For an admin screen over millions of orders, or an API someone scripts against, it does.</p>
+
+<h2 id="keyset-pagination-in-sql">Keyset pagination in SQL</h2>
+<p>Sort by a column that is unique when combined with the id, because many orders can share one timestamp. Use both in the sort and in the cursor:</p>
+<pre><code>-- first page
+SELECT id, created_at, status, total_minor
+FROM orders
+WHERE customer_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 21;
+
+-- next page: $2 and $3 come from the last row of the previous page
+SELECT id, created_at, status, total_minor
+FROM orders
+WHERE customer_id = $1
+  AND (created_at, id) &lt; ($2, $3)
+ORDER BY created_at DESC, id DESC
+LIMIT 21;</code></pre>
+<p>The pair comparison <code>(created_at, id) &lt; ($2, $3)</code> compares the first value, and the second only on a tie. That is exactly the order of the sort, so no row is missed or repeated. Ask for one more row than the page size (21 for 20). If you get 21, there is a next page, and you return only 20 of them.</p>
+<p>The index must match the sort so Postgres can walk it directly:</p>
+<pre><code>CREATE INDEX orders_customer_created_idx
+  ON orders (customer_id, created_at DESC, id DESC);</code></pre>
+
+<h2 id="the-cursor-in-your-api">The cursor in your API</h2>
+<p>Do not expose raw column values as the contract. Encode them into one opaque string, so you can change the sort later:</p>
+<pre><code>const encode = (c: { t: string; id: number }) =&gt;
+  Buffer.from(JSON.stringify(c)).toString("base64url");
+const decode = (s: string) =&gt; JSON.parse(Buffer.from(s, "base64url").toString());
+
+// response: { items: [...], next: encode({ t: last.created_at, id: last.id }) }
+// request:  GET /orders?limit=20&amp;after=&lt;cursor&gt;</code></pre>
+<p>Validate the cursor on input: reject anything that does not decode to the expected shape, and cap <code>limit</code> (for example at 100). Pass the timestamp back as it came from the database, with its full microsecond precision, or you will skip rows that share a rounded timestamp.</p>
+
+<h2 id="check-the-plan-not-the-guess">Check the plan, not the guess</h2>
+<p>Run <code>EXPLAIN (ANALYZE, BUFFERS)</code> on both queries against a large table. With the index above you should see an index scan that stops after 21 rows. With OFFSET you will see it read far more. The difference only shows on lots of rows, so load a big seed first; <a href="/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/">generating realistic shop data</a> shows how to create 100,000 orders in seconds. If your local Postgres runs in Flisk, open a <code>psql</code> session with <code>docker exec -it my_shop_postgres psql -U my_shop -d my_shop_shop</code> (the names follow the project and stack, see <a href="/@odykyi/local-database-guide/connect-to-a-local-database-from-your-machine/">connecting to a local database</a>), and paste the queries there.</p>
+
+<h2 id="trade-offs">Trade-offs</h2>
+<ul>
+<li><strong>No "jump to page 50".</strong> Cursors only go forward and back. If the admin UI needs page numbers, OFFSET is acceptable for small, filtered sets.</li>
+<li><strong>Changing the sort.</strong> Each sort order needs its own index and cursor shape. Sorting by total value needs <code>(total_minor, id)</code>.</li>
+<li><strong>Total counts.</strong> <code>COUNT(*)</code> on a big table is slow. Show "more than 1,000" or an estimate, or cache the count.</li>
+<li><strong>Mixed sort directions.</strong> A row comparison needs the same direction on every column. If you need <code>created_at DESC, id ASC</code>, write the condition as an explicit OR expression.</li>
+</ul>
+<p>For the order list to be useful, orders must also have clean statuses; see <a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/">modelling order statuses</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is OFFSET ever fine?</summary><p>Yes, for small tables or admin screens with filters that keep the result set small. The problems appear with deep pages on large tables.</p></details><details><summary>Why include id in the sort?</summary><p>Many rows can share one created_at value. Without the id as a tie-breaker, pages can repeat or skip rows.</p></details><details><summary>Can I paginate backwards?</summary><p>Yes. Flip the comparison and the sort, fetch the rows, then reverse them in code.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/seed-realistic-store-data-with-faker/"><span class="lbl">Guide</span><b>How to generate realistic shop data for local development</b><span>Ten rows will not show you a slow query or a broken pagination. Generate thousands of rows that look like a real store, and make the data the same on every run.</span></a><a href="/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/"><span class="lbl">Guide</span><b>How to model order statuses as a state machine in Postgres</b><span>Most order bugs are a status that moved when it should not. Write the allowed moves down, enforce them in one place and keep a log of every change.</span></a><a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"><span class="lbl">Guide</span><b>How to stop overselling stock when two customers check out</b><span>Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

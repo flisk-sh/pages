@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to model order statuses as a state machine in Postgres</title>
+<meta name="description" content="Define which order status changes are allowed, enforce them with a guarded UPDATE, keep an event history table and test every transition without a stack.">
+<meta name="keywords" content="order status state machine, order lifecycle statuses, postgres order status transitions, ecommerce order states, order history table">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to model order statuses as a state machine in Postgres">
+<meta property="og:description" content="Define which order status changes are allowed, enforce them with a guarded UPDATE, keep an event history table and test every transition without a stack.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to model order statuses as a state machine in Postgres","description":"Define which order status changes are allowed, enforce them with a guarded UPDATE, keep an event history table and test every transition without a stack.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/","keywords":"order status state machine, order lifecycle statuses, postgres order status transitions, ecommerce order states, order history table","wordCount":797,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"E-commerce backends locally","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/"},{"@type":"ListItem","position":3,"name":"How to model order statuses as a state machine in Postgres","item":"https://pages.flisk.si/@odykyi/ecommerce-backend-local/order-status-state-machine-in-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use a Postgres enum for order status?","acceptedAnswer":{"@type":"Answer","text":"A CHECK constraint on a text column is simpler to change. Enums work, but adding or removing values needs more care in migrations."}},{"@type":"Question","name":"Do I need an event table if I have updated_at?","acceptedAnswer":{"@type":"Answer","text":"Yes, if you ever need to answer who changed the status and when. updated_at only keeps the last change."}},{"@type":"Question","name":"Can a database trigger enforce the transitions?","acceptedAnswer":{"@type":"Answer","text":"It can, and it is a good safety net. Most teams keep the rule in application code where it is easier to test, and add a trigger only for critical paths."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ecommerce-backend-local/">E-commerce backends locally</a></div>
+<section class="hero"><div><div class="lbl">E-commerce backends locally</div><h1>How to model order statuses as a state machine in Postgres</h1><p class="dek">Most order bugs are a status that moved when it should not. Write the allowed moves down, enforce them in one place and keep a log of every change.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#keep-the-list-of-states-short">Keep the list of states short</a></li><li><a href="#write-the-allowed-moves-as-data">Write the allowed moves as data</a></li><li><a href="#change-status-with-a-guarded-update">Change status with a guarded UPDATE</a></li><li><a href="#use-a-check-or-an-enum-for-the-values">Use a CHECK or an enum for the values</a></li><li><a href="#test-every-move-with-and-without-the-database">Test every move, with and without the database</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Model order status as a small state machine: a fixed list of states, a table of allowed moves, and one function that performs every change with a guarded <code>UPDATE</code>. The guard (<code>WHERE status = 'expected_current_state'</code>) means two competing requests cannot both win. Add an events table and you get a full history for free.</p>
+
+<h2 id="keep-the-list-of-states-short">Keep the list of states short</h2>
+<p>A typical shop needs fewer states than people expect. A workable set:</p>
+<ul>
+<li><code>pending_payment</code>: the order exists and stock is held.</li>
+<li><code>paid</code>: money is confirmed.</li>
+<li><code>fulfilling</code>: the warehouse or your code is packing it.</li>
+<li><code>shipped</code> and <code>delivered</code>.</li>
+<li><code>cancelled</code> and <code>expired</code>: terminal, stock released.</li>
+<li><code>refunded</code>: terminal, after <code>paid</code> or later.</li>
+</ul>
+<p>Resist adding a state for every screen in the admin. A flag such as <code>gift_wrap</code> is not a state. If you find yourself writing <code>status = 'paid_but_waiting_for_address'</code>, that is a second field.</p>
+
+<h2 id="write-the-allowed-moves-as-data">Write the allowed moves as data</h2>
+<p>Put the transitions in one place, as a map your code reads and your tests iterate over:</p>
+<pre><code>export const NEXT: Record&lt;string, string[]&gt; = {
+  pending_payment: ["paid", "cancelled", "expired"],
+  paid: ["fulfilling", "refunded", "cancelled"],
+  fulfilling: ["shipped", "cancelled"],
+  shipped: ["delivered", "refunded"],
+  delivered: ["refunded"],
+  cancelled: [],
+  expired: [],
+  refunded: [],
+};</code></pre>
+<p>Terminal states have an empty list. That one line prevents a whole family of bugs, such as a late "payment succeeded" message reviving an order you already cancelled and released.</p>
+
+<h2 id="change-status-with-a-guarded-update">Change status with a guarded UPDATE</h2>
+<p>The only way status should change is through one function. It checks the map, then updates with the current state in the <code>WHERE</code> clause, in the same transaction as the history row:</p>
+<pre><code>BEGIN;
+UPDATE orders
+SET status = 'paid', updated_at = now()
+WHERE id = $1 AND status = 'pending_payment';
+-- affected rows = 0 means someone else moved it first: stop here
+INSERT INTO order_events (order_id, from_status, to_status, actor, created_at)
+VALUES ($1, 'pending_payment', 'paid', $2, now());
+COMMIT;</code></pre>
+<p>If the update touches zero rows, do not insert the event and do not treat it as a crash. Return a clear "already changed" result. The caller decides whether that is fine (a duplicate message) or a conflict (two admins clicking at once). The same guard makes retries safe: sending "mark as paid" twice moves the order once.</p>
+<p>Add the table that records the history:</p>
+<pre><code>CREATE TABLE order_events (
+  id          bigserial PRIMARY KEY,
+  order_id    bigint NOT NULL REFERENCES orders(id),
+  from_status text NOT NULL,
+  to_status   text NOT NULL,
+  actor       text NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON order_events (order_id, id);</code></pre>
+<p>Later, when a customer asks why an order was cancelled, the answer is one query.</p>
+
+<h2 id="use-a-check-or-an-enum-for-the-values">Use a CHECK or an enum for the values</h2>
+<p>Constrain the column so a typo cannot become a state. A <code>CHECK (status IN (...))</code> is easier to change than a Postgres enum, because adding a value to a CHECK is a normal migration, while enum changes have extra rules. Postgres cannot easily express "only these transitions" in a constraint; a trigger can, but most teams keep the transition rule in application code and the allowed values in the schema.</p>
+
+<h2 id="test-every-move-with-and-without-the-database">Test every move, with and without the database</h2>
+<p>Two kinds of test pay off. First, a pure test over the map: for each state and each target, assert that the function accepts the listed moves and rejects the rest. It runs in milliseconds and needs no database. Second, a test against real Postgres for the guard: call "mark as paid" twice in parallel and assert exactly one event row.</p>
+<p>For the second test with Flisk, create the API and the shared database as in <a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/">stopping overselling</a>, keep the DDL above in a migration, and put the test in a script you run inside the service:</p>
+<pre><code>flisk run orders-api -- bun test</code></pre>
+<p>That runs the command with the service's environment, including its <code>DATABASE_URL</code>, so the test hits the same Postgres your API uses. Use a separate database or schema for tests if the data matters, and see <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a> for the options.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Status set in several places.</strong> Webhook handlers, admin screens and jobs each running <code>UPDATE orders SET status = ...</code> is how invalid states appear. Search your code for it.</li>
+<li><strong>Timestamps instead of states.</strong> <code>paid_at</code> and <code>shipped_at</code> columns are useful, but derive them from the events, or set them in the same function.</li>
+<li><strong>Cancelling a shipped order.</strong> Decide the rule now. In the map above a shipped order can only be refunded, which forces a return flow.</li>
+<li><strong>One giant state for everything.</strong> Keep payment, fulfilment and shipping as separate fields on bigger systems, so they can move on their own.</li>
+</ul>
+<p>Once statuses are safe, the next common failure is an order that sits in <code>pending_payment</code> forever and holds stock. <a href="/@odykyi/ecommerce-backend-local/expire-unpaid-orders-and-release-stock/">Expiring unpaid orders</a> covers it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use a Postgres enum for order status?</summary><p>A CHECK constraint on a text column is simpler to change. Enums work, but adding or removing values needs more care in migrations.</p></details><details><summary>Do I need an event table if I have updated_at?</summary><p>Yes, if you ever need to answer who changed the status and when. updated_at only keeps the last change.</p></details><details><summary>Can a database trigger enforce the transitions?</summary><p>It can, and it is a good safety net. Most teams keep the rule in application code where it is easier to test, and add a trigger only for critical paths.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">E-commerce backends locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/stop-overselling-stock-at-checkout/"><span class="lbl">Guide</span><b>How to stop overselling stock when two customers check out</b><span>Overselling is a race condition, not a business rule. Make the database refuse the second sale and prove it with a test that fires two requests at once.</span></a><a href="/@odykyi/ecommerce-backend-local/expire-unpaid-orders-and-release-stock/"><span class="lbl">Guide</span><b>How to expire unpaid orders and release the reserved stock</b><span>An abandoned checkout keeps stock locked. A small sweep job fixes that, as long as the query is safe when two copies run at once.</span></a><a href="/@odykyi/ecommerce-backend-local/product-variants-schema-postgres/"><span class="lbl">Guide</span><b>Database schema for product variants: sizes, colours and SKUs</b><span>A t-shirt in three sizes and four colours is twelve things to stock, not one. Model the product, its variants and the stock separately.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
