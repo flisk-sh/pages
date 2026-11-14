@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run only the changed services in a monorepo</title>
+<meta name="description" content="Select only the affected packages with pnpm --filter, turbo --filter and nx affected, and start a subset of services locally with flisk up --only.">
+<meta name="keywords" content="nx affected, turbo filter changed packages, pnpm filter changed, monorepo run only affected, flisk up only">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run only the changed services in a monorepo">
+<meta property="og:description" content="Select only the affected packages with pnpm --filter, turbo --filter and nx affected, and start a subset of services locally with flisk up --only.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run only the changed services in a monorepo","description":"Select only the affected packages with pnpm --filter, turbo --filter and nx affected, and start a subset of services locally with flisk up --only.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/","keywords":"nx affected, turbo filter changed packages, pnpm filter changed, monorepo run only affected, flisk up only","wordCount":667,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Monorepos with several services","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/"},{"@type":"ListItem","position":3,"name":"How to run only the changed services in a monorepo","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What do the three dots in a pnpm or turbo filter mean?","acceptedAnswer":{"@type":"Answer","text":"A leading ... includes the dependents of the selected packages, and a trailing ... includes their dependencies. ...[origin/main] means changed packages and everything that depends on them."}},{"@type":"Question","name":"Why does nx affected select everything in CI?","acceptedAnswer":{"@type":"Answer","text":"Usually the base commit is missing from a shallow clone, or a global input such as the lockfile changed. Fetch full history and set --base."}},{"@type":"Question","name":"Does flisk up compute affected services?","acceptedAnswer":{"@type":"Answer","text":"No. It starts a named subset with --only, a stack, or profiles. Feed it names from your tool's affected command if you want that."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-tooling/">Monorepos with several services</a></div>
+<section class="hero"><div><div class="lbl">Monorepos with several services</div><h1>How to run only the changed services in a monorepo</h1><p class="dek">Running every test and every server for every change wastes time. Git-aware filters pick the packages a change touches, and the packages that depend on them.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-affected-means">What &quot;affected&quot; means</a></li><li><a href="#the-commands">The commands</a></li><li><a href="#servers-are-not-tests">Servers are not tests</a></li><li><a href="#starting-a-subset-with-flisk">Starting a subset with Flisk</a></li><li><a href="#a-ci-example">A CI example</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Each major monorepo tool can select packages by what changed in git: <code>pnpm --filter "...[origin/main]"</code>, <code>turbo run test --filter="...[origin/main]"</code> and <code>nx affected -t test</code>. They compare your branch to a base, find changed packages, and add the packages that depend on them. For local servers, start a subset by name instead.</p>
+<h2 id="what-affected-means">What "affected" means</h2>
+<p>If <code>packages/shared</code> changes, everything that imports it is affected, but a change in <code>apps/admin</code> affects only itself. A good filter follows the dependency graph, not only the file list. If you test only the folder you edited, you miss breakage in its consumers.</p>
+<h2 id="the-commands">The commands</h2>
+<p><strong>pnpm.</strong> The three dots before the bracket mean "changed packages and their dependents":</p>
+<pre><code>pnpm --filter "...[origin/main]" run test</code></pre>
+<p>Without the dots, <code>--filter "[origin/main]"</code> selects only the changed packages themselves.</p>
+<p><strong>Turborepo.</strong> The same filter syntax works with <code>turbo run</code>:</p>
+<pre><code>turbo run test build --filter="...[origin/main]"</code></pre>
+<p><strong>Nx.</strong> The command is built in and has a base option:</p>
+<pre><code>nx affected -t test build --base=origin/main
+nx show projects --affected --base=origin/main</code></pre>
+<p>In all three the base must exist in the checkout. In CI, a shallow clone often has no <code>origin/main</code>, so fetch enough history or the filter selects everything or fails. Use <code>fetch-depth: 0</code> on GitHub Actions, or fetch the base branch explicitly.</p>
+<h2 id="servers-are-not-tests">Servers are not tests</h2>
+<p>Affected filters answer "what should I verify?", which is a build and test question. They do not answer "what should I run to try this change?". For that you choose by hand: the service you edited plus the services it calls. A good habit is to give each service a short name and start exactly those.</p>
+<p>With a plain pnpm workspace, that is <code>pnpm --filter @shop/web... --parallel run dev</code>. The trailing dots add dependencies, which for a website usually includes the API package it talks to.</p>
+<h2 id="starting-a-subset-with-flisk">Starting a subset with Flisk</h2>
+<p>Flisk has this built in. <code>flisk up --only api web</code> starts those services plus what they depend on through <code>dependsOn</code>. For container services it also starts the shared infrastructure the Tiltfile enables for them. With local processes, <code>flisk up --only web</code> starts <code>web</code> and the services it depends on, in order, and leaves the rest off.</p>
+<pre><code>flisk up --only api web
+flisk up shop               # one stack
+flisk up --profile admin    # also start services tagged "admin"</code></pre>
+<p>Use <code>profiles</code> in <code>service.json</code> for heavy parts you rarely need, such as an admin app or a reporting job:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "admin",
+  "appType": "frontend",
+  "command": "pnpm dev",
+  "port": 3001,
+  "profiles": ["admin"]
+}</code></pre>
+<p>Without <code>--profile admin</code> that service is left out; with <code>--only admin</code> it starts anyway. Flisk does not compute affected packages from git. If you want that, run your tool's affected command and pass the resulting names to <code>--only</code> yourself. See also <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">starting only the services you need</a>.</p>
+<h2 id="a-ci-example">A CI example</h2>
+<p>On GitHub Actions the usual failure is a checkout that is too shallow for the comparison. Fetch the history, then run the filter:</p>
+<pre><code>- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+- run: pnpm install --frozen-lockfile
+- run: pnpm --filter "...[origin/main]" run test</code></pre>
+<p>On a pull request, <code>origin/main</code> is the base you want. On a push to main itself, comparing to <code>origin/main</code> selects nothing, so compare to the previous commit (<code>HEAD~1</code>) or run everything on that branch.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Missing base branch.</strong> In a shallow clone the base commit is absent. Fetch it.</li>
+<li><strong>Changed root files.</strong> A change to the lockfile, <code>turbo.json</code> or a root config can affect every package. Tools treat some root files as global inputs; check yours, or the filter hides real breakage.</li>
+<li><strong>Dependents only through runtime calls.</strong> The graph sees imports, not HTTP calls. If service A calls service B over HTTP, a change in B does not mark A affected. Add contract tests for those links.</li>
+<li><strong>Do not skip a full run before release.</strong> Run everything on the main branch.</li>
+</ul>
+<p>On the CI side, see <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">running a multi-service stack in GitHub Actions</a>. For layout questions, see <a href="/@odykyi/monorepo-tooling/monorepo-or-separate-repos-for-services/">monorepo or separate repos</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What do the three dots in a pnpm or turbo filter mean?</summary><p>A leading ... includes the dependents of the selected packages, and a trailing ... includes their dependencies. ...[origin/main] means changed packages and everything that depends on them.</p></details><details><summary>Why does nx affected select everything in CI?</summary><p>Usually the base commit is missing from a shallow clone, or a global input such as the lockfile changed. Fetch full history and set --base.</p></details><details><summary>Does flisk up compute affected services?</summary><p>No. It starts a named subset with --only, a stack, or profiles. Feed it names from your tool&#39;s affected command if you want that.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepos with several services</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-tooling/nx-run-many-serve-services/"><span class="lbl">Guide</span><b>Nx run-many: how to serve several apps at the same time</b><span>nx run-many is built for builds and tests. It can start dev servers too, if you know about one default that surprises people.</span></a><a href="/@odykyi/monorepo-tooling/turborepo-dev-task-persistent-services/"><span class="lbl">Guide</span><b>Turborepo dev task: run many services with turbo dev</b><span>turbo dev can start every app in a repo with one command. The catch is a few settings that decide whether it works at all.</span></a><a href="/@odykyi/monorepo-tooling/monorepo-or-separate-repos-for-services/"><span class="lbl">Guide</span><b>Monorepo or separate repos for backend services?</b><span>The honest answer depends on team boundaries more than on tools. Here is what each choice costs, including for local development.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

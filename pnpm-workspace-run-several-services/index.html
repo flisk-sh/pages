@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pnpm workspace: how to run several services at once</title>
+<meta name="description" content="Run an API, a website and a worker from one pnpm workspace with pnpm -r, --filter and a root script, plus how Flisk starts them in order with one command.">
+<meta name="keywords" content="pnpm workspace run multiple services, pnpm -r --parallel dev, pnpm filter, pnpm monorepo dev servers">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="pnpm workspace: how to run several services at once">
+<meta property="og:description" content="Run an API, a website and a worker from one pnpm workspace with pnpm -r, --filter and a root script, plus how Flisk starts them in order with one command.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"pnpm workspace: how to run several services at once","description":"Run an API, a website and a worker from one pnpm workspace with pnpm -r, --filter and a root script, plus how Flisk starts them in order with one command.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/","keywords":"pnpm workspace run multiple services, pnpm -r --parallel dev, pnpm filter, pnpm monorepo dev servers","wordCount":685,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Monorepos with several services","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/"},{"@type":"ListItem","position":3,"name":"pnpm workspace: how to run several services at once","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does pnpm -r run dev only start one package?","acceptedAnswer":{"@type":"Answer","text":"Without --parallel pnpm runs scripts in topological order and waits for each to exit. A dev server never exits, so the next package never starts. Add --parallel."}},{"@type":"Question","name":"How do I run one app and the packages it depends on?","acceptedAnswer":{"@type":"Answer","text":"Use a filter with three dots, for example pnpm --filter @shop/web... --parallel run dev. The trailing dots include the package's workspace dependencies."}},{"@type":"Question","name":"Does Flisk replace pnpm workspaces?","acceptedAnswer":{"@type":"Answer","text":"No. pnpm still installs and links packages. Flisk only starts the services, in order, and watches their health."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-tooling/">Monorepos with several services</a></div>
+<section class="hero"><div><div class="lbl">Monorepos with several services</div><h1>pnpm workspace: how to run several services at once</h1><p class="dek">A pnpm workspace gives you one install and one lockfile. It does not decide which services start, in what order, or where their logs go. Here is how to cover that.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#set-up-the-workspace">Set up the workspace</a></li><li><a href="#start-everything-or-a-part">Start everything or a part</a></li><li><a href="#what-pnpm-does-not-do">What pnpm does not do</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run several services from one pnpm workspace, list the folders in <code>pnpm-workspace.yaml</code>, give every service a <code>dev</code> script, and start them with <code>pnpm -r --parallel run dev</code>. Use <code>--filter</code> when you want only some of them. That works well for two or three services; past that, start order and mixed logs become the problem.</p>
+<h2 id="set-up-the-workspace">Set up the workspace</h2>
+<p>A pnpm workspace is a folder with a <code>pnpm-workspace.yaml</code> at the root. It lists which folders hold packages:</p>
+<pre><code>packages:
+  - "apps/*"
+  - "packages/*"</code></pre>
+<p>With that file, one <code>pnpm install</code> at the root installs every package, writes one <code>pnpm-lock.yaml</code>, and links workspace packages to each other. A typical layout:</p>
+<pre><code>shop/
+  pnpm-workspace.yaml
+  package.json
+  apps/
+    api/        (package.json with a "dev" script)
+    web/
+    worker/
+  packages/
+    shared/</code></pre>
+<p>Each app is a normal package with its own <code>package.json</code> and its own <code>dev</code> script, such as <code>tsx watch src/index.ts</code> for an API or <code>vite</code> for a website.</p>
+<h2 id="start-everything-or-a-part">Start everything or a part</h2>
+<p>From the root, <code>-r</code> (recursive) runs a script in every package that defines it:</p>
+<pre><code>pnpm -r --parallel run dev</code></pre>
+<p><code>--parallel</code> matters. Without it pnpm runs the scripts one after another in dependency order and waits for each to finish, and a dev server never finishes. With it, every <code>dev</code> script starts at once and pnpm ignores topological order.</p>
+<p>To start only some packages, filter by name or by folder:</p>
+<pre><code>pnpm --filter @shop/api dev
+pnpm --filter "./apps/*" --parallel run dev
+pnpm --filter @shop/web... --parallel run dev</code></pre>
+<p>The trailing <code>...</code> adds the package's dependencies, so <code>@shop/web...</code> includes <code>packages/shared</code> if the website imports it. You can wrap the common cases in root scripts such as <code>"dev": "pnpm -r --parallel run dev"</code>.</p>
+<h2 id="what-pnpm-does-not-do">What pnpm does not do</h2>
+<ul>
+<li><strong>No start order.</strong> With <code>--parallel</code> the website may start before the API is listening. Most frontends tolerate that; a worker that connects to the API at boot may crash and need a restart.</li>
+<li><strong>No health waits.</strong> pnpm knows a process started, not that it is ready.</li>
+<li><strong>Interleaved logs.</strong> pnpm prefixes lines with the package name, but several watchers writing at once are hard to read.</li>
+<li><strong>No supervision.</strong> If one process dies, the others keep running and you find out later.</li>
+</ul>
+<p>If you need caching or task graphs, that is a job for a task runner on top of pnpm. See <a href="/@odykyi/monorepo-tooling/turborepo-dev-task-persistent-services/">the Turborepo dev task article</a>.</p>
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk can start each workspace package as a local process, in <code>dependsOn</code> order, and wait for health checks. Each service gets a small <code>service.json</code> next to its <code>package.json</code>. For <code>apps/api</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "pnpm dev",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>And for <code>apps/web</code>, which should wait for the API:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "pnpm dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "API_URL": "http://localhost:4000" }
+}</code></pre>
+<p>The <code>command</code> runs from the service folder, so <code>pnpm dev</code> runs that package's script. Flisk passes the <code>port</code> as the <code>PORT</code> environment variable, so make your dev script read it. Then run:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk up</code></pre>
+<p>Flisk starts <code>api</code>, waits until <code>/health</code> answers, starts <code>web</code>, prefixes every log line with the service name, and restarts a process that exits. <code>flisk up --only web</code> starts <code>web</code> and what it depends on. <code>flisk down</code> stops everything.</p>
+<blockquote>The default <code>discovery.paths</code> in <code>.flisk/project.json</code> is <code>services/*/*</code>. When you scaffold a service under <code>apps/</code>, the CLI warns that it is outside that pattern. Add <code>"apps/*"</code> to <code>discovery.paths</code> and run <code>flisk config regenerate</code>.</blockquote>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Run <code>pnpm install</code> once at the root before <code>flisk up</code>. Flisk does not install dependencies for local processes.</li>
+<li>Flisk and pnpm both need to find <code>pnpm</code> on the <code>PATH</code>. <code>flisk doctor</code> reports a command whose program is missing.</li>
+<li>Do not mix local-process services with container-built services in one run. Flisk stops with a <code>MIXED_RUNTIME</code> error. A database from a ready-made image is the exception.</li>
+</ul>
+<p>For a repo where the real problem is deciding what to run on a given day, read <a href="/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/">how to run only the changed services</a>, or see the broader <a href="/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">monorepo local dev setup</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does pnpm -r run dev only start one package?</summary><p>Without --parallel pnpm runs scripts in topological order and waits for each to exit. A dev server never exits, so the next package never starts. Add --parallel.</p></details><details><summary>How do I run one app and the packages it depends on?</summary><p>Use a filter with three dots, for example pnpm --filter @shop/web... --parallel run dev. The trailing dots include the package&#39;s workspace dependencies.</p></details><details><summary>Does Flisk replace pnpm workspaces?</summary><p>No. pnpm still installs and links packages. Flisk only starts the services, in order, and watches their health.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepos with several services</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-tooling/turborepo-dev-task-persistent-services/"><span class="lbl">Guide</span><b>Turborepo dev task: run many services with turbo dev</b><span>turbo dev can start every app in a repo with one command. The catch is a few settings that decide whether it works at all.</span></a><a href="/@odykyi/monorepo-tooling/run-only-changed-services-in-a-monorepo/"><span class="lbl">Guide</span><b>How to run only the changed services in a monorepo</b><span>Running every test and every server for every change wastes time. Git-aware filters pick the packages a change touches, and the packages that depend on them.</span></a><a href="/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/"><span class="lbl">Guide</span><b>How to share a package between services in a monorepo</b><span>A shared package is the main reason to use a monorepo, and the main reason edits seem to have no effect. Here is how the links and the builds work.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

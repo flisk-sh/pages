@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to share one tsconfig across a monorepo</title>
+<meta name="description" content="Share one TypeScript base config across apps with extends, set up project references and tsc --build for shared packages, and avoid the usual path alias traps.">
+<meta name="keywords" content="tsconfig monorepo, tsconfig extends base, typescript project references, tsc --build, tsconfig paths monorepo">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to share one tsconfig across a monorepo">
+<meta property="og:description" content="Share one TypeScript base config across apps with extends, set up project references and tsc --build for shared packages, and avoid the usual path alias traps.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to share one tsconfig across a monorepo","description":"Share one TypeScript base config across apps with extends, set up project references and tsc --build for shared packages, and avoid the usual path alias traps.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/","keywords":"tsconfig monorepo, tsconfig extends base, typescript project references, tsc --build, tsconfig paths monorepo","wordCount":651,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Monorepos with several services","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/"},{"@type":"ListItem","position":3,"name":"How to share one tsconfig across a monorepo","item":"https://pages.flisk.si/@odykyi/monorepo-tooling/share-tsconfig-across-a-monorepo/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do include and exclude merge when a tsconfig extends another?","acceptedAnswer":{"@type":"Answer","text":"No. In the child they replace the base values. Compiler options merge, with the child winning."}},{"@type":"Question","name":"Do I need project references?","acceptedAnswer":{"@type":"Answer","text":"Not always. Linked workspace packages that resolve through node_modules work without them. References add ordered builds and faster incremental checks for packages that import each other."}},{"@type":"Question","name":"Why do my paths aliases fail at runtime?","acceptedAnswer":{"@type":"Answer","text":"TypeScript does not rewrite path aliases in emitted JavaScript. Your runtime or bundler must resolve them as well."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-tooling/">Monorepos with several services</a></div>
+<section class="hero"><div><div class="lbl">Monorepos with several services</div><h1>How to share one tsconfig across a monorepo</h1><p class="dek">Ten copies of a tsconfig drift apart within a month. A base file and a few small per-package files keep strictness and module settings aligned.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-base-config-and-thin-per-package-files">A base config and thin per-package files</a></li><li><a href="#project-references-for-shared-packages">Project references for shared packages</a></li><li><a href="#path-aliases">Path aliases</a></li><li><a href="#flisk-and-tsconfig">Flisk and tsconfig</a></li><li><a href="#type-checking-as-a-script">Type checking as a script</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Put shared compiler options in <code>tsconfig.base.json</code> at the repo root, and have every package's <code>tsconfig.json</code> <code>extends</code> it and add only what is different. For packages that import each other, add project references so <code>tsc --build</code> compiles them in dependency order.</p>
+<h2 id="a-base-config-and-thin-per-package-files">A base config and thin per-package files</h2>
+<p>The root file holds what every package agrees on:</p>
+<pre><code>{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "sourceMap": true
+  }
+}</code></pre>
+<p>Each package keeps a small file:</p>
+<pre><code>// apps/api/tsconfig.json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "types": ["node"]
+  },
+  "include": ["src"]
+}</code></pre>
+<p>Remember two rules of <code>extends</code>. Paths in the base file such as <code>outDir</code> are resolved relative to the file that declares them, which is why <code>outDir</code> and <code>rootDir</code> belong in the package file. And <code>include</code> and <code>exclude</code> in the child replace the base's, they do not merge.</p>
+<p>If you want several flavours, make small presets: <code>tsconfig.node.json</code> for services and <code>tsconfig.react.json</code> for websites, both extending the base. In recent TypeScript versions <code>extends</code> accepts an array, so a package can combine two.</p>
+<h2 id="project-references-for-shared-packages">Project references for shared packages</h2>
+<p>When <code>apps/api</code> imports <code>packages/shared</code>, TypeScript has to know about its types. Project references make that explicit. The shared package must set <code>composite</code>:</p>
+<pre><code>// packages/shared/tsconfig.json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "composite": true, "outDir": "dist", "rootDir": "src" },
+  "include": ["src"]
+}
+
+// apps/api/tsconfig.json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src" },
+  "include": ["src"],
+  "references": [{ "path": "../../packages/shared" }]
+}</code></pre>
+<p>Then <code>tsc --build apps/api</code> builds <code>shared</code> first and caches the result with an incremental build file, and <code>tsc --build --watch</code> keeps both fresh. A root <code>tsconfig.json</code> with <code>"files": []</code> and a list of references lets you run one <code>tsc --build</code> for everything. For how the package is linked and exported, see <a href="/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/">sharing a package between services</a>.</p>
+<h2 id="path-aliases">Path aliases</h2>
+<p>It is tempting to avoid references with <code>paths</code> such as <code>"@shop/shared": ["../../packages/shared/src"]</code>. That makes the editor happy, but TypeScript does not rewrite those paths in emitted JavaScript. The runtime or bundler must resolve them too: Vite needs <code>vite-tsconfig-paths</code> or an alias, <code>tsx</code> and Bun read them, plain Node does not. If the workspace link already resolves <code>@shop/shared</code> through <code>node_modules</code>, you need no alias at all.</p>
+<h2 id="flisk-and-tsconfig">Flisk and tsconfig</h2>
+<p>The Flisk part is small. When you scaffold a service with <code>flisk resource</code>, it writes a <code>tsconfig.json</code> in the service folder with its own options, so change it to <code>extends</code> your base. A service that runs as a local process through a <code>command</code> in <code>service.json</code> gets no generated TypeScript, Vite or Docker files: Flisk runs your command and nothing else, so your tsconfig stays exactly as you wrote it. Flisk does not read or manage the base config.</p>
+<h2 id="type-checking-as-a-script">Type checking as a script</h2>
+<p>Give every package a <code>typecheck</code> script so checks are uniform and can be run by the workspace tool:</p>
+<pre><code>"scripts": { "typecheck": "tsc --noEmit" }</code></pre>
+<p>Then <code>pnpm -r run typecheck</code> checks everything, and <code>pnpm --filter @shop/api typecheck</code> checks one package. With project references, <code>tsc --build</code> is the command that checks referenced packages in order. Keep <code>typecheck</code> separate from the dev server: most dev servers transpile without checking types, so errors only appear when you run it.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Everything in one config.</strong> A single root <code>tsconfig.json</code> that includes every app makes the editor slow and mixes DOM and Node types. Keep one config per package.</li>
+<li><strong>Wrong <code>types</code>.</strong> A website needs DOM types, a service does not. Set <code>lib</code> and <code>types</code> per package.</li>
+<li><strong>Missing <code>composite</code>.</strong> A referenced project without it gives the error "Referenced project must have setting composite: true".</li>
+<li><strong>Stale build info.</strong> If errors look wrong, run <code>tsc --build --clean</code> and rebuild.</li>
+<li><strong>Linting versus type checking.</strong> A shared ESLint or Biome config follows the same pattern: one base, thin package files.</li>
+</ul>
+<p>To see the whole workspace set up around this, read <a href="/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/">running several services from a pnpm workspace</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do include and exclude merge when a tsconfig extends another?</summary><p>No. In the child they replace the base values. Compiler options merge, with the child winning.</p></details><details><summary>Do I need project references?</summary><p>Not always. Linked workspace packages that resolve through node_modules work without them. References add ordered builds and faster incremental checks for packages that import each other.</p></details><details><summary>Why do my paths aliases fail at runtime?</summary><p>TypeScript does not rewrite path aliases in emitted JavaScript. Your runtime or bundler must resolve them as well.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepos with several services</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-tooling/share-a-package-between-services-in-a-monorepo/"><span class="lbl">Guide</span><b>How to share a package between services in a monorepo</b><span>A shared package is the main reason to use a monorepo, and the main reason edits seem to have no effect. Here is how the links and the builds work.</span></a><a href="/@odykyi/monorepo-tooling/pnpm-workspace-run-several-services/"><span class="lbl">Guide</span><b>pnpm workspace: how to run several services at once</b><span>A pnpm workspace gives you one install and one lockfile. It does not decide which services start, in what order, or where their logs go. Here is how to cover that.</span></a><a href="/@odykyi/monorepo-tooling/turborepo-dev-task-persistent-services/"><span class="lbl">Guide</span><b>Turborepo dev task: run many services with turbo dev</b><span>turbo dev can start every app in a repo with one command. The catch is a few settings that decide whether it works at all.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
