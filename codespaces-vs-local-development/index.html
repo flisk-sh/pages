@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Codespaces vs local development: how to decide</title>
+<meta name="description" content="When a cloud workspace beats your laptop and when it does not: cost, speed, offline work, onboarding and how to run a multi-service stack in either.">
+<meta name="keywords" content="codespaces vs local development, cloud dev environment vs local, github codespaces docker compose, remote development environment">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GitHub Codespaces vs local development: how to decide">
+<meta property="og:description" content="When a cloud workspace beats your laptop and when it does not: cost, speed, offline work, onboarding and how to run a multi-service stack in either.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GitHub Codespaces vs local development: how to decide","description":"When a cloud workspace beats your laptop and when it does not: cost, speed, offline work, onboarding and how to run a multi-service stack in either.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/","keywords":"codespaces vs local development, cloud dev environment vs local, github codespaces docker compose, remote development environment","wordCount":648,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"GitHub Codespaces vs local development: how to decide","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is GitHub Codespaces free?","acceptedAnswer":{"@type":"Answer","text":"Personal accounts get an included monthly quota of compute and storage, then usage is billed. Check GitHub's current plan and pricing pages for the numbers."}},{"@type":"Question","name":"Can I run docker compose in Codespaces?","acceptedAnswer":{"@type":"Answer","text":"Yes, if the dev container has Docker available, for example through a Docker feature in devcontainer.json."}},{"@type":"Question","name":"Does Flisk work in Codespaces?","acceptedAnswer":{"@type":"Answer","text":"Flisk can run inside a workspace and flisk doctor detects Codespaces. Services run as plain processes, or as containers if a container runtime is reachable."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>GitHub Codespaces vs local development: how to decide</h1><p class="dek">A remote workspace moves the machine, not the problem. Here is what changes and what stays the same.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-cloud-workspace-gives-you">What a cloud workspace gives you</a></li><li><a href="#what-local-still-does-better">What local still does better</a></li><li><a href="#the-part-that-does-not-change-starting-the-stack">The part that does not change: starting the stack</a></li><li><a href="#a-decision-rule">A decision rule</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Choose Codespaces or a similar cloud workspace when onboarding speed, a bigger machine or keeping code off laptops matters more than offline work and zero hourly cost. Stay local when your laptop is strong enough, you work offline, or you already have a one-command setup that new people finish in minutes. Either way, you still have to decide how the services of your app start together.</p>
+
+<h2 id="what-a-cloud-workspace-gives-you">What a cloud workspace gives you</h2>
+<p>GitHub Codespaces runs a development container on a managed virtual machine and connects your browser or VS Code to it. The environment is defined by the repo's dev container configuration, so everyone gets the same tools. Practical advantages:</p>
+<ul>
+<li><strong>Fast onboarding.</strong> A new person opens the repo and gets a working environment, with no local installs.</li>
+<li><strong>Bigger machines.</strong> You can pick a larger VM for a heavy build or a stack that does not fit in 16 GB of laptop RAM. Available sizes and limits are on GitHub's pricing and plan pages, so check the current ones.</li>
+<li><strong>Prebuilds.</strong> The repo can prebuild the environment so opening it is quick.</li>
+<li><strong>Code stays remote.</strong> Useful for contractors and strict security policies.</li>
+<li><strong>Port forwarding.</strong> Forwarded ports can be shared with a teammate for a quick look.</li>
+</ul>
+
+<h2 id="what-local-still-does-better">What local still does better</h2>
+<ul>
+<li><strong>No meter.</strong> Codespaces bills by compute time and storage after the included monthly quota for your plan. A laptop you already own has no hourly cost.</li>
+<li><strong>Offline and latency.</strong> Typing in a remote editor over a bad connection is painful, and offline is impossible.</li>
+<li><strong>Your own tools.</strong> Your editor setup, shell and GPU access are simply there.</li>
+<li><strong>Hardware access.</strong> Devices, local GPUs and special network setups are hard or impossible to reach from a cloud VM.</li>
+</ul>
+
+<h2 id="the-part-that-does-not-change-starting-the-stack">The part that does not change: starting the stack</h2>
+<p>A workspace gives you a shell on a machine. It does not start your API, your database and your worker. In both worlds you need a repeatable way to do that. In a Codespace that usually means one of these:</p>
+<ol>
+<li>A Compose file, started by a <code>postStartCommand</code> or by hand. The dev container can use Compose directly, as described in <a href="/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/">Dev Containers vs Docker Compose</a>.</li>
+<li>A script or task runner. See <a href="/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/">Make vs just vs Task</a>.</li>
+<li>A stack tool such as Flisk, run inside the workspace the same way you run it on a laptop.</li>
+</ol>
+<p>If you use Flisk, <code>flisk doctor</code> detects Codespaces and reports it as the host kind (visible in <code>flisk doctor --json</code> as <code>data.host.kind</code>), along with whether a container runtime is reachable. Services that each have a <code>command</code> in <code>service.json</code> run as plain processes, so they do not need Docker in the workspace. Services on the container path do need a container runtime, which for a dev container means adding a Docker feature to its configuration.</p>
+
+<h2 id="a-decision-rule">A decision rule</h2>
+<table>
+<thead><tr><th>If this is true</th><th>Lean toward</th></tr></thead>
+<tbody>
+<tr><td>Onboarding takes days and laptops vary a lot</td><td>Cloud workspace</td></tr>
+<tr><td>The stack needs more RAM than developers' laptops have</td><td>Cloud workspace</td></tr>
+<tr><td>Developers often work offline or on a bad connection</td><td>Local</td></tr>
+<tr><td>Budget for hourly compute is tight</td><td>Local</td></tr>
+<tr><td>You want both</td><td>Define everything in a dev container and one start command, so either works</td></tr>
+</tbody>
+</table>
+<p>The last row is the safest bet. If the setup is one dev container plus one command, you are not locked to either side.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Idle cost.</strong> A running workspace bills until it stops. Set an idle timeout and delete old ones.</li>
+<li><strong>Secrets.</strong> Use the platform's secret store rather than committing <code>.env</code>. See <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values, in config</a>.</li>
+<li><strong>URLs.</strong> Services do not live at <code>localhost</code> in your browser. Forwarded ports get their own URLs, so absolute localhost links in config can break callbacks.</li>
+<li><strong>Cold starts.</strong> A stopped workspace still needs to restart, and your stack inside it needs starting again.</li>
+</ul>
+<p>To keep the choice open, next read <a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/">how to choose a local dev tool</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is GitHub Codespaces free?</summary><p>Personal accounts get an included monthly quota of compute and storage, then usage is billed. Check GitHub&#39;s current plan and pricing pages for the numbers.</p></details><details><summary>Can I run docker compose in Codespaces?</summary><p>Yes, if the dev container has Docker available, for example through a Docker feature in devcontainer.json.</p></details><details><summary>Does Flisk work in Codespaces?</summary><p>Flisk can run inside a workspace and flisk doctor detects Codespaces. Services run as plain processes, or as containers if a container runtime is reachable.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/"><span class="lbl">Guide</span><b>Dev Containers vs Docker Compose: what each one is for</b><span>They are often compared, but one standardizes the developer&#39;s toolbox and the other runs the app&#39;s parts.</span></a><a href="/@odykyi/dev-loop-tools-compared/make-vs-just-vs-task-for-dev-commands/"><span class="lbl">Guide</span><b>Make vs just vs Task for project dev commands</b><span>A command runner gives the team one set of names for build, test and start. The three popular choices differ mostly in syntax and portability.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dev Containers vs Docker Compose: what each one is for</title>
+<meta name="description" content="Dev Containers give you a reproducible workspace for your editor. Compose runs your app&#39;s services. Learn what each does and how to combine them.">
+<meta name="keywords" content="dev containers vs docker compose, devcontainer.json vs compose, devcontainer docker compose, dev containers for microservices">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Dev Containers vs Docker Compose: what each one is for">
+<meta property="og:description" content="Dev Containers give you a reproducible workspace for your editor. Compose runs your app&#39;s services. Learn what each does and how to combine them.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Dev Containers vs Docker Compose: what each one is for","description":"Dev Containers give you a reproducible workspace for your editor. Compose runs your app's services. Learn what each does and how to combine them.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/","keywords":"dev containers vs docker compose, devcontainer.json vs compose, devcontainer docker compose, dev containers for microservices","wordCount":646,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local dev tools compared","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/"},{"@type":"ListItem","position":3,"name":"Dev Containers vs Docker Compose: what each one is for","item":"https://pages.flisk.si/@odykyi/dev-loop-tools-compared/dev-containers-vs-docker-compose/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Docker Compose with a dev container?","acceptedAnswer":{"@type":"Answer","text":"Only if your app needs other services such as a database. A single-service project can use just devcontainer.json."}},{"@type":"Question","name":"Can a dev container start my database?","acceptedAnswer":{"@type":"Answer","text":"Yes, by pointing dockerComposeFile at a Compose file that defines it. The dev container spec supports Compose services as the workspace."}},{"@type":"Question","name":"Do dev containers replace local installs?","acceptedAnswer":{"@type":"Answer","text":"For the toolchain, yes. They do not replace the tools that start and connect your services, which is the job of Compose or a similar orchestrator."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-loop-tools-compared/">Local dev tools compared</a></div>
+<section class="hero"><div><div class="lbl">Local dev tools compared</div><h1>Dev Containers vs Docker Compose: what each one is for</h1><p class="dek">They are often compared, but one standardizes the developer&#39;s toolbox and the other runs the app&#39;s parts.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-dev-container-does">What a dev container does</a></li><li><a href="#what-compose-does">What Compose does</a></li><li><a href="#using-them-together">Using them together</a></li><li><a href="#how-to-decide">How to decide</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A dev container is the environment you work in: the compiler, the CLI tools, the editor extensions. Docker Compose runs the services your app talks to: the API, the database, the queue. They answer different questions, so the usual setup is both, with the dev container pointing at a Compose file. Choose one alone only when your project is small enough to need just that half.</p>
+
+<h2 id="what-a-dev-container-does">What a dev container does</h2>
+<p>The Dev Containers specification describes a <code>.devcontainer/devcontainer.json</code> file. Editors that support it (VS Code, JetBrains products, GitHub Codespaces and the <code>devcontainer</code> CLI) read the file, build or pull an image, start a container and attach your editor to it. You get the same Node, Python or Go version, the same linters and the same extensions as everyone else, without installing them on the host. Useful fields include <code>image</code> or <code>build</code>, <code>features</code> (reusable install steps), <code>forwardPorts</code>, <code>postCreateCommand</code> and <code>customizations</code>.</p>
+<pre><code>{
+  "name": "shop",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "forwardPorts": [3000, 4000],
+  "postCreateCommand": "npm install"
+}</code></pre>
+<p>On its own this gives you a toolbox. It does not start your database or your other services.</p>
+
+<h2 id="what-compose-does">What Compose does</h2>
+<p>Compose starts and wires containers from a <code>compose.yaml</code>: images, networks, volumes, environment, health checks and startup order. It has no idea which editor you use and no opinion about your toolchain. See <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a> for the ordering part.</p>
+
+<h2 id="using-them-together">Using them together</h2>
+<p>The spec lets a dev container use a Compose file through <code>dockerComposeFile</code>, <code>service</code> and <code>workspaceFolder</code>. Your editor attaches to one Compose service (the workspace), and the other services start beside it.</p>
+<pre><code>{
+  "name": "shop",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "workspace",
+  "workspaceFolder": "/workspaces/shop"
+}</code></pre>
+<p>Inside the workspace container, the other services are reachable by their Compose service names, for example <code>db:5432</code>. That is the main practical gain: no host port juggling for tool-to-service traffic.</p>
+
+<h2 id="how-to-decide">How to decide</h2>
+<table>
+<thead><tr><th>Situation</th><th>Choose</th></tr></thead>
+<tbody>
+<tr><td>Your pain is "works on my machine" for tool versions</td><td>Dev container</td></tr>
+<tr><td>Your pain is starting five services in the right order</td><td>Compose, or another orchestrator</td></tr>
+<tr><td>New hires lose a day installing things, and the app also has a database</td><td>Both</td></tr>
+<tr><td>You use an editor that does not support dev containers</td><td>Compose plus a documented tool list</td></tr>
+<tr><td>Docker Desktop licensing or RAM is a concern</td><td>Weigh the cost: a dev container is another container on top of your services</td></tr>
+</tbody>
+</table>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk does not install your toolchain, and it does not provide an editor environment. It starts the app's services. That makes it a companion to a dev container rather than an alternative to one. Flisk's own docs describe running it inside a dev container: the container brings Node, Go or Python, and <code>flisk up</code> brings the stack. Inside a container, <code>flisk doctor</code> reports where it runs (<code>local</code>, <code>wsl2</code>, <code>devcontainer</code>, <code>codespaces</code> and others) and whether a container runtime is reachable.</p>
+<p>The detail to plan for: Flisk's container path needs Docker reachable from where you run it. In a dev container that usually means adding the Docker-outside-of-Docker or Docker-in-Docker feature. If your services run as plain local processes (each <code>service.json</code> has a <code>command</code>), that requirement disappears, which keeps a dev container light. See <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run local services without Docker</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Bind-mount speed.</strong> On macOS and Windows, file access across the VM boundary can be slow for large <code>node_modules</code> trees. Use a named volume or clone the repo into the container's filesystem.</li>
+<li><strong>Docker inside a container.</strong> Mounting the host Docker socket gives the container control of the host daemon. Know that trade-off before you enable it.</li>
+<li><strong>Rebuild habits.</strong> Changes to <code>devcontainer.json</code> need a container rebuild. Put one-time setup in <code>postCreateCommand</code>, not in your head.</li>
+<li><strong>Forwarded ports.</strong> A port listed in <code>forwardPorts</code> is forwarded by the editor, not published by Docker. Scripts outside the editor may not see it.</li>
+</ul>
+<p>If the remote side matters more than the container, read <a href="/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/">Codespaces vs local development</a> next.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Docker Compose with a dev container?</summary><p>Only if your app needs other services such as a database. A single-service project can use just devcontainer.json.</p></details><details><summary>Can a dev container start my database?</summary><p>Yes, by pointing dockerComposeFile at a Compose file that defines it. The dev container spec supports Compose services as the workspace.</p></details><details><summary>Do dev containers replace local installs?</summary><p>For the toolchain, yes. They do not replace the tools that start and connect your services, which is the job of Compose or a similar orchestrator.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local dev tools compared</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/codespaces-vs-local-development/"><span class="lbl">Guide</span><b>GitHub Codespaces vs local development: how to decide</b><span>A remote workspace moves the machine, not the problem. Here is what changes and what stays the same.</span></a><a href="/@odykyi/dev-loop-tools-compared/tilt-vs-docker-compose-for-local-development/"><span class="lbl">Guide</span><b>Tilt vs Docker Compose for local development: how to choose</b><span>Compose describes what runs. Tilt watches your code and updates what runs. You can use either alone or both together.</span></a><a href="/@odykyi/dev-loop-tools-compared/how-to-choose-a-local-dev-tool/"><span class="lbl">Guide</span><b>How to choose a local dev tool: a decision guide for teams</b><span>Most teams choose a dev tool by habit. These questions make the choice from facts about your project instead.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
