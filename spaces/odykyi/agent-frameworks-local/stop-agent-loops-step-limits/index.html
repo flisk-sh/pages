@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to stop an AI agent from looping forever: step limits</title>
+<meta name="description" content="Every agent framework has a way to cap tool steps, turns or tokens. Where to set it in LangGraph, CrewAI, OpenAI Agents SDK, Pydantic AI and the AI SDK.">
+<meta name="keywords" content="agent infinite loop, langgraph recursion limit, openai agents max_turns, crewai max_iter, limit agent tool calls">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to stop an AI agent from looping forever: step limits">
+<meta property="og:description" content="Every agent framework has a way to cap tool steps, turns or tokens. Where to set it in LangGraph, CrewAI, OpenAI Agents SDK, Pydantic AI and the AI SDK.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to stop an AI agent from looping forever: step limits","description":"Every agent framework has a way to cap tool steps, turns or tokens. Where to set it in LangGraph, CrewAI, OpenAI Agents SDK, Pydantic AI and the AI SDK.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/","keywords":"agent infinite loop, langgraph recursion limit, openai agents max_turns, crewai max_iter, limit agent tool calls","wordCount":746,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Agent frameworks on your laptop","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/"},{"@type":"ListItem","position":3,"name":"How to stop an AI agent from looping forever: step limits","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is a safe default step limit?","acceptedAnswer":{"@type":"Answer","text":"There is no universal number. Run your real task once, note how many steps it needs, and set the limit to roughly twice that. Write the value in code so a framework upgrade cannot change it silently."}},{"@type":"Question","name":"Does a restart policy stop a looping agent?","acceptedAnswer":{"@type":"Answer","text":"No. A loop is not a crash, so the process stays up and healthy. Only limits in the code, a timeout, or a manual restart end it."}},{"@type":"Question","name":"Should I retry a run that hit the limit?","acceptedAnswer":{"@type":"Answer","text":"Not with the same input, because it will loop again. Change the prompt or the tools, or return a failure to the caller."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-frameworks-local/">Agent frameworks on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Agent frameworks on your laptop</div><h1>How to stop an AI agent from looping forever: step limits</h1><p class="dek">An agent that keeps calling tools never crashes, so no restart policy will save you. The cap has to be in the code, and you should set it yourself.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-loop-is-a-cost-problem-not-a-crash">Why a loop is a cost problem, not a crash</a></li><li><a href="#where-to-set-the-limit">Where to set the limit</a></li><li><a href="#what-to-do-when-the-limit-fires">What to do when the limit fires</a></li><li><a href="#finding-a-loop-in-a-local-stack">Finding a loop in a local stack</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>An agent loops when each model answer asks for another tool call and none of them ever produces a final reply. To stop it, set a step limit in the framework, a wall-clock timeout around the whole run, and a token or request budget. Every popular framework has the first one, with a different name and a different default, so set the value yourself instead of relying on it.</p>
+
+<h2 id="why-a-loop-is-a-cost-problem-not-a-crash">Why a loop is a cost problem, not a crash</h2>
+<p>A looping agent is healthy by every measure a process supervisor has. It answers its health check, uses little CPU, and makes a network request every few seconds. The only visible symptom is a growing bill and a request that never returns. So limits belong in the agent code, and monitoring should watch the number of model calls per run, not just uptime.</p>
+<p>Common causes: a tool returns an error the model does not understand and it retries the same call, a tool returns an empty result and the model asks again, or two agents hand a task back and forth. A cap does not fix these, but it turns an unbounded run into a bounded one with a clear error you can log.</p>
+
+<h2 id="where-to-set-the-limit">Where to set the limit</h2>
+<p>The names below are the documented options at the time of writing. Defaults vary by version, so read yours and write the number down in your code.</p>
+<pre><code># LangGraph: raises GraphRecursionError when exceeded
+graph.invoke(inputs, {"recursion_limit": 10})
+
+# OpenAI Agents SDK: raises MaxTurnsExceeded
+await Runner.run(agent, "task", max_turns=6)
+
+# Pydantic AI: raises UsageLimitExceeded
+from pydantic_ai import UsageLimits
+agent.run_sync("task", usage_limits=UsageLimits(request_limit=6))
+
+# CrewAI: per-agent limits on an Agent
+Agent(role="...", goal="...", backstory="...", max_iter=8, max_execution_time=120)
+
+// Vercel AI SDK: stop after a number of steps
+generateText({ model, tools, prompt, stopWhen: stepCountIs(6) })</code></pre>
+<p>Each of these counts a different thing. LangGraph counts graph steps, which can be several per model call. The Agents SDK counts turns of the agent loop. Pydantic AI can count requests to the model (and, in recent releases, tokens). CrewAI counts iterations of one agent on one task. The AI SDK counts model steps. A limit of six means very different amounts of work, so test the number against a task that really needs tools.</p>
+
+<h2 id="what-to-do-when-the-limit-fires">What to do when the limit fires</h2>
+<p>The framework raises an exception or returns a partial result. Decide what the caller should see:</p>
+<ul>
+<li>Log the run input, the number of steps and the last tool call. The last call usually shows the loop.</li>
+<li>Return an explicit failure to the caller, such as <code>status: "failed"</code> with a short reason, not an empty answer that looks like a success.</li>
+<li>Do not retry automatically with the same input. The same input loops the same way. Retry only when the failure was a network error.</li>
+</ul>
+<p>Also put an outer timeout on the whole run, for example with <code>asyncio.wait_for</code> in Python or an <code>AbortSignal</code> in JavaScript. A step limit does not help when one model call hangs. And make tools with side effects idempotent, so a run cut off by a limit that is then repeated does not send two emails.</p>
+
+<h2 id="finding-a-loop-in-a-local-stack">Finding a loop in a local stack</h2>
+<p>With Flisk the loop shows up in the logs, not in <code>flisk status</code>, because the service stays healthy. Read recent output, merged across services:</p>
+<pre><code>flisk logs --service agent --tail 50
+flisk logs --service agent --since 5m</code></pre>
+<p>If one tool name repeats down the list, you have found it. To end a run that is stuck right now, restart that resource (<code>flisk restart agent</code>). Flisk's local-process runner also restarts a crashed process after 1, 2, 4 and 8 seconds and stops after five quick exits, but that only applies to crashes, not to loops. For reading logs from several services, see <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">how to read logs from every service in a local stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A limit that is too low breaks legitimate work.</strong> Measure a normal run first, then set the limit to about double.</li>
+<li><strong>Counting the wrong thing.</strong> A step limit does not bound tokens. A single step with a huge prompt can still be expensive, so add a token budget where the framework supports it.</li>
+<li><strong>Local models loop more.</strong> Small models often fail to produce the tool call format and retry. See <a href="/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/">running agent frameworks against a local model</a> before you tune limits upward.</li>
+</ul>
+<p>If a run does hit the limit, the next question is what state it left behind. That is what <a href="/@odykyi/agent-frameworks-local/where-agent-frameworks-keep-state/">where agent frameworks keep state</a> compares.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is a safe default step limit?</summary><p>There is no universal number. Run your real task once, note how many steps it needs, and set the limit to roughly twice that. Write the value in code so a framework upgrade cannot change it silently.</p></details><details><summary>Does a restart policy stop a looping agent?</summary><p>No. A loop is not a crash, so the process stays up and healthy. Only limits in the code, a timeout, or a manual restart end it.</p></details><details><summary>Should I retry a run that hit the limit?</summary><p>Not with the same input, because it will loop again. Change the prompt or the tools, or return a failure to the caller.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent frameworks on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-frameworks-local/where-agent-frameworks-keep-state/"><span class="lbl">Guide</span><b>Where agent frameworks keep state: LangGraph, CrewAI and others</b><span>Two different things get called state: the conversation so far, and the progress of a run in flight. Frameworks cover them very differently.</span></a><a href="/@odykyi/agent-frameworks-local/crewai-crew-local-api/"><span class="lbl">Guide</span><b>How to run a CrewAI crew locally behind an HTTP endpoint</b><span>A crew run takes minutes, so an HTTP endpoint that waits for it will time out. Start the run, return an id, and let callers poll.</span></a><a href="/@odykyi/agent-frameworks-local/local-model-for-agent-frameworks/"><span class="lbl">Guide</span><b>How to point an agent framework at a local model with Ollama</b><span>Most agent frameworks can talk to any server that speaks the OpenAI API. That means a model on your laptop can replace the paid API while you build.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

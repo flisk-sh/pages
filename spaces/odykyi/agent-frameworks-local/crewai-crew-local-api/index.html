@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a CrewAI crew locally behind an HTTP endpoint</title>
+<meta name="description" content="Wrap a CrewAI crew in a small FastAPI service with a start-and-poll API, then run it as a plain local process next to your other services, no Docker needed.">
+<meta name="keywords" content="run crewai locally, crewai fastapi, crewai kickoff api, crewai local development, crewai http endpoint">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-frameworks-local/crewai-crew-local-api/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a CrewAI crew locally behind an HTTP endpoint">
+<meta property="og:description" content="Wrap a CrewAI crew in a small FastAPI service with a start-and-poll API, then run it as a plain local process next to your other services, no Docker needed.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-frameworks-local/crewai-crew-local-api/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a CrewAI crew locally behind an HTTP endpoint","description":"Wrap a CrewAI crew in a small FastAPI service with a start-and-poll API, then run it as a plain local process next to your other services, no Docker needed.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/agent-frameworks-local/crewai-crew-local-api/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/agent-frameworks-local/crewai-crew-local-api/","keywords":"run crewai locally, crewai fastapi, crewai kickoff api, crewai local development, crewai http endpoint","wordCount":865,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Agent frameworks on your laptop","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/"},{"@type":"ListItem","position":3,"name":"How to run a CrewAI crew locally behind an HTTP endpoint","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/crewai-crew-local-api/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Flisk have a CrewAI template?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk has no CrewAI-specific scaffold. You can scaffold a plain Python FastAPI service with flisk resource --language python --local and put your crew behind it."}},{"@type":"Question","name":"Can I use kickoff_async instead of a thread?","acceptedAnswer":{"@type":"Answer","text":"CrewAI offers async kickoff methods, and they work if your wrapper is async. A thread around the blocking kickoff is the simplest version and behaves the same for the caller."}},{"@type":"Question","name":"Where do I keep run results so they survive a restart?","acceptedAnswer":{"@type":"Answer","text":"Replace the in-memory dict with a database table or a file per run. The wrapper only needs to write a status and an output for each run id."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-frameworks-local/">Agent frameworks on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Agent frameworks on your laptop</div><h1>How to run a CrewAI crew locally behind an HTTP endpoint</h1><p class="dek">A crew run takes minutes, so an HTTP endpoint that waits for it will time out. Start the run, return an id, and let callers poll.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-crew-does-not-fit-a-plain-request-and-response">Why a crew does not fit a plain request and response</a></li><li><a href="#start-from-the-crewai-project">Start from the CrewAI project</a></li><li><a href="#the-wrapper">The wrapper</a></li><li><a href="#run-it-with-flisk-as-a-local-process">Run it with Flisk as a local process</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-this-is-more-than-you-need">When this is more than you need</a></li></ol></nav></aside>
+<article><p>To call a CrewAI crew from a frontend or another service, put it behind a small web API that starts the run in a background thread, returns a run id at once, and lets the caller poll for the result. <code>crew.kickoff()</code> is a blocking call that makes several model requests, so waiting for it inside one HTTP request is fragile. This article builds that wrapper with FastAPI and runs it as a local process.</p>
+
+<h2 id="why-a-crew-does-not-fit-a-plain-request-and-response">Why a crew does not fit a plain request and response</h2>
+<p>A crew is a group of agents that work through tasks one after another (or with a manager). Each task is one or more model calls, and an agent may loop through tool calls before it finishes. A run of a few minutes is normal. Browsers, proxies and test clients give up long before that, and a dropped connection does not stop the crew: it keeps running and spending tokens with nobody listening.</p>
+<p>The usual answer is the one job systems use. <code>POST /runs</code> accepts the inputs and returns <code>202</code> with an id. <code>GET /runs/{id}</code> returns <code>running</code>, <code>done</code> or <code>failed</code>, plus the output when it is ready.</p>
+
+<h2 id="start-from-the-crewai-project">Start from the CrewAI project</h2>
+<p>CrewAI ships a generator. Install it as the CrewAI docs describe, then create a crew:</p>
+<pre><code>crewai create crew research_crew
+cd research_crew
+crewai run</code></pre>
+<p>That gives you <code>src/research_crew/</code> with <code>crew.py</code>, <code>config/agents.yaml</code> and <code>config/tasks.yaml</code>. Get <code>crewai run</code> working first with your model key set in the environment, so any failure later is about the wrapper and not the crew. Check the Python versions your CrewAI release supports before you pick an interpreter.</p>
+
+<h2 id="the-wrapper">The wrapper</h2>
+<p>Copy the <code>research_crew</code> package next to the API file so both are importable. The run table below is a plain dict. That is enough for local work and is the first thing to replace if you need runs to survive a restart.</p>
+<pre><code>import threading
+import uuid
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+from research_crew.crew import ResearchCrew
+
+app = FastAPI(title="crew-api")
+runs: dict[str, dict] = {}
+
+
+class RunIn(BaseModel):
+    topic: str
+
+
+def execute(run_id: str, topic: str) -> None:
+    try:
+        result = ResearchCrew().crew().kickoff(inputs={"topic": topic})
+        runs[run_id] = {"status": "done", "output": str(result.raw)}
+    except Exception as exc:  # report any crew failure to the caller
+        runs[run_id] = {"status": "failed", "error": str(exc)}
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/runs", status_code=202)
+def start(body: RunIn) -> dict[str, str]:
+    run_id = uuid.uuid4().hex
+    runs[run_id] = {"status": "running"}
+    threading.Thread(target=execute, args=(run_id, body.topic), daemon=True).start()
+    return {"id": run_id}
+
+
+@app.get("/runs/{run_id}")
+def get_run(run_id: str) -> dict:
+    if run_id not in runs:
+        raise HTTPException(status_code=404, detail="unknown run")
+    return runs[run_id]</code></pre>
+<p>The inputs (<code>topic</code> here) must match the placeholders your <code>tasks.yaml</code> uses, such as <code>{topic}</code>. A mismatch usually shows up as a literal placeholder in the model's output.</p>
+
+<h2 id="run-it-with-flisk-as-a-local-process">Run it with Flisk as a local process</h2>
+<p>Flisk can scaffold the FastAPI service for you and start it without Docker. Install it with <code>npm install -g @flisk-sh/flisk</code>, then in a project folder:</p>
+<pre><code>flisk project --yes
+flisk resource crew-api --type backend --language python --local --stack agents --yes</code></pre>
+<p>The scaffold writes <code>services/agents/crew-api/</code> with a <code>pyproject.toml</code>, a FastAPI <code>src/main.py</code> and a <code>service.json</code> whose <code>command</code> is a uvicorn line. Replace <code>src/main.py</code> with the wrapper above, add <code>crewai</code> to the dependencies in <code>pyproject.toml</code>, and install them into your active virtual environment. The scaffold pins its own versions, so if pip reports a conflict with CrewAI's requirements, loosen the pins. Flisk will refuse to start a command whose program is not installed.</p>
+<p>Pass the model key through <code>env</code> in <code>service.json</code>. In a local-process service, <code>${VAR}</code> is read from your shell, the project <code>.env</code> or the service's own <code>.env</code>:</p>
+<pre><code>"env": { "OPENAI_API_KEY": "${OPENAI_API_KEY}" }</code></pre>
+<p>Then start it and try a run:</p>
+<pre><code>flisk up
+curl -X POST localhost:4003/runs -H 'content-type: application/json' -d '{"topic":"local dev tools"}'
+curl localhost:4003/runs/&lt;id&gt;</code></pre>
+<p>Use the port that <code>flisk up</code> prints for your service. The scaffold chose 4003 in a fresh project, but the next free port depends on what the project already has.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Reload drops runs.</strong> The scaffold's uvicorn command includes <code>--reload --reload-dir src</code>. Saving any file in <code>src</code> restarts the process, and the in-memory run table is gone with it. While you test a long run, do not edit files, or remove <code>--reload</code> from the command.</li>
+<li><strong>Threads and shared state.</strong> A crew object keeps state while it runs. Build a new one per run, as the wrapper does, instead of sharing one instance between requests.</li>
+<li><strong>Cost control.</strong> A crew that cannot finish keeps calling the model. Set iteration limits on its agents; see <a href="/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/">how to stop an agent from looping forever</a>.</li>
+<li><strong>Keys.</strong> Never write the key into <code>service.json</code>. See <a href="/@odykyi/agent-frameworks-local/llm-api-keys-in-local-stack/">keeping LLM API keys out of git</a>.</li>
+</ul>
+
+<h2 id="when-this-is-more-than-you-need">When this is more than you need</h2>
+<p>If you only run the crew from your terminal, <code>crewai run</code> is the right tool and a wrapper adds nothing. Build the API when something else has to call the crew, for example a React frontend, a webhook handler or a test suite. The same pattern for any Python framework is covered in <a href="/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/">putting a Python agent behind a FastAPI endpoint</a>. For a different framework with durable runs, read <a href="/@odykyi/ai-agents-local/langgraph-agent-local-stack/">running a LangGraph agent locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Flisk have a CrewAI template?</summary><p>No. Flisk has no CrewAI-specific scaffold. You can scaffold a plain Python FastAPI service with flisk resource --language python --local and put your crew behind it.</p></details><details><summary>Can I use kickoff_async instead of a thread?</summary><p>CrewAI offers async kickoff methods, and they work if your wrapper is async. A thread around the blocking kickoff is the simplest version and behaves the same for the caller.</p></details><details><summary>Where do I keep run results so they survive a restart?</summary><p>Replace the in-memory dict with a database table or a file per run. The wrapper only needs to write a status and an output for each run id.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent frameworks on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/"><span class="lbl">Guide</span><b>How to put a Python agent behind a FastAPI endpoint</b><span>Agent libraries are blocking Python functions. A web endpoint is not. The mismatch causes most of the first-day problems.</span></a><a href="/@odykyi/agent-frameworks-local/stop-agent-loops-step-limits/"><span class="lbl">Guide</span><b>How to stop an AI agent from looping forever: step limits</b><span>An agent that keeps calling tools never crashes, so no restart policy will save you. The cap has to be in the code, and you should set it yourself.</span></a><a href="/@odykyi/agent-frameworks-local/llm-api-keys-in-local-stack/"><span class="lbl">Guide</span><b>How to keep LLM API keys out of service.json and git</b><span>An agent project has at least one secret that really costs money. Commit the name of the variable and never its value.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

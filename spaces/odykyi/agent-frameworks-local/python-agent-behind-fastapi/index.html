@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to put a Python agent behind a FastAPI endpoint</title>
+<meta name="description" content="Serve any Python agent framework over HTTP with FastAPI: sync versus async handlers, streaming with server-sent events, and long runs, started locally with Flisk.">
+<meta name="keywords" content="fastapi llm agent, fastapi streaming response llm, serve agent over http, fastapi blocking call agent, python agent api">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to put a Python agent behind a FastAPI endpoint">
+<meta property="og:description" content="Serve any Python agent framework over HTTP with FastAPI: sync versus async handlers, streaming with server-sent events, and long runs, started locally with Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to put a Python agent behind a FastAPI endpoint","description":"Serve any Python agent framework over HTTP with FastAPI: sync versus async handlers, streaming with server-sent events, and long runs, started locally with Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/","keywords":"fastapi llm agent, fastapi streaming response llm, serve agent over http, fastapi blocking call agent, python agent api","wordCount":706,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Agent frameworks on your laptop","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/"},{"@type":"ListItem","position":3,"name":"How to put a Python agent behind a FastAPI endpoint","item":"https://pages.flisk.si/@odykyi/agent-frameworks-local/python-agent-behind-fastapi/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should an agent endpoint be async def or def?","acceptedAnswer":{"@type":"Answer","text":"Use def when the agent call blocks, because FastAPI then runs it in a thread pool. Use async def only with awaitable calls, or you freeze the event loop."}},{"@type":"Question","name":"Why does my streamed response arrive all at once?","acceptedAnswer":{"@type":"Answer","text":"Some layer is buffering it. Test the service directly with curl -N to rule out a proxy, and make sure the generator yields as chunks arrive."}},{"@type":"Question","name":"Does Flisk work with frameworks other than FastAPI for Python?","acceptedAnswer":{"@type":"Answer","text":"The Python scaffold uses FastAPI. Any process you can start with a command works as a local Flisk service, so another server is fine if you write its command and health path."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-frameworks-local/">Agent frameworks on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Agent frameworks on your laptop</div><h1>How to put a Python agent behind a FastAPI endpoint</h1><p class="dek">Agent libraries are blocking Python functions. A web endpoint is not. The mismatch causes most of the first-day problems.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-blocking-trap">The blocking trap</a></li><li><a href="#stream-the-answer">Stream the answer</a></li><li><a href="#runs-that-take-minutes">Runs that take minutes</a></li><li><a href="#run-it-with-flisk-no-docker">Run it with Flisk, no Docker</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To serve a Python agent over HTTP with FastAPI, declare the handler as a plain <code>def</code> if the agent call is blocking, use an <code>async def</code> only when the framework gives you an awaitable, and stream tokens with <code>StreamingResponse</code> if the call takes more than a few seconds. Getting this wrong stalls the whole server: one slow request blocks every other.</p>
+
+<h2 id="the-blocking-trap">The blocking trap</h2>
+<p>FastAPI runs <code>async def</code> handlers on the event loop. If one of them calls a blocking function, such as a framework's synchronous <code>run</code> that waits on a model for twenty seconds, the loop is frozen for that time. Health checks time out, and other requests wait. FastAPI runs a plain <code>def</code> handler in a thread pool instead, so a blocking call there only occupies one thread.</p>
+<pre><code>from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class In(BaseModel):
+    message: str
+
+
+@app.post("/chat")
+def chat(body: In) -> dict[str, str]:   # plain def: runs in a worker thread
+    reply = my_agent.run_sync(body.message)  # a blocking framework call
+    return {"reply": reply}</code></pre>
+<p>When the framework offers an async API (most do), use it with <code>async def</code> and <code>await</code>. Do not mix: calling <code>asyncio.run</code> inside a running handler fails, and wrapping every blocking call in a new thread by hand is rarely needed. If an async handler must call something blocking, use <code>await asyncio.to_thread(fn, arg)</code>.</p>
+
+<h2 id="stream-the-answer">Stream the answer</h2>
+<p>For chat, users want text as it arrives. Server-sent events are the simplest way over plain HTTP. Return a generator wrapped in <code>StreamingResponse</code> with the <code>text/event-stream</code> type and one <code>data:</code> line per chunk:</p>
+<pre><code>import json
+from fastapi.responses import StreamingResponse
+
+
+@app.post("/chat/stream")
+def chat_stream(body: In) -> StreamingResponse:
+    def events():
+        for chunk in my_agent.stream(body.message):  # your framework's stream
+            yield f"data: {json.dumps({'text': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")</code></pre>
+<p>Test it with <code>curl -N</code>, which turns off curl's own buffering. If the text appears in one block at the end, something between you and the client is buffering, and a reverse proxy is the usual cause. Calling the service directly on its port first tells you whether the proxy is the problem.</p>
+
+<h2 id="runs-that-take-minutes">Runs that take minutes</h2>
+<p>Streaming helps up to a point. Multi-agent crews and research jobs can run for minutes, and clients and proxies close idle connections. For those, start the job and return an id, then let the client poll. <a href="/@odykyi/agent-frameworks-local/crewai-crew-local-api/">The CrewAI article</a> shows a complete start-and-poll wrapper.</p>
+
+<h2 id="run-it-with-flisk-no-docker">Run it with Flisk, no Docker</h2>
+<p>Flisk scaffolds this service for you. Install it (<code>npm install -g @flisk-sh/flisk</code>) and run:</p>
+<pre><code>flisk project --yes
+flisk resource agent-api --type backend --language python --local --stack agents --yes</code></pre>
+<p>You get a FastAPI app with a <code>/health</code> route, CORS set for <code>*.localhost</code> origins so a frontend on its own local host name can call it, a <code>pyproject.toml</code> with pinned FastAPI and uvicorn versions, a pytest setup, and a <code>service.json</code> with a <code>command</code>. That command is a uvicorn line bound to <code>localhost</code> that reads <code>PORT</code> and runs with <code>--reload</code>. Add your agent library to <code>pyproject.toml</code>, install the dependencies into your environment, and run <code>flisk up</code>. Flisk starts the process, waits for <code>/health</code>, prefixes its logs with the service name and restarts it if it crashes.</p>
+<p>Keep <code>/health</code> cheap. It should say the process is alive and not call the model. Why a readiness check is separate is explained in <a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">health versus readiness endpoints for an AI agent</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Reload restarts the process.</strong> While <code>--reload</code> is on, saving a file in the watched folder kills runs in flight and any in-memory state.</li>
+<li><strong>One worker.</strong> uvicorn with <code>--reload</code> runs one process. State kept in a Python dict is not shared if you later run several workers, so keep sessions in a database or file.</li>
+<li><strong>Request size and time.</strong> Set a timeout on your model client. A hung model call otherwise holds a thread forever.</li>
+<li><strong>Bind address.</strong> The scaffold listens on <code>localhost</code> only, which is right for development. Do not bind <code>0.0.0.0</code> with a real key in the environment on a shared network.</li>
+</ul>
+<p>To check the endpoint without a real model, use a scripted one, as in <a href="/@odykyi/agent-frameworks-local/pydantic-ai-test-without-llm/">testing an agent without calling a model</a>. For a larger Python and Node layout, see <a href="/@odykyi/stack-recipes/python-and-node-in-one-repo/">running Python and Node services in one repo</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should an agent endpoint be async def or def?</summary><p>Use def when the agent call blocks, because FastAPI then runs it in a thread pool. Use async def only with awaitable calls, or you freeze the event loop.</p></details><details><summary>Why does my streamed response arrive all at once?</summary><p>Some layer is buffering it. Test the service directly with curl -N to rule out a proxy, and make sure the generator yields as chunks arrive.</p></details><details><summary>Does Flisk work with frameworks other than FastAPI for Python?</summary><p>The Python scaffold uses FastAPI. Any process you can start with a command works as a local Flisk service, so another server is fine if you write its command and health path.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent frameworks on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-frameworks-local/crewai-crew-local-api/"><span class="lbl">Guide</span><b>How to run a CrewAI crew locally behind an HTTP endpoint</b><span>A crew run takes minutes, so an HTTP endpoint that waits for it will time out. Start the run, return an id, and let callers poll.</span></a><a href="/@odykyi/agent-frameworks-local/openai-agents-sdk-sessions-sqlite/"><span class="lbl">Guide</span><b>How to keep OpenAI Agents SDK conversations across restarts</b><span>By default a conversation lives in memory and ends with the process. A session backed by a file keeps it, and one header turns it into a multi-user API.</span></a><a href="/@odykyi/agent-frameworks-local/pydantic-ai-test-without-llm/"><span class="lbl">Guide</span><b>How to test a Pydantic AI agent without calling a real model</b><span>Tests that call a real model are slow, cost money and give a different answer each run. Pydantic AI has test models built for this.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
