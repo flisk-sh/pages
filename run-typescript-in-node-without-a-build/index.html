@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Run TypeScript in Node.js without a build step</title>
+<meta name="description" content="Run .ts files directly with Node&#39;s type stripping or with tsx, keep tsc for type checking, and know the syntax limits so local development needs no compile step.">
+<meta name="keywords" content="run typescript in node, node strip types, tsx watch, node --experimental-strip-types, ts-node alternative">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Run TypeScript in Node.js without a build step">
+<meta property="og:description" content="Run .ts files directly with Node&#39;s type stripping or with tsx, keep tsc for type checking, and know the syntax limits so local development needs no compile step.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Run TypeScript in Node.js without a build step","description":"Run .ts files directly with Node's type stripping or with tsx, keep tsc for type checking, and know the syntax limits so local development needs no compile step.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/","keywords":"run typescript in node, node strip types, tsx watch, node --experimental-strip-types, ts-node alternative","wordCount":617,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"Run TypeScript in Node.js without a build step","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-typescript-in-node-without-a-build/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Node run TypeScript files directly?","acceptedAnswer":{"@type":"Answer","text":"Yes. Node 22.18 and later, and 23.6 and later, strip types by default, so node file.ts works for files that use only erasable syntax."}},{"@type":"Question","name":"Does node file.ts check my types?","acceptedAnswer":{"@type":"Answer","text":"No. It only removes the annotations. Run tsc --noEmit to check types."}},{"@type":"Question","name":"When do I still need tsx or a build step?","acceptedAnswer":{"@type":"Answer","text":"Use tsx for older Node versions or syntax Node cannot strip, such as enums. Compile for production if you want plain JavaScript and CI type checks."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>Run TypeScript in Node.js without a build step</h1><p class="dek">For local development you can skip the compile step. Node strips types itself in current releases, and tsx covers the rest.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-type-stripping-does-and-does-not-do">What type stripping does and does not do</a></li><li><a href="#let-typescript-enforce-the-same-rules">Let TypeScript enforce the same rules</a></li><li><a href="#when-to-use-tsx-instead">When to use tsx instead</a></li><li><a href="#use-it-in-a-flisk-service">Use it in a Flisk service</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>On Node 22.18 or later (and Node 23.6 or later) you can run <code>node src/server.ts</code> directly. Node removes the type annotations and runs the JavaScript that is left. On older versions use <code>tsx</code>: <code>npx tsx src/server.ts</code>. In both cases, run <code>tsc --noEmit</code> separately, because neither runner checks your types.</p>
+
+<h2 id="what-type-stripping-does-and-does-not-do">What type stripping does and does not do</h2>
+<p>Node's feature is called type stripping. It erases types from the file and does nothing else: no type checking, no transforms, no reading of <code>tsconfig.json</code>. That keeps it fast and predictable, but it limits what syntax works.</p>
+<ul>
+<li>Supported: type annotations, <code>interface</code>, <code>type</code>, generics, <code>import type</code>, <code>as</code> casts.</li>
+<li>Not supported, because they produce runtime code: <code>enum</code>, <code>namespace</code> with values, constructor parameter properties (<code>constructor(private x: number)</code>).</li>
+<li>Import paths must name the real file, so write <code>import { db } from "./db.ts"</code> with the <code>.ts</code> extension.</li>
+<li>Type-only imports need the <code>type</code> keyword: <code>import type { User } from "./types.ts"</code>. Otherwise Node tries to import a value that does not exist.</li>
+<li>Files inside <code>node_modules</code> are not stripped, so libraries must ship JavaScript.</li>
+</ul>
+<p>Older Node releases that have the feature behind a flag need <code>node --experimental-strip-types src/server.ts</code>. If you are unsure which behaviour your version has, run <code>node -v</code> and test with a one-line file.</p>
+
+<h2 id="let-typescript-enforce-the-same-rules">Let TypeScript enforce the same rules</h2>
+<p>Add these options to <code>tsconfig.json</code> so the editor and <code>tsc</code> warn about anything Node cannot run:</p>
+<pre><code>{
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "noEmit": true,
+    "erasableSyntaxOnly": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "strict": true
+  }
+}</code></pre>
+<p><code>erasableSyntaxOnly</code> (TypeScript 5.8 and later) flags enums and parameter properties. <code>verbatimModuleSyntax</code> forces you to write <code>import type</code> where needed. Then add scripts:</p>
+<pre><code>{
+  "scripts": {
+    "dev": "node --watch src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  }
+}</code></pre>
+
+<h2 id="when-to-use-tsx-instead">When to use tsx instead</h2>
+<p>Reach for <code>tsx</code> when your Node is older than 22.18, when the code uses <code>enum</code>, path aliases from <code>tsconfig</code> or extensionless imports, or when you need decorators. <code>tsx watch src/server.ts</code> gives you restarts too, and it handles both ESM and CommonJS. Another choice is Bun, which runs TypeScript natively: see <a href="/@odykyi/stack-recipes/bun-and-hono-api/">Bun and Hono API</a>.</p>
+<p>For production, most teams still compile. A build gives you plain JavaScript, so the runtime does not depend on a flag or a loader, and it catches type errors in CI. Treat direct <code>.ts</code> execution as a development convenience unless you have tested it on your production Node version.</p>
+
+<h2 id="use-it-in-a-flisk-service">Use it in a Flisk service</h2>
+<p>For a service with a <code>command</code>, the command is the run script, so the choice is yours:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "command": "node --watch src/server.ts",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Replace the command with <code>npx tsx watch src/server.ts</code> on an older Node. Flisk supervises the process and passes <code>PORT</code>, but it does not type check or compile anything for local-process services. Add the typecheck to your pre-commit hook or CI. If you want the Docker route, Flisk generates the container configuration for its scaffolded services, which is a separate path from this one.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>"Unknown file extension .ts".</strong> Your Node is too old for stripping, or a flag is missing. Check <code>node -v</code> or switch to <code>tsx</code>.</li>
+<li><strong>Runs but behaves oddly with enums.</strong> You are probably on a runner that transforms them while your production build does not. Keep <code>erasableSyntaxOnly</code> on.</li>
+<li><strong>No type errors at runtime.</strong> Right, there are none. Run <code>tsc --noEmit --watch</code> in a second terminal, or in the editor.</li>
+<li><strong>Debugging.</strong> Stripping keeps line positions, so breakpoints line up. See <a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/">debugging with --inspect</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Pin the Node version so every machine has the feature: <a href="/@odykyi/nodejs-dev-setup/node-version-per-project/">use a different Node.js version per project</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Node run TypeScript files directly?</summary><p>Yes. Node 22.18 and later, and 23.6 and later, strip types by default, so node file.ts works for files that use only erasable syntax.</p></details><details><summary>Does node file.ts check my types?</summary><p>No. It only removes the annotations. Run tsc --noEmit to check types.</p></details><details><summary>When do I still need tsx or a build step?</summary><p>Use tsx for older Node versions or syntax Node cannot strip, such as enums. Compile for production if you want plain JavaScript and CI type checks.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"><span class="lbl">Guide</span><b>Node.js watch mode: node --watch instead of nodemon</b><span>Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</span></a><a href="/@odykyi/nodejs-dev-setup/node-version-per-project/"><span class="lbl">Guide</span><b>How to use a different Node.js version per project</b><span>Two projects on one laptop often need two Node versions. Pin the version in the repo so nobody has to remember it.</span></a><a href="/@odykyi/nodejs-dev-setup/debug-node-with-inspect-and-vscode/"><span class="lbl">Guide</span><b>How to debug a Node.js server with --inspect and VS Code</b><span>console.log gets you far, but a breakpoint on a running server is faster. Here is the minimum setup that works.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run several npm scripts at once (API, web, worker)</title>
+<meta name="description" content="Run a Node API, a web app and a worker in parallel with concurrently, npm-run-all or pnpm, then see how a Flisk manifest adds startup order, health waits and logs.">
+<meta name="keywords" content="run multiple npm scripts, concurrently npm, npm-run-all parallel, pnpm run parallel, run api and frontend together">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run several npm scripts at once (API, web, worker)">
+<meta property="og:description" content="Run a Node API, a web app and a worker in parallel with concurrently, npm-run-all or pnpm, then see how a Flisk manifest adds startup order, health waits and logs.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run several npm scripts at once (API, web, worker)","description":"Run a Node API, a web app and a worker in parallel with concurrently, npm-run-all or pnpm, then see how a Flisk manifest adds startup order, health waits and logs.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/","keywords":"run multiple npm scripts, concurrently npm, npm-run-all parallel, pnpm run parallel, run api and frontend together","wordCount":633,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"How to run several npm scripts at once (API, web, worker)","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I run two npm scripts in parallel?","acceptedAnswer":{"@type":"Answer","text":"Install concurrently and run it with both scripts, for example concurrently with the two scripts as separate quoted arguments. Or use run-p from npm-run-all2."}},{"@type":"Question","name":"Why does npm run dev --workspaces not start every server?","acceptedAnswer":{"@type":"Answer","text":"It runs the workspaces one after another. A dev server never exits, so the next one never starts. Use a parallel runner."}},{"@type":"Question","name":"Can Flisk start my API before my frontend?","acceptedAnswer":{"@type":"Answer","text":"Yes. Put the API name in dependsOn of the frontend service.json. Flisk waits until the API is ready, then starts the frontend."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>How to run several npm scripts at once (API, web, worker)</h1><p class="dek">npm run dev only starts one thing. Here are the ways to start three, from a one-line script to a manifest per service.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#option-1-concurrently">Option 1: concurrently</a></li><li><a href="#option-2-npm-run-all2-or-workspace-commands">Option 2: npm-run-all2 or workspace commands</a></li><li><a href="#what-these-runners-do-not-do">What these runners do not do</a></li><li><a href="#option-3-one-manifest-per-service-with-flisk">Option 3: one manifest per service with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To run several npm scripts at once, use a small runner: <code>concurrently</code>, <code>npm-run-all2</code> (<code>run-p</code>), or <code>pnpm -r --parallel</code> in a workspace. The shell trick <code>npm run a &amp; npm run b</code> works on Mac and Linux but leaves orphan processes behind, so use it only for quick tests.</p>
+
+<h2 id="option-1-concurrently">Option 1: concurrently</h2>
+<p>This is the most common answer, and it is a good one for two or three processes.</p>
+<pre><code>npm install -D concurrently</code></pre>
+<pre><code>{
+  "scripts": {
+    "dev": "concurrently -k -n api,web,worker -c blue,green,yellow \"npm:dev:api\" \"npm:dev:web\" \"npm:dev:worker\"",
+    "dev:api": "node --watch api/server.js",
+    "dev:web": "vite web",
+    "dev:worker": "node --watch worker/index.js"
+  }
+}</code></pre>
+<p><code>-n</code> prefixes each line with a name, <code>-c</code> colors the prefixes, and <code>-k</code> kills all processes when one exits, which stops a half-running stack. The <code>npm:dev:api</code> shorthand runs the script with that name.</p>
+
+<h2 id="option-2-npm-run-all2-or-workspace-commands">Option 2: npm-run-all2 or workspace commands</h2>
+<p><code>run-p</code> from <code>npm-run-all2</code> runs scripts in parallel with <code>run-p dev:*</code>, which picks every script that starts with <code>dev:</code>. In a pnpm workspace, <code>pnpm -r --parallel dev</code> runs the <code>dev</code> script in every package at once. npm's <code>npm run dev --workspaces --if-present</code> runs them one after the other, and since a dev server never exits, the second one never starts. Use a runner for parallel work.</p>
+
+<h2 id="what-these-runners-do-not-do">What these runners do not do</h2>
+<ul>
+<li><strong>Ordering.</strong> The web app starts at the same time as the API and may show errors until the API is up.</li>
+<li><strong>Readiness.</strong> They know that a process started, not that it is answering.</li>
+<li><strong>Restart policy.</strong> With <code>-k</code> one crash stops everything. Without it, a crashed process stays dead while the others run.</li>
+<li><strong>Per-service config.</strong> Ports and env vars live in several scripts and <code>.env</code> files.</li>
+</ul>
+<p>For two services these gaps are acceptable. With five or more, they cost time.</p>
+
+<h2 id="option-3-one-manifest-per-service-with-flisk">Option 3: one manifest per service with Flisk</h2>
+<p>Give each part a <code>service.json</code> with a <code>command</code>. Flisk starts them as local processes, in order, with no Docker:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "API_URL": "http://localhost:4000" }
+}</code></pre>
+<p>The API manifest has <code>"command": "node --watch server.js"</code>, <code>"port": 4000</code> and a <code>healthCheckPath</code> such as <code>/health</code>. A worker can be a third manifest with <code>"appType": "worker"</code>, no port, and <code>"dependsOn": ["api"]</code> if it needs the API.</p>
+<pre><code>flisk up --dry-run   # shows services, commands and start order
+flisk up             # starts them; Ctrl+C stops them all
+flisk status
+flisk logs --service api --tail 50
+flisk down</code></pre>
+<p>Flisk waits for each service to be ready before it starts the ones that depend on it (up to 60 seconds per service), prefixes every log line with the service name, restarts a crashed process after 1, 2, 4 and 8 seconds, and refuses to start when a port is taken or a program is missing. To start only part of the stack, <code>flisk up --only web</code> starts <code>web</code> and what it depends on. The full flow is in <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a>, and the ordering rules are in <a href="/@odykyi/microservices-local-dev/service-startup-order/">service startup order</a>.</p>
+<p>The cost is a file per service and one more tool to install. If a single script with concurrently does the job, keep it. Move to manifests when you need ordering, health waits or one stack that every teammate starts the same way.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two services on one port.</strong> Give each a unique port and read it from <code>PORT</code>.</li>
+<li><strong>Interleaved logs hide errors.</strong> Always name the prefixes. Search by name when something fails.</li>
+<li><strong>Windows quoting.</strong> Escaped double quotes inside <code>package.json</code> scripts are the portable form. Avoid single quotes.</li>
+<li><strong>Shutdown.</strong> If a process ignores SIGTERM, the port stays busy. See <a href="/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/">graceful shutdown for a dev server</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Make each process restart cleanly on save with <a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/">node --watch</a>, and keep their settings apart with <a href="/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/">env files</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I run two npm scripts in parallel?</summary><p>Install concurrently and run it with both scripts, for example concurrently with the two scripts as separate quoted arguments. Or use run-p from npm-run-all2.</p></details><details><summary>Why does npm run dev --workspaces not start every server?</summary><p>It runs the workspaces one after another. A dev server never exits, so the next one never starts. Use a parallel runner.</p></details><details><summary>Can Flisk start my API before my frontend?</summary><p>Yes. Put the API name in dependsOn of the frontend service.json. Flisk waits until the API is ready, then starts the frontend.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"><span class="lbl">Guide</span><b>Node.js watch mode: node --watch instead of nodemon</b><span>Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</span></a><a href="/@odykyi/nodejs-dev-setup/graceful-shutdown-node-dev-server/"><span class="lbl">Guide</span><b>How to shut down a Node.js dev server cleanly on Ctrl+C</b><span>A dev server that ignores signals leaves ports busy and connections open. Twenty lines of code fix it.</span></a><a href="/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/"><span class="lbl">Guide</span><b>Load a .env file in Node.js without the dotenv package</b><span>You may not need dotenv any more. Node reads env files itself, and the rules for which value wins are worth knowing.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

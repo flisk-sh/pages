@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Load a .env file in Node.js without the dotenv package</title>
+<meta name="description" content="Node 20.6 and later can read a .env file with --env-file. Learn the flags, precedence rules, multiple files, and how Flisk expands variables for local services.">
+<meta name="keywords" content="node --env-file, load .env without dotenv, process.loadEnvFile, node env file precedence, node .env file">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Load a .env file in Node.js without the dotenv package">
+<meta property="og:description" content="Node 20.6 and later can read a .env file with --env-file. Learn the flags, precedence rules, multiple files, and how Flisk expands variables for local services.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Load a .env file in Node.js without the dotenv package","description":"Node 20.6 and later can read a .env file with --env-file. Learn the flags, precedence rules, multiple files, and how Flisk expands variables for local services.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/","keywords":"node --env-file, load .env without dotenv, process.loadEnvFile, node env file precedence, node .env file","wordCount":682,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Node.js local development setup","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/"},{"@type":"ListItem","position":3,"name":"Load a .env file in Node.js without the dotenv package","item":"https://pages.flisk.si/@odykyi/nodejs-dev-setup/node-env-file-without-dotenv/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which Node version supports --env-file?","acceptedAnswer":{"@type":"Answer","text":"Node 20.6 and later. --env-file-if-exists, which ignores a missing file, arrived in later Node 22 releases (22.9 and up)."}},{"@type":"Question","name":"Does the .env file override variables already set in my shell?","acceptedAnswer":{"@type":"Answer","text":"No. A variable that is already in the environment keeps its value, and the file only fills in the missing ones."}},{"@type":"Question","name":"Does Flisk pass my whole .env to a local service?","acceptedAnswer":{"@type":"Answer","text":"No. The service gets its env map from service.json, where ${VAR} references are filled from your shell, the project .env, the service .env or a default."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/nodejs-dev-setup/">Node.js local development setup</a></div>
+<section class="hero"><div><div class="lbl">Node.js local development setup</div><h1>Load a .env file in Node.js without the dotenv package</h1><p class="dek">You may not need dotenv any more. Node reads env files itself, and the rules for which value wins are worth knowing.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-built-in-options">The built-in options</a></li><li><a href="#which-value-wins">Which value wins</a></li><li><a href="#when-dotenv-or-another-loader-is-still-useful">When dotenv or another loader is still useful</a></li><li><a href="#how-flisk-treats-env-files-for-local-services">How Flisk treats env files for local services</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Start your program with <code>node --env-file=.env server.js</code>. Node reads the file, adds each <code>KEY=value</code> line to <code>process.env</code> before your code runs, and you no longer need the <code>dotenv</code> package. The flag exists since Node 20.6.</p>
+
+<h2 id="the-built-in-options">The built-in options</h2>
+<p>There are three ways to do it, and they differ in when the load happens.</p>
+<pre><code># 1. On the command line, before any of your code runs
+node --env-file=.env server.js
+
+# 2. Several files; a later file overrides an earlier one
+node --env-file=.env --env-file=.env.local server.js
+
+# 3. Inside the program
+node -e "process.loadEnvFile('.env'); console.log(process.env.DATABASE_URL)"</code></pre>
+<p><code>process.loadEnvFile(path)</code> is the same loader as a function. It is useful in a script where you choose the file at runtime. With the flag form, a missing file is an error and Node exits. Newer Node 22 releases (22.9 and later) add <code>--env-file-if-exists</code>, which skips a file that is not there. That is handy for an optional <code>.env.local</code>.</p>
+<p>The file format is the usual one: one <code>KEY=value</code> per line, <code>#</code> comments, and quotes for values with spaces. Node supports multi-line values in double quotes. It does not expand <code>${OTHER}</code> references inside the file the way Docker Compose does, so write the final value or build it in code.</p>
+
+<h2 id="which-value-wins">Which value wins</h2>
+<p>A variable that is already set in the environment keeps its value. The file fills in only what is missing. This surprises people who expect the file to win:</p>
+<pre><code>echo 'PORT=3000' &gt; .env
+PORT=4000 node --env-file=.env -p "process.env.PORT"
+# prints 4000</code></pre>
+<p>That is the right default for local work: a one-off <code>PORT=4000</code> in the shell overrides the file without editing it. It also explains the common bug where a stale value exported in your shell profile beats the one in <code>.env</code>. If a variable "does not change" when you edit the file, run <code>printenv NAME</code> first. More on that in <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">environment variable not loaded</a>.</p>
+
+<h2 id="when-dotenv-or-another-loader-is-still-useful">When dotenv or another loader is still useful</h2>
+<ul>
+<li>You support Node versions older than 20.6.</li>
+<li>You need variable expansion in the file (<code>dotenv-expand</code>) or schema validation of the values (libraries such as zod or envalid are good for that, on top of any loader).</li>
+<li>Your framework already loads <code>.env</code> files itself, as Vite and Next.js do. Do not load them twice with different rules.</li>
+</ul>
+
+<h2 id="how-flisk-treats-env-files-for-local-services">How Flisk treats env files for local services</h2>
+<p>For a service with a <code>command</code>, the <code>env</code> map in <code>service.json</code> is what the process receives, and values can reference variables with <code>${VAR}</code> or <code>${VAR:-default}</code>. Flisk resolves them in this order, first match wins: your shell, the project <code>.env</code> next to <code>.flisk/project.json</code>, the service's own <code>.env</code> next to its <code>service.json</code>, then the default. A missing service <code>.env</code> is ignored.</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch server.js",
+  "port": 4000,
+  "env": {
+    "DATABASE_URL": "${DATABASE_URL}",
+    "LOG_LEVEL": "${LOG_LEVEL:-info}"
+  }
+}</code></pre>
+<p>This keeps the committed manifest free of values: it holds names, and each developer's <code>.env</code> holds the secrets. Note the direction: the project <code>.env</code> feeds the <code>${...}</code> expansion, it is not handed wholesale to the process. Name what the service needs in <code>env</code>, or load a file yourself in the command with <code>node --env-file=.env server.js</code>, which Node reads from the service directory because that is where the command runs.</p>
+<p>To use a different project env file for one run, <code>flisk up --env-file .env.integration</code> does that. For keys you do not want to share, <code>secrets.generate</code> in <code>service.json</code> can create random development secrets and append them to <code>.env</code> once. See <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values, in committed config</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Never commit <code>.env</code>.</strong> Commit a <code>.env.example</code> with names and safe placeholder values and add <code>.env</code> to <code>.gitignore</code>.</li>
+<li><strong>Everything is a string.</strong> <code>DEBUG=false</code> is the truthy string <code>"false"</code>. Parse booleans and numbers explicitly.</li>
+<li><strong>Relative path.</strong> <code>--env-file=.env</code> is relative to the directory where you start Node, not to the script.</li>
+<li><strong>Watch mode.</strong> Editing <code>.env</code> does not restart <code>node --watch</code> unless you add the file with <code>--watch-path</code>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>With variables loaded, you can combine them with watch mode: <a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/">node --watch instead of nodemon</a> shows the flags that go together.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which Node version supports --env-file?</summary><p>Node 20.6 and later. --env-file-if-exists, which ignores a missing file, arrived in later Node 22 releases (22.9 and up).</p></details><details><summary>Does the .env file override variables already set in my shell?</summary><p>No. A variable that is already in the environment keeps its value, and the file only fills in the missing ones.</p></details><details><summary>Does Flisk pass my whole .env to a local service?</summary><p>No. The service gets its env map from service.json, where ${VAR} references are filled from your shell, the project .env, the service .env or a default.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Node.js local development setup</span></div>
+<div class="rgrid"><a href="/@odykyi/nodejs-dev-setup/node-watch-mode-without-nodemon/"><span class="lbl">Guide</span><b>Node.js watch mode: node --watch instead of nodemon</b><span>Node can restart itself when a file changes. For most small and medium servers that removes a dependency.</span></a><a href="/@odykyi/nodejs-dev-setup/run-several-npm-scripts-at-once/"><span class="lbl">Guide</span><b>How to run several npm scripts at once (API, web, worker)</b><span>npm run dev only starts one thing. Here are the ways to start three, from a one-line script to a manifest per service.</span></a><a href="/@odykyi/nodejs-dev-setup/node-version-per-project/"><span class="lbl">Guide</span><b>How to use a different Node.js version per project</b><span>Two projects on one laptop often need two Node versions. Pin the version in the repo so nobody has to remember it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
