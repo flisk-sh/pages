@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set up a staging environment on a small budget</title>
+<meta name="description" content="A staging environment that catches deploy problems without doubling your bill: same config shape, separate data and secrets, smaller plans, and safe test keys.">
+<meta name="keywords" content="staging environment small budget, cheap staging environment, staging vs production differences, staging database test data, preview environment">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/staging-environment-small-budget/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set up a staging environment on a small budget">
+<meta property="og:description" content="A staging environment that catches deploy problems without doubling your bill: same config shape, separate data and secrets, smaller plans, and safe test keys.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/staging-environment-small-budget/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set up a staging environment on a small budget","description":"A staging environment that catches deploy problems without doubling your bill: same config shape, separate data and secrets, smaller plans, and safe test keys.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/staging-environment-small-budget/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/staging-environment-small-budget/","keywords":"staging environment small budget, cheap staging environment, staging vs production differences, staging database test data, preview environment","wordCount":769,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"How to set up a staging environment on a small budget","item":"https://pages.flisk.si/@odykyi/laptop-to-production/staging-environment-small-budget/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can staging share the production database?","acceptedAnswer":{"@type":"Answer","text":"No. A staging bug or a migration test could change real user data. Use a separate database, even a small one."}},{"@type":"Question","name":"How close should staging be to production?","acceptedAnswer":{"@type":"Answer","text":"Close in structure: same images, config names, database engine and deploy path. It can be smaller in size, data volume and uptime."}},{"@type":"Question","name":"Is a preview environment per pull request worth it?","acceptedAnswer":{"@type":"Answer","text":"For UI-heavy teams it can be. For small teams one shared staging is cheaper and easier to keep in order."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>How to set up a staging environment on a small budget</h1><p class="dek">You do not need a copy of production. You need a place where the deploy can fail without anyone noticing.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-staging-is-for">What staging is for</a></li><li><a href="#what-must-be-separate">What must be separate</a></li><li><a href="#what-can-be-smaller">What can be smaller</a></li><li><a href="#three-budget-shapes">Three budget shapes</a></li><li><a href="#use-the-same-config-for-both">Use the same config for both</a></li><li><a href="#make-staging-earn-its-keep">Make staging earn its keep</a></li><li><a href="#when-you-can-skip-it">When you can skip it</a></li></ol></nav></aside>
+<article><p>A cheap staging environment runs the same images and the same configuration shape as production, on smaller plans, with its own database, its own secrets and test-mode keys for third parties. Its job is to catch deploy problems such as missing variables, failed migrations and broken routing, so it needs to be close in structure, not in size.</p>
+
+<h2 id="what-staging-is-for">What staging is for</h2>
+<p>Staging answers one question: will this release work on a real host? It does not need production traffic or production data. It does need the same moving parts: the same Dockerfile, the same start command, the same kind of database, the same environment variable names and the same deploy path. Most surprises in a first deploy come from the differences between a laptop and a host, and staging is a host.</p>
+
+<h2 id="what-must-be-separate">What must be separate</h2>
+<ul>
+<li><strong>The database.</strong> Never point staging at production data. A bug or a migration test must not touch real users.</li>
+<li><strong>Secrets.</strong> Generate new ones. If staging leaks, production should not.</li>
+<li><strong>Third-party accounts.</strong> Use test modes and sandbox keys, for example a payment provider's test keys. See <a href="/@odykyi/payments-and-webhooks/test-stripe-payments-locally/">testing Stripe payments locally</a> for the idea.</li>
+<li><strong>Outgoing email and notifications.</strong> Route them to a sink or an allow-listed address. See <a href="/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/">stopping dev from emailing real users</a>.</li>
+<li><strong>The domain.</strong> A subdomain such as <code>staging.example.com</code>, with OAuth redirect URIs and webhooks registered for it.</li>
+</ul>
+
+<h2 id="what-can-be-smaller">What can be smaller</h2>
+<ul>
+<li>The plan size: one small instance per service, no autoscaling, a small database.</li>
+<li>The data: a seed set or an anonymised sample. Never copy raw production data into staging, because it carries personal data into a less protected place. See <a href="/@odykyi/local-database-guide/seed-a-local-database/">how to seed a database</a>.</li>
+<li>The uptime: some hosts let free or low plans sleep, which is fine for a place that only you and your team use.</li>
+<li>The lifetime: tear it down at night or on weekends if your host bills by time.</li>
+</ul>
+
+<h2 id="three-budget-shapes">Three budget shapes</h2>
+<ol>
+<li><strong>A second environment on your platform.</strong> Same Blueprint or project, different names, smaller plans, separate database. This is the closest to production, and often the simplest, because the deploy path is identical.</li>
+<li><strong>One small VPS with Compose.</strong> A single server running the stack from a Compose file with its own <code>.env</code>. Cheap, and you control it fully, but you also own backups, updates and HTTPS. See <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file to a VPS</a>.</li>
+<li><strong>Preview environments per pull request,</strong> if your platform supports them. Useful for UI review, but each needs its own data and costs add up. Most small teams are better off with one shared staging.</li>
+</ol>
+
+<h2 id="use-the-same-config-for-both">Use the same config for both</h2>
+<p>Staging only helps when production is built the same way. The trick is one set of config files and different values. With Flisk, the <code>service.json</code> files hold the names of the variables each service needs, and the exporters write them without values, so the same exported file works for both environments and each environment supplies its own values.</p>
+<pre><code>flisk export render --dry-run            # review the Render Blueprint
+flisk export render --resource api       # export only one service
+flisk export compose                     # standalone Compose file for a VPS</code></pre>
+<p><code>--resource</code> and <code>--out</code> are real options of the Render exporter, <code>--dry-run</code> prints without writing, and every exporter needs Node.js 22.12 or later because it runs through <code>npx</code>. The exporters write files only: no deploy, no DNS record and no cloud calls. For Render, each variable is written as a name that Render asks for when you create the Blueprint, so staging and production values stay out of git. Create the staging Blueprint with its own values and the same file. Check the generated file is current in CI with <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">a config drift check</a>. The step-by-step version is in <a href="/@odykyi/testing-and-shipping/from-local-to-render/">from a local stack to a Render Blueprint</a>.</p>
+
+<h2 id="make-staging-earn-its-keep">Make staging earn its keep</h2>
+<ol>
+<li>Deploy every merge to main to staging automatically.</li>
+<li>Run the <a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/">smoke test</a> against it and block the production deploy on a pass.</li>
+<li>Run migrations on staging first, against a database that has realistic volume if the table is big.</li>
+<li>Promote the same image to production. Do not rebuild it, because a rebuild is a different artifact.</li>
+</ol>
+
+<h2 id="when-you-can-skip-it">When you can skip it</h2>
+<p>For a hobby project with one service and an easy rollback, the production-image test on your laptop plus a good smoke test may be enough. Add staging when a bad deploy costs you real money or users, when more than one person deploys, or when you have a migration you cannot undo.</p>
+
+<p>Whichever shape you pick, start from the checklist in <a href="/@odykyi/laptop-to-production/first-deploy-checklist/">the first deploy checklist</a> and run through it on staging first.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can staging share the production database?</summary><p>No. A staging bug or a migration test could change real user data. Use a separate database, even a small one.</p></details><details><summary>How close should staging be to production?</summary><p>Close in structure: same images, config names, database engine and deploy path. It can be smaller in size, data volume and uptime.</p></details><details><summary>Is a preview environment per pull request worth it?</summary><p>For UI-heavy teams it can be. For small teams one shared staging is cheaper and easier to keep in order.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/first-deploy-checklist/"><span class="lbl">Guide</span><b>First deploy checklist: what to check before going live</b><span>Most first-deploy failures are the same ten small things. Check them on your laptop first, when fixing them is cheap.</span></a><a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/"><span class="lbl">Guide</span><b>How to write a smoke test that runs after every deploy</b><span>A green deploy only means the container started. A smoke test asks whether the app does its one job.</span></a><a href="/@odykyi/laptop-to-production/roll-back-a-bad-deploy/"><span class="lbl">Guide</span><b>How to roll back a bad deploy quickly and safely</b><span>The deploy is live, the error rate is climbing, and you have a few minutes. This is what to do, and what to prepare so those minutes are enough.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

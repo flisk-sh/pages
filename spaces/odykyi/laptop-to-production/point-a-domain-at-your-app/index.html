@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to point a domain at your app: DNS records and HTTPS</title>
+<meta name="description" content="Connect your own domain to a deployed app: pick A, AAAA, CNAME or ALIAS records, wait for DNS, check with dig, and get an HTTPS certificate that renews.">
+<meta name="keywords" content="point domain to app, dns a record vs cname, custom domain https deploy, dig check dns, apex domain cname alias">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/point-a-domain-at-your-app/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to point a domain at your app: DNS records and HTTPS">
+<meta property="og:description" content="Connect your own domain to a deployed app: pick A, AAAA, CNAME or ALIAS records, wait for DNS, check with dig, and get an HTTPS certificate that renews.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/point-a-domain-at-your-app/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to point a domain at your app: DNS records and HTTPS","description":"Connect your own domain to a deployed app: pick A, AAAA, CNAME or ALIAS records, wait for DNS, check with dig, and get an HTTPS certificate that renews.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/point-a-domain-at-your-app/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/point-a-domain-at-your-app/","keywords":"point domain to app, dns a record vs cname, custom domain https deploy, dig check dns, apex domain cname alias","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"How to point a domain at your app: DNS records and HTTPS","item":"https://pages.flisk.si/@odykyi/laptop-to-production/point-a-domain-at-your-app/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long does DNS take to update?","acceptedAnswer":{"@type":"Answer","text":"Usually minutes, sometimes up to the TTL of the old record, which can be hours or a day. Lowering the TTL before a change shortens the wait."}},{"@type":"Question","name":"Why can't I use a CNAME on my root domain?","acceptedAnswer":{"@type":"Answer","text":"The DNS standard does not allow a CNAME to share a name with other records, and the root carries NS and SOA. Use an A record, or an ALIAS or ANAME record if your DNS provider supports it."}},{"@type":"Question","name":"Do I need to buy an HTTPS certificate?","acceptedAnswer":{"@type":"Answer","text":"Not for a typical app. Most platforms and reverse proxies such as Caddy issue and renew free certificates automatically once the DNS record is correct."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>How to point a domain at your app: DNS records and HTTPS</h1><p class="dek">Your app works at a long platform address. Here is how a short domain name ends up pointing at it, with HTTPS.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#which-record-to-use">Which record to use</a></li><li><a href="#steps">Steps</a></li><li><a href="#on-your-own-server">On your own server</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#after-the-domain-works">After the domain works</a></li><li><a href="#common-failures">Common failures</a></li></ol></nav></aside>
+<article><p>To point a domain at your app, add a DNS record at your registrar or DNS host. Use a CNAME for a subdomain such as <code>app.example.com</code> pointing to the host's address, and an A record (or an ALIAS or ANAME record) for the bare domain. Then wait for DNS to update, check it with <code>dig</code>, and let the platform or a proxy issue the HTTPS certificate.</p>
+
+<h2 id="which-record-to-use">Which record to use</h2>
+<table>
+<thead><tr><th>Record</th><th>Maps a name to</th><th>Use it for</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>An IPv4 address</td><td>A server with a fixed IP, or the apex domain when the host gives you an IP</td></tr>
+<tr><td>AAAA</td><td>An IPv6 address</td><td>The same, for IPv6</td></tr>
+<tr><td>CNAME</td><td>Another hostname</td><td>Subdomains that point to a platform address such as <code>myapp.example-host.com</code></td></tr>
+<tr><td>ALIAS or ANAME</td><td>Another hostname, resolved by your DNS provider</td><td>The bare domain, when the host gives a hostname and not an IP</td></tr>
+</tbody>
+</table>
+<p>The classic trap: a standard DNS rule forbids a CNAME on the bare domain (<code>example.com</code>), because the apex also carries records such as MX for email. Some DNS providers offer ALIAS, ANAME or a flattened CNAME to get around it. If yours does not, use the A record values your host publishes, or put the app on a <code>www</code> or <code>app</code> subdomain and redirect the bare domain to it.</p>
+
+<h2 id="steps">Steps</h2>
+<ol>
+<li><strong>Add the domain in your host's dashboard first.</strong> It tells you the exact record to create and starts waiting to verify it.</li>
+<li><strong>Create the record at your DNS provider</strong> with the name and value the host gave you. Copy the value exactly, with no extra <code>https://</code> and no stray spaces.</li>
+<li><strong>Lower the TTL beforehand if you are replacing an existing record.</strong> The TTL is how long resolvers may cache the old answer. Changing it to a few minutes a day before a switch makes the cutover quick.</li>
+<li><strong>Check from the command line,</strong> not only the browser, which caches:
+<pre><code>dig +short app.example.com CNAME
+dig +short example.com A
+dig +short @1.1.1.1 app.example.com</code></pre>
+The last form asks a specific public resolver, which shows what the rest of the internet sees.</li>
+<li><strong>Wait for the certificate.</strong> Most platforms issue one automatically with Let's Encrypt or a similar authority once DNS points to them. It can take minutes.</li>
+<li><strong>Test HTTPS and the redirect from HTTP:</strong> <code>curl -I http://app.example.com</code> then <code>curl -I https://app.example.com</code>.</li>
+</ol>
+
+<h2 id="on-your-own-server">On your own server</h2>
+<p>With a VPS, point an A record at the server's IP and put a reverse proxy in front of the app. Caddy requests and renews certificates on its own when ports 80 and 443 reach it and the DNS record is correct. A two-line Caddyfile such as <code>app.example.com { reverse_proxy 127.0.0.1:4000 }</code> is enough to start. The full flow is in <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file to a VPS</a>. If certificate issuance fails, the usual causes are a wrong or not yet propagated record, a blocked port 80, or a proxy listening on the wrong host.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>Flisk's exporters stop at files. They never create DNS records and never call a cloud API. For Cloudflare Workers, <code>flisk export wrangler --resource &lt;name&gt; --route app.example.com</code> writes a custom-domain route into <code>wrangler.toml</code> (wildcard patterns are refused), and you still deploy with wrangler. The domain's DNS has to be on Cloudflare for that route type to work, which is a Cloudflare requirement, so check their documentation. Details are in <a href="/@odykyi/testing-and-shipping/cloudflare-workers-config-from-service-json/">generating a wrangler.toml from service.json</a>. Locally you do not need a real domain at all, since a name ending in <code>.localhost</code> resolves to your machine in most browsers. See <a href="/@odykyi/local-routing-and-https/custom-local-domain-instead-of-localhost/">custom local domain instead of localhost</a> if you want a nicer local name.</p>
+
+<h2 id="after-the-domain-works">After the domain works</h2>
+<ul>
+<li>Update everything that still says the old address: OAuth redirect URIs, webhook endpoints, CORS origins, email links and the public URL variable. See <a href="/@odykyi/laptop-to-production/localhost-urls-break-in-production/">why localhost URLs break in production</a>.</li>
+<li>Set cookies with the right <code>Domain</code> and <code>Secure</code> flags.</li>
+<li>Keep the platform address working or redirect it, so old links do not break.</li>
+<li>Add CAA records if you want to limit which authorities may issue certificates, and make sure your platform's authority is allowed.</li>
+</ul>
+
+<h2 id="common-failures">Common failures</h2>
+<ul>
+<li><strong>Changes do not show.</strong> DNS caches for the TTL. Query the authoritative name servers or a public resolver, and wait.</li>
+<li><strong>Certificate stays pending.</strong> A proxy such as Cloudflare in front can interfere with validation depending on the mode. Read the host's note on it.</li>
+<li><strong>Email stops working.</strong> You replaced the apex records and removed MX or TXT entries. Add them back.</li>
+</ul>
+
+<p>Next, confirm that the whole path works end to end after each deploy with <a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/">a smoke test</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long does DNS take to update?</summary><p>Usually minutes, sometimes up to the TTL of the old record, which can be hours or a day. Lowering the TTL before a change shortens the wait.</p></details><details><summary>Why can&#39;t I use a CNAME on my root domain?</summary><p>The DNS standard does not allow a CNAME to share a name with other records, and the root carries NS and SOA. Use an A record, or an ALIAS or ANAME record if your DNS provider supports it.</p></details><details><summary>Do I need to buy an HTTPS certificate?</summary><p>Not for a typical app. Most platforms and reverse proxies such as Caddy issue and renew free certificates automatically once the DNS record is correct.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/localhost-urls-break-in-production/"><span class="lbl">Guide</span><b>Why hardcoded localhost URLs break in production</b><span>A URL that says localhost means this machine. On a host, that machine is the wrong one.</span></a><a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/"><span class="lbl">Guide</span><b>How to write a smoke test that runs after every deploy</b><span>A green deploy only means the container started. A smoke test asks whether the app does its one job.</span></a><a href="/@odykyi/laptop-to-production/app-not-reachable-after-deploy/"><span class="lbl">Guide</span><b>App runs but is not reachable after deploy: bind and PORT</b><span>The logs say the server started, and the host says nothing is listening. Both are true.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

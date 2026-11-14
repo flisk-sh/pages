@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to back up and restore Postgres before you launch</title>
+<meta name="description" content="Take a pg_dump backup, restore it into a scratch database to prove it works, and schedule it, before real users put data into your production Postgres.">
+<meta name="keywords" content="pg_dump backup production, restore postgres from dump, postgres backup before launch, pg_restore custom format, test database restore">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/back-up-postgres-before-launch/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to back up and restore Postgres before you launch">
+<meta property="og:description" content="Take a pg_dump backup, restore it into a scratch database to prove it works, and schedule it, before real users put data into your production Postgres.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/back-up-postgres-before-launch/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to back up and restore Postgres before you launch","description":"Take a pg_dump backup, restore it into a scratch database to prove it works, and schedule it, before real users put data into your production Postgres.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/back-up-postgres-before-launch/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/back-up-postgres-before-launch/","keywords":"pg_dump backup production, restore postgres from dump, postgres backup before launch, pg_restore custom format, test database restore","wordCount":724,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"How to back up and restore Postgres before you launch","item":"https://pages.flisk.si/@odykyi/laptop-to-production/back-up-postgres-before-launch/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How often should I back up Postgres?","acceptedAnswer":{"@type":"Answer","text":"Daily is a common minimum for small apps. Decide how much data you can afford to lose and back up at least that often. Point-in-time recovery from your provider narrows the gap."}},{"@type":"Question","name":"Does pg_dump lock my database?","acceptedAnswer":{"@type":"Answer","text":"It reads from a consistent snapshot and does not block normal reads and writes, though it adds load and can conflict with some schema changes while it runs."}},{"@type":"Question","name":"Is a provider snapshot enough?","acceptedAnswer":{"@type":"Answer","text":"It is good for quick recovery, but keep an independent copy elsewhere and test restoring both, because snapshots are tied to one account and region."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>How to back up and restore Postgres before you launch</h1><p class="dek">A backup you have never restored is a hope, not a backup. Do the restore once, before launch day.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#two-kinds-of-backup">Two kinds of backup</a></li><li><a href="#take-a-dump">Take a dump</a></li><li><a href="#restore-into-a-scratch-database">Restore into a scratch database</a></li><li><a href="#schedule-it">Schedule it</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Back up Postgres with <code>pg_dump</code> in custom format, restore it into an empty scratch database with <code>pg_restore</code>, and check that the tables and row counts match. Do that once before launch, then schedule it. If your provider offers managed backups or point-in-time recovery, turn those on as well, and still try a restore.</p>
+
+<h2 id="two-kinds-of-backup">Two kinds of backup</h2>
+<p>A <strong>logical backup</strong> such as <code>pg_dump</code> writes the schema and data as a file. It is portable, works across Postgres versions with care, and is easy to try on a laptop. A <strong>physical backup or snapshot</strong> copies the database files, usually with continuous archiving for point-in-time recovery. Managed Postgres providers offer this as a feature, and it is the better tool for restoring to a precise minute. Read your provider's documentation for what is on by default, how long copies are kept, and how to restore, because the answers differ and some plans have no automatic backups at all.</p>
+<p>For a new app, run both ideas: the provider's snapshots for the quick recovery, and your own dump files stored somewhere else for the day the whole account has a problem.</p>
+
+<h2 id="take-a-dump">Take a dump</h2>
+<pre><code>pg_dump --format=custom --no-owner --file=app-$(date +%F).dump "$DATABASE_URL"</code></pre>
+<ul>
+<li><code>--format=custom</code> produces a compressed archive that <code>pg_restore</code> can restore selectively and in parallel.</li>
+<li><code>--no-owner</code> skips ownership statements, which avoids errors when the target has different role names.</li>
+<li>Use a <code>pg_dump</code> that is the same major version as the server, or newer. An older client refuses to dump a newer server.</li>
+<li>The dump is consistent: it is taken from a single snapshot, so you can run it against a live database.</li>
+</ul>
+<p>The file contains all your data, including personal data. Store it encrypted, restrict access, and delete old copies on a schedule.</p>
+
+<h2 id="restore-into-a-scratch-database">Restore into a scratch database</h2>
+<p>This is the step people skip. Create an empty database, restore into it, and look:</p>
+<pre><code>createdb -h localhost -U postgres restore_test
+pg_restore --no-owner --dbname "postgresql://postgres:password@localhost/restore_test" app-2026-11-14.dump
+psql "postgresql://postgres:password@localhost/restore_test" -c "select count(*) from users;"</code></pre>
+<p>Compare the count with production. Open the app against the scratch database if you can. You are checking three things: the restore finishes without errors, the data is current, and you know how long it takes. A one-hour restore changes how you plan a risky migration. If you run Postgres locally in a container, <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">running Postgres locally for development</a> shows how to get a scratch server in a minute, and <a href="/@odykyi/local-database-guide/reset-a-local-database/">how to reset a local database</a> covers dropping and recreating it.</p>
+<p>When you restore over an existing database, <code>pg_restore --clean --if-exists</code> drops objects first. Point it at the right database, because it will delete things.</p>
+
+<h2 id="schedule-it">Schedule it</h2>
+<p>A manual dump before launch is a start. After launch you need a schedule and an offsite copy:</p>
+<ol>
+<li>Run the dump daily from a cron job or a scheduled job on your host. Do not run it inside the app container that serves traffic.</li>
+<li>Upload the file to object storage in a different account or region from the database.</li>
+<li>Keep a retention rule, for example daily files for two weeks. Set a lifecycle rule on the bucket so old files expire.</li>
+<li>Alert when a run fails or when the newest file is older than expected. A silent failure is the common way backups die.</li>
+<li>Repeat the restore test on a schedule, say monthly.</li>
+</ol>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>It does not manage production databases. The exporters write services and environment names, and <code>flisk export render</code> leaves the database for you to define on the host. Your backup practice lives with the database provider or your own scripts. Locally, Flisk can run a Postgres container for development, but treat it as disposable data and never as the thing you back up from.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Dumping the wrong database.</strong> Check the host and database name in the connection string before you run a restore with <code>--clean</code>.</li>
+<li><strong>Missing extensions and roles.</strong> A dump references extensions such as <code>pgcrypto</code> or <code>vector</code>. They must be available on the target. Roles are not part of a single-database dump.</li>
+<li><strong>Large objects and other databases.</strong> <code>pg_dump</code> covers one database. Use <code>pg_dumpall</code> for roles, or your provider's export, when you need cluster-wide data.</li>
+<li><strong>Backups that live next to the data.</strong> A copy on the same disk does not survive the disk.</li>
+</ul>
+
+<p>With a tested backup in hand, a risky migration stops being scary. Continue with <a href="/@odykyi/laptop-to-production/run-migrations-on-deploy-safely/">running migrations on deploy safely</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How often should I back up Postgres?</summary><p>Daily is a common minimum for small apps. Decide how much data you can afford to lose and back up at least that often. Point-in-time recovery from your provider narrows the gap.</p></details><details><summary>Does pg_dump lock my database?</summary><p>It reads from a consistent snapshot and does not block normal reads and writes, though it adds load and can conflict with some schema changes while it runs.</p></details><details><summary>Is a provider snapshot enough?</summary><p>It is good for quick recovery, but keep an independent copy elsewhere and test restoring both, because snapshots are tied to one account and region.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/run-migrations-on-deploy-safely/"><span class="lbl">Guide</span><b>How to run database migrations on deploy safely</b><span>On your laptop you run the migration by hand. In production, someone has to run it exactly once, at the right moment.</span></a><a href="/@odykyi/laptop-to-production/roll-back-a-bad-deploy/"><span class="lbl">Guide</span><b>How to roll back a bad deploy quickly and safely</b><span>The deploy is live, the error rate is climbing, and you have a few minutes. This is what to do, and what to prepare so those minutes are enough.</span></a><a href="/@odykyi/laptop-to-production/first-deploy-checklist/"><span class="lbl">Guide</span><b>First deploy checklist: what to check before going live</b><span>Most first-deploy failures are the same ten small things. Check them on your laptop first, when fixing them is cheap.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

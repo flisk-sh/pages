@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to roll back a bad deploy quickly and safely</title>
+<meta name="description" content="Decide fast, redeploy the last good image, handle the database schema and data, and prepare before you need it: tagged images, feature flags and a written plan.">
+<meta name="keywords" content="roll back a bad deploy, rollback docker image tag, revert deployment, rollback database migration, feature flag rollback">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/roll-back-a-bad-deploy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to roll back a bad deploy quickly and safely">
+<meta property="og:description" content="Decide fast, redeploy the last good image, handle the database schema and data, and prepare before you need it: tagged images, feature flags and a written plan.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/roll-back-a-bad-deploy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to roll back a bad deploy quickly and safely","description":"Decide fast, redeploy the last good image, handle the database schema and data, and prepare before you need it: tagged images, feature flags and a written plan.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/roll-back-a-bad-deploy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/roll-back-a-bad-deploy/","keywords":"roll back a bad deploy, rollback docker image tag, revert deployment, rollback database migration, feature flag rollback","wordCount":761,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"How to roll back a bad deploy quickly and safely","item":"https://pages.flisk.si/@odykyi/laptop-to-production/roll-back-a-bad-deploy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I roll back or fix forward?","acceptedAnswer":{"@type":"Answer","text":"Roll back by default, because it is fast and predictable. Fix forward only when the fix is tiny, tested, and quicker than a rollback."}},{"@type":"Question","name":"Can I roll back a database migration?","acceptedAnswer":{"@type":"Answer","text":"Only if you wrote a down migration and no data was lost by the change. The safer approach is additive migrations that old and new code both work with, with a backup as the last resort."}},{"@type":"Question","name":"Why not deploy the latest tag?","acceptedAnswer":{"@type":"Answer","text":"Because latest points to a different image over time, so you cannot redeploy what ran yesterday. Tag every image with a commit SHA or version."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>How to roll back a bad deploy quickly and safely</h1><p class="dek">The deploy is live, the error rate is climbing, and you have a few minutes. This is what to do, and what to prepare so those minutes are enough.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#decide-quickly">Decide quickly</a></li><li><a href="#make-rolling-back-cheap">Make rolling back cheap</a></li><li><a href="#the-database-is-the-catch">The database is the catch</a></li><li><a href="#reduce-the-blast-radius">Reduce the blast radius</a></li><li><a href="#write-the-plan-down">Write the plan down</a></li><li><a href="#after-the-rollback">After the rollback</a></li></ol></nav></aside>
+<article><p>To roll back a bad deploy, redeploy the last known good version of the code, which is the previous image tag or the previous release in your platform. Do it first and investigate afterwards. The code is the easy part. The hard part is the database: a migration that already ran may not be compatible with the old code, so you plan for that before the deploy, not during the incident.</p>
+
+<h2 id="decide-quickly">Decide quickly</h2>
+<p>Set a rule in advance, for example: if a smoke test fails or the error rate stays above a threshold for five minutes after a deploy, roll back. Do not debug in production while users are failing. Reverting buys time, and the broken version is still in git for a calm investigation. A fix forward is reasonable only when the fix is a one-line change that you can ship in less time than a rollback.</p>
+
+<h2 id="make-rolling-back-cheap">Make rolling back cheap</h2>
+<ul>
+<li><strong>Tag images by commit.</strong> Build once, tag as <code>myapp:3f9c2b1</code>, and deploy that exact image. Never deploy <code>latest</code>, because you cannot say what it was an hour ago. The same image you tested is the one you ship.</li>
+<li><strong>Keep the last few images</strong> in the registry. A cleanup rule that deletes everything but <code>latest</code> removes your way back.</li>
+<li><strong>Use the platform's history.</strong> Many hosts keep earlier deploys and let you redeploy one from the dashboard or a command. Learn where that button is before you need it.</li>
+<li><strong>Keep configuration in the same history.</strong> A rollback of code with today's environment variables may still be broken. Note which variables changed in a release.</li>
+</ul>
+<p>On a self-managed server with Compose, rolling back is a tag change and a restart of one service:</p>
+<pre><code># in .env or the compose file: IMAGE_TAG=3f9c2b1
+docker compose pull api
+docker compose up -d api
+docker compose ps</code></pre>
+<p>A standalone Compose file that points at pinned image tags, as produced by <code>flisk export compose</code> from services that declare an <code>image</code>, makes this a one-line change. The exporter needs the images to exist, so pin a version in the registry. See <a href="/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">deploy a standalone Compose file to a VPS</a>.</p>
+
+<h2 id="the-database-is-the-catch">The database is the catch</h2>
+<p>Code rolls back instantly. Data does not. Three cases:</p>
+<ol>
+<li><strong>No schema change in the release.</strong> Roll back the code and you are done.</li>
+<li><strong>Additive schema change</strong> (a new nullable column or table). The old code ignores it, so rolling back the code is safe and the extra column can stay.</li>
+<li><strong>Destructive or incompatible change</strong> (a dropped or renamed column, a changed type). The old code now fails. This is why you split such changes across releases. See <a href="/@odykyi/laptop-to-production/run-migrations-on-deploy-safely/">run migrations on deploy safely</a>.</li>
+</ol>
+<p>A down migration can undo a schema change, but it cannot bring back data a migration already dropped. Restoring from a backup loses everything written since the backup. Keep that as the last resort, and make sure you have tried one, as in <a href="/@odykyi/laptop-to-production/back-up-postgres-before-launch/">back up Postgres before launch</a>.</p>
+
+<h2 id="reduce-the-blast-radius">Reduce the blast radius</h2>
+<ul>
+<li><strong>Feature flags.</strong> Ship risky behaviour behind a flag that defaults to off, then turn it on for a few users. Turning off a flag is faster than any rollback and needs no deploy.</li>
+<li><strong>Gradual rollouts.</strong> If your platform supports a canary or a percentage of traffic, send a small share to the new version first. Otherwise deploy at a quiet hour.</li>
+<li><strong>Automated checks.</strong> A <a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/">smoke test after every deploy</a> tells you within a minute that you need to roll back.</li>
+</ul>
+
+<h2 id="write-the-plan-down">Write the plan down</h2>
+<p>Keep three lines in your README or runbook: how to see which version is live, the exact command or button to redeploy the previous one, and who can decide. Try it once on a quiet day. A rollback you have never practised often fails on a detail, such as a registry login that expired or an image that was cleaned up.</p>
+<p>If you use Flisk locally, <code>flisk config verify</code> and the same <code>service.json</code> files describe what the services need, which makes it easier to compare what changed between two releases. It does not roll anything back on a host, since the exporters write files and never deploy.</p>
+
+<h2 id="after-the-rollback">After the rollback</h2>
+<ul>
+<li>Confirm recovery with the smoke test and your error dashboard, not only a green status.</li>
+<li>Write down what happened while it is fresh: the trigger, the time to detect, the time to recover.</li>
+<li>Reproduce the failure locally or in staging before you ship the fix. See <a href="/@odykyi/laptop-to-production/staging-environment-small-budget/">a staging environment on a small budget</a>.</li>
+</ul>
+
+<p>The best next step is to rehearse: deploy a harmless change, roll it back, and time it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I roll back or fix forward?</summary><p>Roll back by default, because it is fast and predictable. Fix forward only when the fix is tiny, tested, and quicker than a rollback.</p></details><details><summary>Can I roll back a database migration?</summary><p>Only if you wrote a down migration and no data was lost by the change. The safer approach is additive migrations that old and new code both work with, with a backup as the last resort.</p></details><details><summary>Why not deploy the latest tag?</summary><p>Because latest points to a different image over time, so you cannot redeploy what ran yesterday. Tag every image with a commit SHA or version.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/"><span class="lbl">Guide</span><b>How to write a smoke test that runs after every deploy</b><span>A green deploy only means the container started. A smoke test asks whether the app does its one job.</span></a><a href="/@odykyi/laptop-to-production/run-migrations-on-deploy-safely/"><span class="lbl">Guide</span><b>How to run database migrations on deploy safely</b><span>On your laptop you run the migration by hand. In production, someone has to run it exactly once, at the right moment.</span></a><a href="/@odykyi/laptop-to-production/back-up-postgres-before-launch/"><span class="lbl">Guide</span><b>How to back up and restore Postgres before you launch</b><span>A backup you have never restored is a hope, not a backup. Do the restore once, before launch day.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Uploaded files disappear after a deploy: ephemeral disks</title>
+<meta name="description" content="Why files written by your app vanish on every deploy or restart on container hosts, and how to move uploads and generated data to object storage or the database.">
+<meta name="keywords" content="files disappear after deploy, ephemeral filesystem container, uploads lost after redeploy, persistent disk vs object storage, s3 uploads from container">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/files-disappear-after-deploy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Uploaded files disappear after a deploy: ephemeral disks">
+<meta property="og:description" content="Why files written by your app vanish on every deploy or restart on container hosts, and how to move uploads and generated data to object storage or the database.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/files-disappear-after-deploy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Uploaded files disappear after a deploy: ephemeral disks","description":"Why files written by your app vanish on every deploy or restart on container hosts, and how to move uploads and generated data to object storage or the database.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/files-disappear-after-deploy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/files-disappear-after-deploy/","keywords":"files disappear after deploy, ephemeral filesystem container, uploads lost after redeploy, persistent disk vs object storage, s3 uploads from container","wordCount":686,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"Uploaded files disappear after a deploy: ephemeral disks","item":"https://pages.flisk.si/@odykyi/laptop-to-production/files-disappear-after-deploy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use a Docker volume on a managed platform?","acceptedAnswer":{"@type":"Answer","text":"Not in the Compose sense. Managed platforms usually offer their own persistent disk product, often tied to one instance. Check your host's documentation and pricing, or use object storage."}},{"@type":"Question","name":"Do cache files matter?","acceptedAnswer":{"@type":"Answer","text":"Not if you can rebuild them. A cache on local disk is fine, as long as the app works when it is empty after a deploy."}},{"@type":"Question","name":"Why do my uploads work in staging but not production?","acceptedAnswer":{"@type":"Answer","text":"Check how many instances run. With two or more, a file saved by one instance is not on the other. Move uploads to shared storage."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>Uploaded files disappear after a deploy: ephemeral disks</h1><p class="dek">It worked for days, then a deploy ran and every uploaded image was gone. The disk was never yours to keep.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-ephemeral-means">What &quot;ephemeral&quot; means</a></li><li><a href="#your-options">Your options</a></li><li><a href="#develop-against-the-same-shape-locally">Develop against the same shape locally</a></li><li><a href="#find-what-writes-to-disk">Find what writes to disk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Files vanish after a deploy because most container hosts give each release a fresh filesystem. Whatever your app wrote to local disk lives only as long as that container. Store uploads and generated data in object storage or a database, or attach a real persistent volume if your host offers one.</p>
+
+<h2 id="what-ephemeral-means">What "ephemeral" means</h2>
+<p>A container starts from an image. Files the app writes go into a thin layer on top of that image. When the container is replaced, because of a deploy, a crash, a scale event or a move to another machine, the layer is discarded and the next container starts from the clean image. Platforms such as Render, Fly.io, Heroku-style hosts and Cloud Run document this behaviour for their default storage, so check your own host's page on disk persistence.</p>
+<p>On your laptop you never see this. You run the same container for weeks, or you mount a project folder into it, and the files seem permanent. The first deploy is where the assumption breaks. A second symptom comes from running more than one instance: a file uploaded through instance A does not exist on instance B, so downloads fail randomly.</p>
+
+<h2 id="your-options">Your options</h2>
+<table>
+<thead><tr><th>Option</th><th>Good for</th><th>Watch out for</th></tr></thead>
+<tbody>
+<tr><td>Object storage (S3, Cloudflare R2, MinIO, GCS)</td><td>User uploads, images, exports, backups</td><td>Needs credentials, a bucket policy and a public or signed URL plan</td></tr>
+<tr><td>The database</td><td>Small blobs, settings, anything relational</td><td>Large files bloat the database and its backups</td></tr>
+<tr><td>A persistent volume or disk from the host</td><td>A single instance that needs a real filesystem, such as SQLite or a search index</td><td>Often limited to one instance, tied to one region, may cost extra, and still needs backups</td></tr>
+<tr><td>A named Docker volume on a plain VPS</td><td>Self-managed servers</td><td>Lives on that one server. Back it up, and know it disappears if the server does</td></tr>
+</tbody>
+</table>
+<p>For most web apps the answer is object storage. It survives deploys, works with any number of instances, and lets the browser upload directly with a signed URL so the file never touches your server.</p>
+
+<h2 id="develop-against-the-same-shape-locally">Develop against the same shape locally</h2>
+<p>The trick is to use object storage locally too, so you meet the problem on your laptop and not in production. MinIO runs an S3-compatible server in one container, and the AWS SDK talks to it when you point the endpoint at it. Read <a href="/@odykyi/search-and-storage-local/run-minio-locally/">how to run MinIO locally</a> and <a href="/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/">how to point the AWS SDK at local S3</a>. Read the endpoint, bucket and keys from environment variables, as in:</p>
+<pre><code>const s3 = new S3Client({
+  region: process.env.S3_REGION ?? "auto",
+  endpoint: process.env.S3_ENDPOINT,      // local MinIO URL, or the provider's endpoint
+  forcePathStyle: process.env.S3_PATH_STYLE === "true",
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID,
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+  },
+});</code></pre>
+<p>In production you change the values, not the code. Keep the keys out of git. Only the names belong in your config files.</p>
+
+<h2 id="find-what-writes-to-disk">Find what writes to disk</h2>
+<p>Before you deploy, look for writes to the local filesystem. They hide in upload handlers, report generators, image resizers, caches and logs. A quick way is to run the production image with a read-only root filesystem and a small writable temp area:</p>
+<pre><code>docker run --rm --read-only --tmpfs /tmp -p 8080:8080 myapp:test</code></pre>
+<p>Anything that writes elsewhere fails with a permission error, which tells you exactly which code paths need a new home. Temporary files in <code>/tmp</code> are fine as long as nothing depends on them after the request ends.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>SQLite in a container.</strong> It is a file. Without a persistent volume it resets on each deploy. It also does not suit several instances.</li>
+<li><strong>Logs in files.</strong> Write to stdout and stderr so the platform keeps them. See <a href="/@odykyi/observability-local/limit-container-log-size/">limiting container log size</a> for the local side.</li>
+<li><strong>Public buckets by accident.</strong> Make uploads private and hand out short-lived signed URLs unless the files are truly public.</li>
+<li><strong>Forgetting the backup.</strong> Object storage durability is not a backup against deletion by your own code. Turn on versioning or keep a copy where your provider supports it.</li>
+</ul>
+
+<p>Data that matters needs a way back. Pair this change with <a href="/@odykyi/laptop-to-production/back-up-postgres-before-launch/">a database backup and restore test</a>, so both the files and the rows are covered.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I use a Docker volume on a managed platform?</summary><p>Not in the Compose sense. Managed platforms usually offer their own persistent disk product, often tied to one instance. Check your host&#39;s documentation and pricing, or use object storage.</p></details><details><summary>Do cache files matter?</summary><p>Not if you can rebuild them. A cache on local disk is fine, as long as the app works when it is empty after a deploy.</p></details><details><summary>Why do my uploads work in staging but not production?</summary><p>Check how many instances run. With two or more, a file saved by one instance is not on the other. Move uploads to shared storage.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/back-up-postgres-before-launch/"><span class="lbl">Guide</span><b>How to back up and restore Postgres before you launch</b><span>A backup you have never restored is a hope, not a backup. Do the restore once, before launch day.</span></a><a href="/@odykyi/laptop-to-production/first-deploy-checklist/"><span class="lbl">Guide</span><b>First deploy checklist: what to check before going live</b><span>Most first-deploy failures are the same ten small things. Check them on your laptop first, when fixing them is cheap.</span></a><a href="/@odykyi/laptop-to-production/staging-environment-small-budget/"><span class="lbl">Guide</span><b>How to set up a staging environment on a small budget</b><span>You do not need a copy of production. You need a place where the deploy can fail without anyone noticing.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
