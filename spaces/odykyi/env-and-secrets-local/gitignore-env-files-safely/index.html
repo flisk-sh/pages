@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to gitignore .env files and still commit .env.example</title>
+<meta name="description" content="The right .gitignore lines for env files, why ignoring does not untrack a file already committed, and how to check with git check-ignore before you push.">
+<meta name="keywords" content="gitignore .env, gitignore .env but keep .env.example, git rm --cached .env, git check-ignore, env file already committed gitignore">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to gitignore .env files and still commit .env.example">
+<meta property="og:description" content="The right .gitignore lines for env files, why ignoring does not untrack a file already committed, and how to check with git check-ignore before you push.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to gitignore .env files and still commit .env.example","description":"The right .gitignore lines for env files, why ignoring does not untrack a file already committed, and how to check with git check-ignore before you push.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/env-and-secrets-local/gitignore-env-files-safely/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/env-and-secrets-local/gitignore-env-files-safely/","keywords":"gitignore .env, gitignore .env but keep .env.example, git rm --cached .env, git check-ignore, env file already committed gitignore","wordCount":691,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Env vars and secrets in local dev","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/"},{"@type":"ListItem","position":3,"name":"How to gitignore .env files and still commit .env.example","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/gitignore-env-files-safely/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is my .env still showing in git status after I added it to .gitignore?","acceptedAnswer":{"@type":"Answer","text":"The file was already tracked. Run git rm --cached .env to stop tracking it, commit, and the ignore rule takes effect. The old content stays in history."}},{"@type":"Question","name":"How do I ignore .env files but keep .env.example?","acceptedAnswer":{"@type":"Answer","text":"Use .env, .env.* and then !.env.example, in that order. Git uses the last matching pattern, so the negation must come last."}},{"@type":"Question","name":"Does Flisk add .env to .gitignore?","acceptedAnswer":{"@type":"Answer","text":"Yes. flisk project appends .env, .env.* and !.env.example, plus its generated-file paths, when they are missing."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/env-and-secrets-local/">Env vars and secrets in local dev</a></div>
+<section class="hero"><div><div class="lbl">Env vars and secrets in local dev</div><h1>How to gitignore .env files and still commit .env.example</h1><p class="dek">Two lines of .gitignore protect your secrets, but only if the order is right and the file was never tracked.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-lines-to-use">The lines to use</a></li><li><a href="#ignoring-does-not-untrack">Ignoring does not untrack</a></li><li><a href="#check-before-you-commit">Check before you commit</a></li><li><a href="#what-flisk-writes-for-you">What Flisk writes for you</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Add <code>.env</code> and <code>.env.*</code> to <code>.gitignore</code>, then a negation line <code>!.env.example</code> after them so the example stays committable. Order matters because git uses the last matching pattern. And a <code>.gitignore</code> entry does nothing for a file that git already tracks, which is the case people miss.</p>
+
+<h2 id="the-lines-to-use">The lines to use</h2>
+<pre><code>.env
+.env.*
+!.env.example</code></pre>
+<p>A pattern with no slash, such as <code>.env</code>, matches at any depth, so it also covers <code>services/api/.env</code> in a monorepo. <code>.env.*</code> covers <code>.env.local</code>, <code>.env.production</code> and <code>.env.integration</code>. The negation has to come after them. If <code>!.env.example</code> is written first, <code>.env.*</code> matches it again and wins.</p>
+<p>If your team wants to commit shared, non-secret defaults such as <code>.env.development</code>, add another negation for that file, and keep real secrets in <code>.env.local</code> or <code>.env</code> only. Do this on purpose. Most leaks happen because an example or a defaults file slowly gains a real value.</p>
+
+<h2 id="ignoring-does-not-untrack">Ignoring does not untrack</h2>
+<p>If <code>.env</code> was committed once, git keeps tracking it and shows changes to it no matter what <code>.gitignore</code> says. Stop tracking it without deleting your local copy:</p>
+<pre><code>git rm --cached .env
+git commit -m "Stop tracking .env"</code></pre>
+<p>That only fixes the future. The old content is still in history, and anyone who cloned has it. If the file held a real secret, treat the secret as leaked and follow <a href="/@odykyi/env-and-secrets-local/committed-a-secret-to-git/">what to do after committing a secret</a>.</p>
+
+<h2 id="check-before-you-commit">Check before you commit</h2>
+<pre><code># which rule ignores this file, or no output if none does
+git check-ignore -v .env services/api/.env.local
+
+# the example must NOT be ignored: expect no output and exit code 1
+git check-ignore -v .env.example
+
+# list any env file git already tracks
+git ls-files | grep -E '(^|/)\.env'</code></pre>
+<p>The last command should show only <code>.env.example</code> files. Run it in CI as a guard: fail the build when it prints anything else.</p>
+<pre><code>if git ls-files | grep -E '(^|/)\.env($|\.)' | grep -v '\.env\.example$'; then
+  echo "Tracked env file found"; exit 1
+fi</code></pre>
+<p>Two more layers help. A global ignore file (<code>git config --global core.excludesFile ~/.gitignore_global</code>) protects you in repositories that forgot the rule. A pre-commit hook or a secret scanner such as gitleaks catches values that are in a file you did not think about. GitHub's push protection also blocks many known credential formats on push.</p>
+
+<h2 id="what-flisk-writes-for-you">What Flisk writes for you</h2>
+<p>When you run <code>flisk project</code>, it appends this block to the project <code>.gitignore</code> (I ran it in an empty git repository to confirm):</p>
+<pre><code># Flisk (generated files and secrets)
+.env
+.env.*
+!.env.example
+.flisk/.flisk-out/
+.flisk/.project-id
+.flisk/smoke/
+node_modules/</code></pre>
+<p>It puts <code>!.env.example</code> right after <code>.env.*</code>, so the order is already correct, and it is only added when missing. The smoke records under <code>.flisk/smoke/</code> are ignored because they store response bodies, with the values from your <code>.env</code> masked.</p>
+<p>One consequence to know: <code>flisk up --env-file .env.integration</code> reads a file that matches <code>.env.*</code>, so it is ignored by default. That is what you want, because such a file is usually a copy of <code>.env</code> and carries <code>DB_PASSWORD</code> and <code>JWT_SECRET</code>. Flisk also refuses to complete a file you pass, since "a file you name may well be committed" and writing a generated credential into it would leak one.</p>
+<p>The generated files themselves, such as <code>.flisk/.flisk-out/</code> and the root <code>package.json</code> block, are a separate matter. Flisk generates the files under <code>services/**/.autogenerated/</code> without secrets in them and checks them with <code>flisk config verify</code>. See <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">checking config drift in CI</a> for the CI side.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A <code>.gitignore</code> inside a subfolder with its own <code>!.env</code> line can re-include the file. Search for <code>!.env</code> across the repository.</li>
+<li>Editors and tools sometimes create <code>.env.bak</code> or <code>.env~</code>. The <code>.env.*</code> pattern catches the first, not the second. Add <code>*~</code> if that applies to you.</li>
+<li>Docker build contexts need their own <code>.dockerignore</code> with <code>.env*</code>, otherwise <code>COPY . .</code> bakes your <code>.env</code> into an image.</li>
+<li>Do not rely on ignoring alone for anything that would be a disaster to publish. Rotate, scan and use push protection.</li>
+</ul>
+<p>With the ignore rules sorted, the next question is how teammates get the values they need. That is the subject of <a href="/@odykyi/env-and-secrets-local/share-dev-secrets-with-a-team/">sharing dev secrets with a team</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is my .env still showing in git status after I added it to .gitignore?</summary><p>The file was already tracked. Run git rm --cached .env to stop tracking it, commit, and the ignore rule takes effect. The old content stays in history.</p></details><details><summary>How do I ignore .env files but keep .env.example?</summary><p>Use .env, .env.* and then !.env.example, in that order. Git uses the last matching pattern, so the negation must come last.</p></details><details><summary>Does Flisk add .env to .gitignore?</summary><p>Yes. flisk project appends .env, .env.* and !.env.example, plus its generated-file paths, when they are missing.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Env vars and secrets in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/env-and-secrets-local/committed-a-secret-to-git/"><span class="lbl">Guide</span><b>I committed a secret to git: what to do, in order</b><span>Deleting the file in a new commit does nothing for the secret. Treat it as public from the moment it was pushed.</span></a><a href="/@odykyi/env-and-secrets-local/write-an-env-example-file/"><span class="lbl">Guide</span><b>How to write a .env.example file that stays up to date</b><span>A new developer should know what to fill in without reading the code. An example file only works if it cannot rot.</span></a><a href="/@odykyi/env-and-secrets-local/env-vs-env-local-which-wins/"><span class="lbl">Guide</span><b>.env vs .env.local vs .env.development: which one wins?</b><span>A variable defined in three places has one effective value. Here is the order each common tool uses, and a way to check yours.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

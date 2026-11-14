@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write a .env.example file that stays up to date</title>
+<meta name="description" content="A good .env.example lists every variable, says which are required, and fails fast in CI when it drifts. Learn the format, the checks, and how Flisk helps.">
+<meta name="keywords" content=".env.example, env example file, env.sample file, document environment variables, check env example in ci, required environment variables list">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/env-and-secrets-local/write-an-env-example-file/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write a .env.example file that stays up to date">
+<meta property="og:description" content="A good .env.example lists every variable, says which are required, and fails fast in CI when it drifts. Learn the format, the checks, and how Flisk helps.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/env-and-secrets-local/write-an-env-example-file/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write a .env.example file that stays up to date","description":"A good .env.example lists every variable, says which are required, and fails fast in CI when it drifts. Learn the format, the checks, and how Flisk helps.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/env-and-secrets-local/write-an-env-example-file/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/env-and-secrets-local/write-an-env-example-file/","keywords":".env.example, env example file, env.sample file, document environment variables, check env example in ci, required environment variables list","wordCount":649,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Env vars and secrets in local dev","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/"},{"@type":"ListItem","position":3,"name":"How to write a .env.example file that stays up to date","item":"https://pages.flisk.si/@odykyi/env-and-secrets-local/write-an-env-example-file/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should .env.example be committed?","acceptedAnswer":{"@type":"Answer","text":"Yes. It holds names and harmless placeholders, no real values, so it is safe in git and helps new developers."}},{"@type":"Question","name":"Does Flisk generate a .env.example?","acceptedAnswer":{"@type":"Answer","text":"No. It generates a project .env with working defaults and a gitignore that keeps .env.example committable. The names a service needs go under secrets in service.json."}},{"@type":"Question","name":"How do I keep .env.example in sync with the code?","acceptedAnswer":{"@type":"Answer","text":"Validate variables at startup and add a CI script that compares the names the code reads with the names in the file."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/env-and-secrets-local/">Env vars and secrets in local dev</a></div>
+<section class="hero"><div><div class="lbl">Env vars and secrets in local dev</div><h1>How to write a .env.example file that stays up to date</h1><p class="dek">A new developer should know what to fill in without reading the code. An example file only works if it cannot rot.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-goes-in-the-file">What goes in the file</a></li><li><a href="#stop-it-from-drifting">Stop it from drifting</a></li><li><a href="#how-this-looks-with-flisk">How this looks with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A <code>.env.example</code> is a committed copy of your <code>.env</code> with the names kept and the secrets replaced by placeholders. It tells a new developer what to set, and it stays accurate only if something fails when it is out of date. Without that check, it is a README that nobody updates.</p>
+
+<h2 id="what-goes-in-the-file">What goes in the file</h2>
+<p>For every variable the app reads, include four things: the name, a safe example value, a one-line comment saying what it is for, and whether it is required. Group related names and leave secrets obviously fake.</p>
+<pre><code># Postgres connection, required. Local default works with the Compose database.
+DATABASE_URL=postgres://app:app@localhost:5432/app
+
+# Required. Generate with: openssl rand -hex 32
+SESSION_SECRET=
+
+# Optional. Leave empty to disable error reporting.
+SENTRY_DSN=
+
+# Optional. Defaults to info.
+LOG_LEVEL=info</code></pre>
+<p>Some conventions that help:</p>
+<ul>
+<li><strong>Empty means "you must fill this".</strong> Use a real harmless default only when the app works with it. Never put a value that looks real, such as a live-looking API key.</li>
+<li><strong>Say how to get it.</strong> A comment with the command or the dashboard URL saves a question in chat.</li>
+<li><strong>Name the file consistently.</strong> <code>.env.example</code> is the most recognised name. Some projects use <code>.env.sample</code> or <code>.env.template</code>. Pick one.</li>
+<li><strong>Keep it flat.</strong> Do not rely on interpolation inside the file, because loaders disagree about it. See <a href="/@odykyi/env-and-secrets-local/dotenv-file-syntax-rules/">the syntax rules</a>.</li>
+</ul>
+
+<h2 id="stop-it-from-drifting">Stop it from drifting</h2>
+<p>Three small checks make the file trustworthy:</p>
+<ol>
+<li><strong>Validate at startup.</strong> Read variables in one config module and throw a message naming the missing one. The code is the source of truth, and the example file is documentation of it.</li>
+<li><strong>Compare the names in CI.</strong> A short script that extracts the keys from the example and the keys your code reads, and fails on a difference, is enough:</li>
+</ol>
+<pre><code>#!/usr/bin/env bash
+# fail when code reads a variable the example does not list
+used=$(grep -rhoE 'process\.env\.[A-Z_][A-Z0-9_]*' src | sed 's/process\.env\.//' | sort -u)
+listed=$(grep -oE '^[A-Z_][A-Z0-9_]*' .env.example | sort -u)
+missing=$(comm -23 &lt;(echo "$used") &lt;(echo "$listed"))
+if [ -n "$missing" ]; then echo "Not in .env.example:"; echo "$missing"; exit 1; fi</code></pre>
+<ol start="3">
+<li><strong>Test the first run.</strong> The most honest check is a fresh clone: copy the example to <code>.env</code>, follow the README, and see if the app starts. Do it when you onboard someone, and fix whatever they hit. <a href="/@odykyi/team-dev-environments/onboard-a-developer-on-day-one/">Onboarding a developer on day one</a> describes that routine.</li>
+</ol>
+<p>The grep above is for Node-style code. Adapt the pattern for <code>os.environ</code> in Python or <code>os.Getenv</code> in Go.</p>
+
+<h2 id="how-this-looks-with-flisk">How this looks with Flisk</h2>
+<p>Flisk does not write a <code>.env.example</code> for you, but it keeps one safe. The <code>.gitignore</code> that <code>flisk project</code> writes contains <code>.env</code>, <code>.env.*</code> and <code>!.env.example</code>, so the example file is the one variant that stays committable.</p>
+<p>The list of names also lives in <code>service.json</code>, which is committed and checkable:</p>
+<pre><code>{
+  "secrets": {
+    "required": ["STRIPE_KEY"],
+    "optional": ["SENTRY_DSN"]
+  }
+}</code></pre>
+<p>A required name with no value in the env file of the run or in the environment makes <code>flisk up</code> stop before anything starts, naming the service and the secret, and printing the fix: add <code>NAME=value</code> to <code>.env</code>, export it, or move it to <code>optional</code>. That is the startup validation from step one, done for every service at once. Listing the same names in the example file keeps it useful for people who read it before they install anything. <a href="/@odykyi/team-dev-environments/service-json-as-a-team-contract/">Using service.json as a team contract</a> covers the wider idea.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A real credential pasted into the example "just for now" is a leak. Review the file in every pull request that touches it.</li>
+<li>Do not use the example as a deploy template. Production values come from your platform.</li>
+<li>If your example has fifty variables, most of them probably deserve defaults in code, so new developers have fewer lines to fill in.</li>
+</ul>
+<p>Names you commit are safe. Values are the part to protect, which is the subject of <a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/">gitignoring env files safely</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should .env.example be committed?</summary><p>Yes. It holds names and harmless placeholders, no real values, so it is safe in git and helps new developers.</p></details><details><summary>Does Flisk generate a .env.example?</summary><p>No. It generates a project .env with working defaults and a gitignore that keeps .env.example committable. The names a service needs go under secrets in service.json.</p></details><details><summary>How do I keep .env.example in sync with the code?</summary><p>Validate variables at startup and add a CI script that compares the names the code reads with the names in the file.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Env vars and secrets in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/env-and-secrets-local/generate-random-local-secrets/"><span class="lbl">Guide</span><b>How to generate random secrets for local development</b><span>A hardcoded fallback such as change-me ends up in real deployments. A random value per machine costs one line.</span></a><a href="/@odykyi/env-and-secrets-local/gitignore-env-files-safely/"><span class="lbl">Guide</span><b>How to gitignore .env files and still commit .env.example</b><span>Two lines of .gitignore protect your secrets, but only if the order is right and the file was never tracked.</span></a><a href="/@odykyi/env-and-secrets-local/dotenv-file-syntax-rules/"><span class="lbl">Guide</span><b>Why your .env file is not parsed: quotes, comments and $ signs</b><span>Two tools can read the same .env file and disagree about it. Learn the rules that most often differ, and how to check what a process really received.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
