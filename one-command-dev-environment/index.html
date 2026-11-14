@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set up a one-command dev environment for your team</title>
+<meta name="description" content="Let a new developer clone a repo and run one command to get every service, URL and secret working. What to commit, what to generate and how to check readiness.">
+<meta name="keywords" content="one command dev environment, local development environment setup, onboard developer local setup, start all services with one command">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/microservices-local-dev/one-command-dev-environment/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set up a one-command dev environment for your team">
+<meta property="og:description" content="Let a new developer clone a repo and run one command to get every service, URL and secret working. What to commit, what to generate and how to check readiness.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/microservices-local-dev/one-command-dev-environment/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set up a one-command dev environment for your team","description":"Let a new developer clone a repo and run one command to get every service, URL and secret working. What to commit, what to generate and how to check readiness.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/microservices-local-dev/one-command-dev-environment/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/microservices-local-dev/one-command-dev-environment/","keywords":"one command dev environment, local development environment setup, onboard developer local setup, start all services with one command","wordCount":756,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Run microservices on your laptop","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/"},{"@type":"ListItem","position":3,"name":"How to set up a one-command dev environment for your team","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/one-command-dev-environment/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What should a one-command environment contain?","acceptedAnswer":{"@type":"Answer","text":"A list of services with start commands and ports, a start order, readiness checks, development-only secrets that are generated rather than shared, and a command that stops everything."}},{"@type":"Question","name":"Should I commit the .env file?","acceptedAnswer":{"@type":"Answer","text":"No. Commit an example file or generate the values. Flisk can generate missing development secrets into a git-ignored .env on the first run."}},{"@type":"Question","name":"How do I check the machine before the first run?","acceptedAnswer":{"@type":"Answer","text":"Run flisk doctor. It checks the tools the services need and the service definitions, and reports what to fix."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/microservices-local-dev/">Run microservices on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Run microservices on your laptop</div><h1>How to set up a one-command dev environment for your team</h1><p class="dek">The goal is simple: clone, run one command, open a URL. Everything between those steps should be written down in files, not in someone&#39;s head.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-command-has-to-do">What the command has to do</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#secrets-without-a-shared-password-file">Secrets without a shared password file</a></li><li><a href="#what-to-commit">What to commit</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A one-command dev environment means a new developer clones the repository, runs a single command, and gets every service running with working URLs. To get there, put the service list, start commands, ports, order and development secrets in files that live in the repository, and add a check that tells the developer what is missing on their machine.</p>
+
+<h2 id="what-the-command-has-to-do">What the command has to do</h2>
+<p>"Run everything" hides a list of small jobs. If any of them is manual, the setup is not one command:</p>
+<ol>
+<li>Check that the right runtimes are installed (Node, Python, Go, Docker if you use it).</li>
+<li>Start every service with the right command and port.</li>
+<li>Start them in dependency order and wait for readiness.</li>
+<li>Provide development secrets and environment variables.</li>
+<li>Print the URLs to open.</li>
+<li>Offer a way to stop everything again.</li>
+</ol>
+<p>A <code>Makefile</code> target or a shell script can do this. The hard part is keeping it correct as services change. A script that starts everything blindly gets stale, and nobody notices until a new hire hits it.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>With Flisk the list lives in one <code>service.json</code> per service, and the command is <code>flisk up</code>. Install it once:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+git clone &lt;your-repo&gt;
+cd &lt;your-repo&gt;
+flisk doctor
+flisk up</code></pre>
+<p><code>flisk doctor</code> runs first. For a project made of local processes it checks that every service's program is installed, that dependencies and ports are valid, and that no two services share a port. It does not check Docker, because that project does not need it. Pin the runtime a service needs with <code>toolchain</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "toolchain": "node@24",
+  "port": 4000
+}</code></pre>
+<p>If the installed Node is not 24.x, Flisk refuses to start and names the service and both versions. Flisk installs nothing itself, so the message is the whole fix: the developer installs the right version.</p>
+<p>You can also point <code>flisk up</code> at a repository: <code>flisk up &lt;git-url&gt;</code> clones it shallowly into a folder named after the repo, then starts it. To see the idea first on any machine, run <code>npx @flisk-sh/flisk demo</code>. It starts a small demo, and falls back to local processes when Docker is not running.</p>
+
+<h2 id="secrets-without-a-shared-password-file">Secrets without a shared password file</h2>
+<p>Do not commit a <code>.env</code> with real values, and do not put a fixed fallback secret in a manifest. For keys a service needs only in development, ask Flisk to generate them:</p>
+<pre><code>{
+  "secrets": { "generate": { "AUTH_SECRET": "hex:32", "APP_ENCRYPTION_KEY": "base64:32" } },
+  "env": { "SESSION_SECRET": "${AUTH_SECRET}" }
+}</code></pre>
+<p>On <code>flisk up</code>, each name missing from the project <code>.env</code> is appended once with random bytes. Existing lines are never changed, a new <code>.env</code> is created with mode 0600, and Flisk prints the names, not the values. Back the file up if the key protects data you cannot lose. A deleted <code>.env</code> gets a new key. Other variables use <code>${VAR}</code> or <code>${VAR:-default}</code>, resolved from your shell first, then the project <code>.env</code>, then the service's own <code>.env</code>, then the default.</p>
+
+<h2 id="what-to-commit">What to commit</h2>
+<ul>
+<li>Every <code>service.json</code>, and <code>.flisk/project.json</code>, which <code>flisk up</code> creates on the first run.</li>
+<li>A short README section with the install command, <code>flisk doctor</code> and <code>flisk up</code>.</li>
+<li>Do not commit <code>.env</code>. Flisk adds it to <code>.gitignore</code>.</li>
+</ul>
+<p>For scripts and CI, <code>flisk up --wait</code> starts the stack in the background and returns when every service is healthy, with exit code 0, or fails. <code>flisk down</code> stops it.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The one command still needs dependencies installed.</strong> If a service needs <code>npm install</code> first, say so in the README or in the service's command.</li>
+<li><strong>One runtime path per project.</strong> A project cannot mix local commands with Dockerfile builds. Pick the path that matches what you need.</li>
+<li><strong>Different machines.</strong> Windows runs the local-process path natively. The container path needs WSL2.</li>
+</ul>
+
+<p>Keep the command honest by running it on a clean checkout now and then, in a fresh clone or in CI with <code>flisk up --wait</code>. A setup that only works on the machine of the person who wrote it is the usual way this goes wrong. When it fails on a clean clone, the missing step is the thing to write down, in the manifest if possible and in the README if not. Treat each manual step you find as a bug in the setup, not as a fact of life, and fix it once for everyone.</p>
+
+<p>Next, see how <a href="/@odykyi/team-dev-environments/onboard-a-developer-on-day-one/">a developer onboards on day one</a>, or <a href="/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">set up a monorepo</a> so the manifests have a clear home.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What should a one-command environment contain?</summary><p>A list of services with start commands and ports, a start order, readiness checks, development-only secrets that are generated rather than shared, and a command that stops everything.</p></details><details><summary>Should I commit the .env file?</summary><p>No. Commit an example file or generate the values. Flisk can generate missing development secrets into a git-ignored .env on the first run.</p></details><details><summary>How do I check the machine before the first run?</summary><p>Run flisk doctor. It checks the tools the services need and the service definitions, and reports what to fix.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Run microservices on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/"><span class="lbl">Guide</span><b>How to run microservices locally on your laptop</b><span>You do not need Kubernetes to work on five services. You need each one running on a known port, started in the right order, with logs you can read.</span></a><a href="/@odykyi/microservices-local-dev/monorepo-local-dev-setup/"><span class="lbl">Guide</span><b>Local development setup for a monorepo with several services</b><span>A monorepo makes it easy to see every service. It does not make it easy to start them together unless the layout and the manifests agree.</span></a><a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/"><span class="lbl">Guide</span><b>How to stop and clean up a local stack and free disk space</b><span>Stopping a stack and cleaning it up are two different jobs. One is cheap and safe. The other deletes data.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

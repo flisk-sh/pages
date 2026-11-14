@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local development setup for a monorepo with several services</title>
+<meta name="description" content="Lay out a monorepo so every service starts locally with one command: where service.json files go, how discovery finds them, and what changes with several repos.">
+<meta name="keywords" content="monorepo local development, run multiple services monorepo, monorepo service discovery, multi repo local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Local development setup for a monorepo with several services">
+<meta property="og:description" content="Lay out a monorepo so every service starts locally with one command: where service.json files go, how discovery finds them, and what changes with several repos.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/microservices-local-dev/monorepo-local-dev-setup/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Local development setup for a monorepo with several services","description":"Lay out a monorepo so every service starts locally with one command: where service.json files go, how discovery finds them, and what changes with several repos.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/microservices-local-dev/monorepo-local-dev-setup/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/microservices-local-dev/monorepo-local-dev-setup/","keywords":"monorepo local development, run multiple services monorepo, monorepo service discovery, multi repo local development","wordCount":755,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Run microservices on your laptop","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/"},{"@type":"ListItem","position":3,"name":"Local development setup for a monorepo with several services","item":"https://pages.flisk.si/@odykyi/microservices-local-dev/monorepo-local-dev-setup/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Where do service.json files go in a monorepo?","acceptedAnswer":{"@type":"Answer","text":"Put one service.json in each service folder. For local processes, Flisk finds them at any depth under the project. For container projects, services are expected under the discovery paths, which default to services/*/*."}},{"@type":"Question","name":"Can one Flisk project span several repositories?","acceptedAnswer":{"@type":"Answer","text":"A service.json outside the project root is not supported. Either keep one project per repository, or use a platform repository that brings the other services in as bring-your-own resources. Flisk can clone repositories listed in .flisk/project.json with flisk repos clone."}},{"@type":"Question","name":"Do I need a workspace tool like Nx or Turborepo?","acceptedAnswer":{"@type":"Answer","text":"Not to start services. Those tools build and cache packages. Starting the services, in order, with ports and health checks is a separate job that a process runner or Flisk handles."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/microservices-local-dev/">Run microservices on your laptop</a></div>
+<section class="hero"><div><div class="lbl">Run microservices on your laptop</div><h1>Local development setup for a monorepo with several services</h1><p class="dek">A monorepo makes it easy to see every service. It does not make it easy to start them together unless the layout and the manifests agree.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-good-monorepo-layout-looks-like">What a good monorepo layout looks like</a></li><li><a href="#the-plain-approach">The plain approach</a></li><li><a href="#the-flisk-way-local-processes">The Flisk way: local processes</a></li><li><a href="#the-flisk-way-containers">The Flisk way: containers</a></li><li><a href="#when-the-services-live-in-several-repositories">When the services live in several repositories</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>For a monorepo, put one manifest in every service folder, give each service its own port, and run one command from the repository root. The tool then discovers the services, starts them in dependency order and shows you what is running. The layout matters more than the tool: if a service cannot be started from its own folder, no runner can fix that from outside.</p>
+
+<h2 id="what-a-good-monorepo-layout-looks-like">What a good monorepo layout looks like</h2>
+<p>A layout that works with almost any runner:</p>
+<pre><code>shop/
+  api/
+    server.js
+    service.json
+  worker/
+    worker.js
+    service.json
+  web/
+    package.json
+    service.json
+  packages/
+    shared/</code></pre>
+<p>Rules that save time later:</p>
+<ul>
+<li>Every service can start from its own folder with one command.</li>
+<li>Every service has its own port, written in one place.</li>
+<li>Shared code lives in a package folder that is imported, not started.</li>
+<li>Each service has its own dependency file, so the runtime picks up the right versions.</li>
+</ul>
+<p>Workspace tools such as npm workspaces, pnpm, Nx or Turborepo handle installing and building shared packages. They are not a replacement for a service runner, and the two work together fine.</p>
+
+<h2 id="the-plain-approach">The plain approach</h2>
+<p>Many teams start with a root script: <code>npm run dev</code> that runs <code>concurrently</code> over each service, or a <code>Makefile</code> with a target per service. It works for three services. It starts to hurt when you need start order, readiness checks, per-service logs and a list of ports. You end up rewriting those in the script. Compose handles it for containers; see <a href="/@odykyi/docker-compose-guide/docker-compose-alternative-for-local-dev/">alternatives to Compose for local dev</a> for the trade-offs.</p>
+
+<h2 id="the-flisk-way-local-processes">The Flisk way: local processes</h2>
+<p>For local processes, Flisk scans the project for <code>service.json</code> files at any depth, so the folder names above need no special rules. Each service describes itself:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "worker",
+  "appType": "worker",
+  "command": "node worker.js",
+  "dependsOn": ["api"]
+}</code></pre>
+<p>Run <code>flisk up --dry-run</code> from the root to see what was discovered and in which order, then <code>flisk up</code>. A heavy part can sit behind a profile, and one service plus its dependencies starts with <code>flisk up --only worker</code>. See <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">start only the services you need</a>.</p>
+
+<h2 id="the-flisk-way-containers">The Flisk way: containers</h2>
+<p>In a container project, discovery is stricter. Services are expected under the paths in <code>discovery.paths</code>, which default to <code>services/*/*</code>, which is a stack folder and then a service folder. Create services with the CLI, which puts them in the right place:</p>
+<pre><code>flisk project
+flisk resource api --type backend --stack shop
+flisk resource web --type frontend --stack shop</code></pre>
+<p>If you add a service by hand outside the scan path, <code>flisk resource</code> warns that it is outside <code>discovery.paths</code>. After you change the paths, run <code>flisk config regenerate</code> and then <code>flisk config verify</code> to check that the generated files match. Do not edit the generated <code>.flisk/</code> files.</p>
+
+<h2 id="when-the-services-live-in-several-repositories">When the services live in several repositories</h2>
+<p>The hard case is not the monorepo, it is a company with one repository per service. A <code>service.json</code> outside the project root is not supported, so one Flisk project cannot reach into a sibling checkout. You have two options:</p>
+<ul>
+<li><strong>One project per repository.</strong> Each repo starts its own services. This is simple and works when the services are mostly independent.</li>
+<li><strong>A platform repository.</strong> It holds the project, and describes the other services as bring-your-own resources that build from a Dockerfile or run an image. <code>flisk repos clone</code> clones the repositories listed in <code>.flisk/project.json</code> that are missing.</li>
+</ul>
+<p>Either way, agree on ports and URLs in writing. Two repositories that both want port 3000 will fight, whatever the tool.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port clashes.</strong> <code>flisk doctor</code> reports two services that share a port.</li>
+<li><strong>Hidden shared state.</strong> Services that read the same local file or database without saying so break in a different order on each machine. Write the dependency down.</li>
+<li><strong>Starting everything by default.</strong> A monorepo of twenty services will not run well on a laptop. Group them and start groups.</li>
+</ul>
+
+<p>Naming helps in a large repository. Use the same pattern for every service folder, and keep the <code>appName</code> equal to the folder name, so a name in the logs maps to a path without a lookup. Keep the ports in a short table in the README as well, even though the manifests are the source of truth, because people read the table first. Decide who owns each service folder, so a broken manifest has a clear person to ask, and review manifest changes the way you review code.</p>
+
+<p>Next, make the repository ready for new people with <a href="/@odykyi/microservices-local-dev/one-command-dev-environment/">a one-command dev environment</a>, and read how a team keeps the manifests honest in <a href="/@odykyi/team-dev-environments/service-json-as-a-team-contract/">service.json as a team contract</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Where do service.json files go in a monorepo?</summary><p>Put one service.json in each service folder. For local processes, Flisk finds them at any depth under the project. For container projects, services are expected under the discovery paths, which default to services/*/*.</p></details><details><summary>Can one Flisk project span several repositories?</summary><p>A service.json outside the project root is not supported. Either keep one project per repository, or use a platform repository that brings the other services in as bring-your-own resources. Flisk can clone repositories listed in .flisk/project.json with flisk repos clone.</p></details><details><summary>Do I need a workspace tool like Nx or Turborepo?</summary><p>Not to start services. Those tools build and cache packages. Starting the services, in order, with ports and health checks is a separate job that a process runner or Flisk handles.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Run microservices on your laptop</span></div>
+<div class="rgrid"><a href="/@odykyi/microservices-local-dev/one-command-dev-environment/"><span class="lbl">Guide</span><b>How to set up a one-command dev environment for your team</b><span>The goal is simple: clone, run one command, open a URL. Everything between those steps should be written down in files, not in someone&#39;s head.</span></a><a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/"><span class="lbl">Guide</span><b>How to start only the services you need in local development</b><span>A full stack on a laptop eats memory and time. Most days you touch one or two services.</span></a><a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/"><span class="lbl">Guide</span><b>How to run microservices locally on your laptop</b><span>You do not need Kubernetes to work on five services. You need each one running on a known port, started in the right order, with logs you can read.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
