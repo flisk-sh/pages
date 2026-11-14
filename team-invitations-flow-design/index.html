@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to design a team invitation flow for a SaaS app</title>
+<meta name="description" content="Hashed single-use invite tokens, expiry, a unique pending invite per email, seat limits checked in one transaction, and how to read invite links in local dev.">
+<meta name="keywords" content="team invitation flow, invite token design, saas invite users, invitation expiry, seat limit invite race">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/team-invitations-flow-design/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to design a team invitation flow for a SaaS app">
+<meta property="og:description" content="Hashed single-use invite tokens, expiry, a unique pending invite per email, seat limits checked in one transaction, and how to read invite links in local dev.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/team-invitations-flow-design/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to design a team invitation flow for a SaaS app","description":"Hashed single-use invite tokens, expiry, a unique pending invite per email, seat limits checked in one transaction, and how to read invite links in local dev.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/team-invitations-flow-design/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/team-invitations-flow-design/","keywords":"team invitation flow, invite token design, saas invite users, invitation expiry, seat limit invite race","wordCount":736,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to design a team invitation flow for a SaaS app","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/team-invitations-flow-design/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I store invitation tokens in plain text?","acceptedAnswer":{"@type":"Answer","text":"No. Store a hash, as you would for a password reset token, so a database leak does not expose usable links."}},{"@type":"Question","name":"Why should accepting an invite be a POST?","acceptedAnswer":{"@type":"Answer","text":"Mail scanners and chat apps fetch links automatically. A GET that consumes the token would burn the invite before the person clicks."}},{"@type":"Question","name":"How do I stop two invites exceeding the seat limit?","acceptedAnswer":{"@type":"Answer","text":"Lock the tenant row or use a counter with a check constraint, and do the count and the insert in the same transaction."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to design a team invitation flow for a SaaS app</h1><p class="dek">Inviting a colleague looks like one button. Behind it are tokens, expiry, duplicates, existing accounts and seat limits that all need a decision.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-table">The table</a></li><li><a href="#token-handling">Token handling</a></li><li><a href="#accepting">Accepting</a></li><li><a href="#seat-limits-and-the-race">Seat limits and the race</a></li><li><a href="#reading-invite-links-in-local-development">Reading invite links in local development</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>An invitation is a row with a random token (stored hashed), the invited email, a role, an expiry and a state. Accepting it adds the signed-in user to the tenant in one transaction and marks the invite used. Decide up front what happens when the email already has an account, when the invite is sent twice and when the seat limit is reached.</p>
+
+<h2 id="the-table">The table</h2>
+<pre><code>create table invitations (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id),
+  email text not null,
+  role text not null,
+  token_hash bytea not null unique,
+  invited_by uuid not null,
+  expires_at timestamptz not null,
+  accepted_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create unique index one_pending_invite
+  on invitations (tenant_id, lower(email))
+  where accepted_at is null and revoked_at is null;</code></pre>
+<p>The partial unique index means a tenant can have only one pending invite per email, however many times someone clicks "invite". Resending reuses the row and issues a new token, so the old link stops working.</p>
+
+<h2 id="token-handling">Token handling</h2>
+<p>Treat the invite token like a password reset token. It is a credential for a short time:</p>
+<ul>
+<li>Generate 32 random bytes, encode them for the URL, and store only a SHA-256 hash of the token. A database leak then does not hand out working links.</li>
+<li>Make it single use. Set <code>accepted_at</code> in the same statement that checks it is still null.</li>
+<li>Expire it, seven days is common, and check expiry on the server at acceptance time.</li>
+<li>Do not put anything private in the link beyond the token. Look up the tenant name server-side to show on the accept page.</li>
+</ul>
+
+<h2 id="accepting">Accepting</h2>
+<p>Bind the invite to an email. The simplest safe rule: the user must be signed in with a verified email address equal to the invited one, otherwise acceptance fails with a clear message. If they have no account, send them to sign-up with the email prefilled and return to the invite afterwards. Without binding, anyone who gets the link, from a forwarded email or a shared chat, joins the tenant with the invited role.</p>
+<pre><code>begin;
+  update invitations
+     set accepted_at = now()
+   where token_hash = $1
+     and accepted_at is null and revoked_at is null
+     and expires_at &gt; now()
+   returning tenant_id, role, email;
+  -- if no row returned: rollback and show "invalid or expired"
+  insert into memberships (tenant_id, user_id, role)
+  values ($tenant, $user, $role)
+  on conflict (tenant_id, user_id) do nothing;
+commit;</code></pre>
+<p>Running both statements in one transaction means a crash between them cannot burn the invite without adding the member. The <code>on conflict</code> clause makes a second click harmless.</p>
+
+<h2 id="seat-limits-and-the-race">Seat limits and the race</h2>
+<p>If the plan allows ten seats, counting members and then inserting is a race: two invites accepted at the same moment can both see nine. Take a lock on the tenant row (<code>select ... from tenants where id = $1 for update</code>) before counting, or keep a counter with a check constraint. Decide whether pending invites count toward the limit. Counting them at creation time gives the sender feedback early, counting at acceptance is the only moment the limit is truly enforced, and most products check at both. Where the limit comes from is covered in <a href="/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/">plans and entitlements</a>.</p>
+
+<h2 id="reading-invite-links-in-local-development">Reading invite links in local development</h2>
+<p>You do not need a mail server to build this. In development, have the API log the accept link instead of sending mail, switched by an environment variable such as <code>MAIL_MODE=log</code> that you define. With the services under Flisk, read the link from the service log:</p>
+<pre><code>flisk logs --service api --tail 50</code></pre>
+<p>The command returns recent output of that service, merged across services when you leave out the name. Set the variable in the manifest's <code>env</code> block so the whole team gets the same behavior. See <a href="/@odykyi/saas-architecture-local/saas-local-stack-layout/">the local stack layout</a> for what else to run next to the API.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Case in emails.</strong> Compare <code>lower(email)</code> consistently, or <code>Ana@x.com</code> and <code>ana@x.com</code> become two invites.</li>
+<li><strong>Role escalation.</strong> Check that the inviter may grant the role they chose. An editor must not invite an admin.</li>
+<li><strong>Link previews.</strong> Chat apps and mail scanners fetch links. Do not consume the invite on a GET. Show a page and accept on a POST.</li>
+<li><strong>Leaking existence.</strong> Responses to "is this email already a member" can reveal who uses your product. Keep them neutral outside the tenant's own admins.</li>
+</ul>
+<p>Every accepted invite and role change is worth recording. The next article shows how: <a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/">an audit log table</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I store invitation tokens in plain text?</summary><p>No. Store a hash, as you would for a password reset token, so a database leak does not expose usable links.</p></details><details><summary>Why should accepting an invite be a POST?</summary><p>Mail scanners and chat apps fetch links automatically. A GET that consumes the token would burn the invite before the person clicks.</p></details><details><summary>How do I stop two invites exceeding the seat limit?</summary><p>Lock the tenant row or use a counter with a check constraint, and do the count and the insert in the same transaction.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/"><span class="lbl">Guide</span><b>How to store and rotate customer API keys safely</b><span>If your SaaS has an API, your customers will paste its keys into scripts and chat. Design them so a leaked database does not leak working keys.</span></a><a href="/@odykyi/saas-architecture-local/plans-and-feature-flags-entitlements/"><span class="lbl">Guide</span><b>How to model SaaS plans and entitlements in your database</b><span>Plan names change, pricing experiments run, and one customer gets a custom deal. Code that asks about features instead of plans survives all of it.</span></a><a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/"><span class="lbl">Guide</span><b>How to build an audit log table for a SaaS app</b><span>Customers ask who deleted a project, and your support team asks it twice a week. An audit log answers that, if you design it before you need it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

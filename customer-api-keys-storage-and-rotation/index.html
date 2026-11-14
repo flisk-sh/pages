@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to store and rotate customer API keys safely</title>
+<meta name="description" content="Generate API keys with a visible prefix, show them once, store only a hash, compare in constant time and rotate with an overlap. Includes Node code.">
+<meta name="keywords" content="store api keys securely, hash api keys, api key rotation, api key prefix, saas customer api keys">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to store and rotate customer API keys safely">
+<meta property="og:description" content="Generate API keys with a visible prefix, show them once, store only a hash, compare in constant time and rotate with an overlap. Includes Node code.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to store and rotate customer API keys safely","description":"Generate API keys with a visible prefix, show them once, store only a hash, compare in constant time and rotate with an overlap. Includes Node code.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/","keywords":"store api keys securely, hash api keys, api key rotation, api key prefix, saas customer api keys","wordCount":762,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to store and rotate customer API keys safely","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/customer-api-keys-storage-and-rotation/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do API keys need bcrypt?","acceptedAnswer":{"@type":"Answer","text":"No. Keys are long random values, so a fast hash such as SHA-256 or HMAC-SHA-256 is enough. Slow hashes protect short human-chosen passwords."}},{"@type":"Question","name":"Why store a key prefix or id in plain text?","acceptedAnswer":{"@type":"Answer","text":"It lets you find the one row to check without scanning every hash, and lets customers identify which key is which in a list."}},{"@type":"Question","name":"How do I rotate an API key without breaking customers?","acceptedAnswer":{"@type":"Answer","text":"Allow two active keys at once. Create the new one, let the customer switch, check the last-used time of the old key, then revoke it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to store and rotate customer API keys safely</h1><p class="dek">If your SaaS has an API, your customers will paste its keys into scripts and chat. Design them so a leaked database does not leak working keys.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-good-key-looks-like">What a good key looks like</a></li><li><a href="#store-a-hash-not-the-key">Store a hash, not the key</a></li><li><a href="#rotation-without-downtime">Rotation without downtime</a></li><li><a href="#the-pepper-in-local-development">The pepper in local development</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Generate each key from a secure random source, show it to the customer once, and store only a hash of it plus a short non-secret prefix for lookup. Keep keys revocable and give each an owner, scopes and a last-used time. To rotate, allow two active keys at once so customers can switch without downtime.</p>
+
+<h2 id="what-a-good-key-looks-like">What a good key looks like</h2>
+<p>A key is a password for a machine, so it needs to be long and random, not a user-chosen string. Include a readable prefix and a public identifier:</p>
+<pre><code>sk_live_k3j9x2ab_Qm8vN0yT4r5UeH7pXw2LcZb1DfGaJiKs9oR3tYn6A</code></pre>
+<ul>
+<li><code>sk_live</code> tells humans and secret scanners what it is and which environment it belongs to.</li>
+<li><code>k3j9x2ab</code> is a public id. You store it in the clear and use it to find the row.</li>
+<li>The long tail is at least 32 random bytes, encoded as base64url or hex.</li>
+</ul>
+<p>A recognizable prefix helps with leaks. Services that scan public repositories for secrets can match your format, and customers can tell at a glance which of their keys they are looking at.</p>
+
+<h2 id="store-a-hash-not-the-key">Store a hash, not the key</h2>
+<p>Unlike a user password, an API key has high entropy, so a fast hash is enough. You do not need bcrypt or Argon2, which exist to slow down guessing of short human passwords. Use SHA-256, or better, HMAC-SHA-256 with a server-side secret so that a copy of the database alone cannot be used to check guesses.</p>
+<pre><code>import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
+
+const PEPPER = process.env.API_KEY_PEPPER;
+
+export function createKey(env = "live") {
+  const id = randomBytes(5).toString("hex");
+  const secret = randomBytes(32).toString("base64url");
+  const key = `sk_${env}_${id}_${secret}`;
+  return { key, id, hash: digest(key) };   // show key once, store id and hash
+}
+
+const digest = (key) =&gt; createHmac("sha256", PEPPER).update(key).digest();
+
+export async function verify(presented) {
+  const id = presented.split("_")[2];
+  const row = await db.oneOrNone(
+    "select * from api_keys where key_id = $1 and revoked_at is null", [id]);
+  if (!row) return null;
+  const ok = timingSafeEqual(digest(presented), row.key_hash);
+  return ok ? row : null;
+}</code></pre>
+<p>The table needs the tenant, so a verified key also tells you which <a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">tenant</a> is calling:</p>
+<pre><code>create table api_keys (
+  key_id text primary key,
+  tenant_id uuid not null references tenants(id),
+  name text not null,
+  key_hash bytea not null,
+  scopes text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  expires_at timestamptz,
+  revoked_at timestamptz
+);</code></pre>
+<p><code>timingSafeEqual</code> compares in constant time and throws if the two buffers differ in length. Both digests are 32 bytes here, so it is safe. Update <code>last_used_at</code> at most once a minute per key, not on every request, or you turn each API call into a write.</p>
+
+<h2 id="rotation-without-downtime">Rotation without downtime</h2>
+<p>Rotation fails when the old key stops working before customers have deployed the new one. Let a tenant hold several active keys. The flow is: create a new key, deploy it, check <code>last_used_at</code> on the old key to confirm nothing still uses it, then revoke it. For compromised keys, revoke immediately and tell the customer which request patterns used it, which your <a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/">audit log</a> should contain.</p>
+
+<h2 id="the-pepper-in-local-development">The pepper in local development</h2>
+<p>The server-side secret must not be committed, and every developer needs one. Flisk can generate it for you on <code>flisk up</code>. Declare the name in the service manifest and read it from <code>env</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "secrets": { "generate": { "API_KEY_PEPPER": "hex:32" } },
+  "env": { "API_KEY_PEPPER": "${API_KEY_PEPPER}" }
+}</code></pre>
+<p>On <code>flisk up</code> Flisk appends the name to the project <code>.env</code> once, with 32 random bytes as hex, and never prints the value or overwrites an existing one. A manifest that also writes a fixed value for that name is rejected by <code>flisk config verify</code>. The catch: if you delete <code>.env</code>, the next run generates a new pepper and every hashed key made with the old one stops verifying. In development that is a nuisance. In production, store the pepper in your real secret manager and never rotate it casually. For the broader approach, see <a href="/@odykyi/team-dev-environments/service-json-as-a-team-contract/">service.json as a team contract</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Logging the key.</strong> Request logs and error trackers capture <code>Authorization</code> headers. Redact them.</li>
+<li><strong>Keys in URLs.</strong> Query strings end up in logs and browser history. Accept keys in a header only.</li>
+<li><strong>Showing the key twice.</strong> You cannot, because you do not have it. Say so in the UI and offer to create a new one.</li>
+<li><strong>One key for everything.</strong> Give keys scopes, such as read-only, and enforce them on the server.</li>
+</ul>
+<p>Keys identify a tenant for machines. People join a tenant a different way, which is the next article: <a href="/@odykyi/saas-architecture-local/team-invitations-flow-design/">designing team invitations</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do API keys need bcrypt?</summary><p>No. Keys are long random values, so a fast hash such as SHA-256 or HMAC-SHA-256 is enough. Slow hashes protect short human-chosen passwords.</p></details><details><summary>Why store a key prefix or id in plain text?</summary><p>It lets you find the one row to check without scanning every hash, and lets customers identify which key is which in a list.</p></details><details><summary>How do I rotate an API key without breaking customers?</summary><p>Allow two active keys at once. Create the new one, let the customer switch, check the last-used time of the old key, then revoke it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/per-tenant-rate-limits-with-redis/"><span class="lbl">Guide</span><b>How to rate limit each tenant of your API with Redis</b><span>One tenant running a runaway script should not slow everyone else. A counter in Redis per tenant and window is the smallest thing that works.</span></a><a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/"><span class="lbl">Guide</span><b>How to build an audit log table for a SaaS app</b><span>Customers ask who deleted a project, and your support team asks it twice a week. An audit log answers that, if you design it before you need it.</span></a><a href="/@odykyi/saas-architecture-local/team-invitations-flow-design/"><span class="lbl">Guide</span><b>How to design a team invitation flow for a SaaS app</b><span>Inviting a colleague looks like one button. Behind it are tokens, expiry, duplicates, existing accounts and seat limits that all need a decision.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

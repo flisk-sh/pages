@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to resolve the tenant from a subdomain in local development</title>
+<meta name="description" content="Read acme.localhost from the Host header, strip the port and the base domain, reject reserved names and test it with curl or a browser, without editing hosts.">
+<meta name="keywords" content="tenant from subdomain, multi tenant subdomain routing, acme.localhost, host header tenant resolution, saas subdomain local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to resolve the tenant from a subdomain in local development">
+<meta property="og:description" content="Read acme.localhost from the Host header, strip the port and the base domain, reject reserved names and test it with curl or a browser, without editing hosts.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to resolve the tenant from a subdomain in local development","description":"Read acme.localhost from the Host header, strip the port and the base domain, reject reserved names and test it with curl or a browser, without editing hosts.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/","keywords":"tenant from subdomain, multi tenant subdomain routing, acme.localhost, host header tenant resolution, saas subdomain local development","wordCount":709,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to resolve the tenant from a subdomain in local development","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does acme.localhost work without editing /etc/hosts?","acceptedAnswer":{"@type":"Answer","text":"In Chrome and Firefox it resolves to your own machine automatically. Some browsers and operating systems do not, and then you can use curl with a Host header or add hosts entries."}},{"@type":"Question","name":"Should I trust X-Forwarded-Host to pick the tenant?","acceptedAnswer":{"@type":"Answer","text":"Only when the request comes from your own proxy. If clients can reach the app directly, a forged header lets them choose any tenant."}},{"@type":"Question","name":"Should session cookies set a Domain attribute?","acceptedAnswer":{"@type":"Answer","text":"No. Host-only cookies are not sent to other subdomains, which keeps tenant sessions separate."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to resolve the tenant from a subdomain in local development</h1><p class="dek">Many SaaS products put each customer on its own subdomain. You can build and test that routing on your laptop without a domain or a hosts file entry.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-resolution-function">The resolution function</a></li><li><a href="#testing-without-a-browser">Testing without a browser</a></li><li><a href="#behind-a-proxy">Behind a proxy</a></li><li><a href="#cookies-and-cors">Cookies and CORS</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#tests-worth-writing">Tests worth writing</a></li><li><a href="#path-prefix-instead">Path prefix instead?</a></li></ol></nav></aside>
+<article><p>Read the <code>Host</code> header, remove the port, remove your base domain (<code>localhost</code> in development), and what remains is the tenant slug. Browsers such as Chrome and Firefox send <code>acme.localhost</code> to your own machine, so you can test <code>acme.localhost:3000</code> and <code>globex.localhost:3000</code> with no DNS setup.</p>
+
+<h2 id="the-resolution-function">The resolution function</h2>
+<p>Keep it small, pure and tested. The base domain comes from configuration, so production uses <code>yourapp.com</code> and development uses <code>localhost</code>:</p>
+<pre><code>const BASE = process.env.BASE_DOMAIN ?? "localhost";
+const RESERVED = new Set(["www", "app", "api", "admin", "static"]);
+
+export function tenantSlugFromHost(hostHeader) {
+  const host = (hostHeader ?? "").toLowerCase().split(":")[0];
+  if (host === BASE) return null;                 // marketing site, no tenant
+  if (!host.endsWith("." + BASE)) return null;    // unknown domain
+  const slug = host.slice(0, -(BASE.length + 1));
+  if (slug.includes(".") || RESERVED.has(slug)) return null;
+  return /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(slug) ? slug : null;
+}</code></pre>
+<p>Then look the slug up in the <code>tenants</code> table and return a 404 for an unknown tenant. A 404 is safer than a redirect, because it does not confirm which names exist beyond what the page already shows.</p>
+
+<h2 id="testing-without-a-browser">Testing without a browser</h2>
+<p>You do not need a wildcard DNS record. Send the header yourself:</p>
+<pre><code>curl -H "Host: acme.localhost:3000" http://localhost:3000/api/projects
+curl -H "Host: globex.localhost:3000" http://localhost:3000/api/projects</code></pre>
+<p>Write the same two calls as an automated test, because the tenant lookup is exactly the kind of code that breaks quietly. In a browser, open <code>http://acme.localhost:3000</code>. If it does not resolve, for example in Safari or on some Linux setups, see <a href="/@odykyi/dev-env-troubleshooting/localhost-subdomain-does-not-resolve/">why a *.localhost subdomain does not resolve</a>.</p>
+
+<h2 id="behind-a-proxy">Behind a proxy</h2>
+<p>When a proxy or gateway sits in front of your app, the <code>Host</code> header may carry the proxy's name, and the original host arrives in <code>X-Forwarded-Host</code>. Trust that header only when the request comes from your own proxy. If the app is reachable directly, any client can send a forged <code>X-Forwarded-Host</code> and pick the tenant. Configure your framework's trusted proxy setting, and let nothing else override the host.</p>
+
+<h2 id="cookies-and-cors">Cookies and CORS</h2>
+<ul>
+<li>Do not set a <code>Domain</code> attribute on session cookies. A host-only cookie for <code>acme.localhost</code> is never sent to <code>globex.localhost</code>, which is the isolation you want.</li>
+<li>If a front end on one subdomain calls an API on another, you need explicit CORS and credentials settings. The rules are in <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">using *.localhost URLs instead of port numbers</a> and the front end guides.</li>
+<li>A user who belongs to two tenants has two separate sessions, one per subdomain. Decide whether that is acceptable or whether you need a central login that redirects.</li>
+</ul>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>When your services run as local processes, Flisk prints a plain <code>http://localhost:&lt;port&gt;</code> for each one. Your browser will accept <code>acme.localhost</code> with that port in front of the same process, and the app does the tenant parsing described above. Set the base domain as an environment variable on the service:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "node server.js",
+  "port": 3000,
+  "env": { "BASE_DOMAIN": "localhost" }
+}</code></pre>
+<p>On the container path, Flisk routes services through a gateway on <code>*.localhost</code> names. That gateway's host names belong to Flisk's own routing, so check what <code>flisk networks</code> prints for your project before you build tenant logic on top of them, and decide whether tenants sit under your service host or in front of it. The tenant parsing itself stays in your code either way.</p>
+
+<h2 id="tests-worth-writing">Tests worth writing</h2>
+<ul>
+<li>A pure unit test of <code>tenantSlugFromHost</code> with the awkward inputs: an uppercase host, a host with a port, the bare base domain, a nested name such as <code>a.b.localhost</code>, a reserved name and an invalid character.</li>
+<li>An integration test that calls two tenants with the <code>Host</code> header and checks the responses differ.</li>
+<li>A test that an unknown slug returns 404 and never falls through to a default tenant. A silent default tenant is how data ends up in the wrong place.</li>
+</ul>
+
+<h2 id="path-prefix-instead">Path prefix instead?</h2>
+<p>If you do not want wildcard hosts, <code>/t/acme/...</code> works everywhere with no DNS at all, and is simpler for custom domains you do not control. The costs are that every link must carry the prefix and cookies are shared across tenants on one host. Subdomains give better isolation by default.</p>
+<p>Next, make sure a request without a resolved tenant cannot reach tenant data: apply <a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/">row level security</a> and test both tenants side by side.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does acme.localhost work without editing /etc/hosts?</summary><p>In Chrome and Firefox it resolves to your own machine automatically. Some browsers and operating systems do not, and then you can use curl with a Host header or add hosts entries.</p></details><details><summary>Should I trust X-Forwarded-Host to pick the tenant?</summary><p>Only when the request comes from your own proxy. If clients can reach the app directly, a forged header lets them choose any tenant.</p></details><details><summary>Should session cookies set a Domain attribute?</summary><p>No. Host-only cookies are not sent to other subdomains, which keeps tenant sessions separate.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"><span class="lbl">Guide</span><b>How to design a multi-tenant database in Postgres</b><span>Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</span></a><a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/"><span class="lbl">Guide</span><b>How to use Postgres row level security for tenant isolation</b><span>A forgotten WHERE clause is the classic tenant leak. Row level security moves the filter into the database, so one missed query cannot expose another customer.</span></a><a href="/@odykyi/saas-architecture-local/saas-local-stack-layout/"><span class="lbl">Guide</span><b>What to run locally for a SaaS app: web, API, worker, database</b><span>A SaaS app is rarely one process. Decide which parts you run, in what order they start and which route fits, before the folders multiply.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

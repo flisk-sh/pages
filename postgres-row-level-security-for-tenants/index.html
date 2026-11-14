@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use Postgres row level security for tenant isolation</title>
+<meta name="description" content="Turn on row level security, write a tenant policy, set the tenant per transaction and avoid the superuser trap that makes RLS silently do nothing in local dev.">
+<meta name="keywords" content="postgres row level security, rls multi tenant, set_config tenant_id, postgres policy tenant isolation, force row level security">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use Postgres row level security for tenant isolation">
+<meta property="og:description" content="Turn on row level security, write a tenant policy, set the tenant per transaction and avoid the superuser trap that makes RLS silently do nothing in local dev.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use Postgres row level security for tenant isolation","description":"Turn on row level security, write a tenant policy, set the tenant per transaction and avoid the superuser trap that makes RLS silently do nothing in local dev.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/","keywords":"postgres row level security, rls multi tenant, set_config tenant_id, postgres policy tenant isolation, force row level security","wordCount":736,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to use Postgres row level security for tenant isolation","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does Postgres row level security not apply to my local user?","acceptedAnswer":{"@type":"Answer","text":"Superusers and roles with BYPASSRLS skip all policies, and the default user of the Postgres Docker image is a superuser. Connect the app as a plain role that does not own the tables."}},{"@type":"Question","name":"Is SET LOCAL safe with connection pooling?","acceptedAnswer":{"@type":"Answer","text":"Yes, when used inside a transaction. set_config with the local flag set to true is cleared at the end of the transaction, so the next borrower of the connection starts clean."}},{"@type":"Question","name":"Does row level security replace WHERE tenant_id in queries?","acceptedAnswer":{"@type":"Answer","text":"No. Keep filtering in your code for clarity and index use. RLS is the backstop for the query you forget."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to use Postgres row level security for tenant isolation</h1><p class="dek">A forgotten WHERE clause is the classic tenant leak. Row level security moves the filter into the database, so one missed query cannot expose another customer.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-rls-does-and-does-not-do">What RLS does and does not do</a></li><li><a href="#step-by-step">Step by step</a></li><li><a href="#setting-the-tenant-per-request">Setting the tenant per request</a></li><li><a href="#prove-it-works-locally">Prove it works locally</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#when-not-to-use-it">When not to use it</a></li></ol></nav></aside>
+<article><p>Enable row level security on each tenant table, add a policy that compares <code>tenant_id</code> to a setting your app sets at the start of every transaction, and connect as a role that is neither a superuser nor the table owner. Then a query without a tenant filter returns nothing instead of leaking rows.</p>
+
+<h2 id="what-rls-does-and-does-not-do">What RLS does and does not do</h2>
+<p>Row level security adds an invisible condition to every query on a table, based on policies you define. It protects against bugs in your queries, not against a stolen database password or an attacker who can run arbitrary SQL as your app role, because that role can also change the setting. Treat it as a second lock, with correct application code as the first.</p>
+
+<h2 id="step-by-step">Step by step</h2>
+<p>Start from a table that already has a <code>tenant_id</code> column, as described in <a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">multi-tenant database design</a>.</p>
+<pre><code>alter table projects enable row level security;
+alter table projects force row level security;
+
+create policy tenant_isolation on projects
+  using (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid)
+  with check (tenant_id = nullif(current_setting('app.tenant_id', true), '')::uuid);</code></pre>
+<p>Three details matter. <code>current_setting('app.tenant_id', true)</code> returns null instead of raising an error when the setting is missing, so an unscoped query sees no rows. <code>using</code> filters reads, updates and deletes, and <code>with check</code> rejects inserts and updates that would write a row for another tenant. <code>force row level security</code> applies the policy to the table owner as well.</p>
+<p>Now create the role your app uses. It must not own the tables:</p>
+<pre><code>create role app_user login password 'change-me-locally' nosuperuser nobypassrls;
+grant select, insert, update, delete on all tables in schema public to app_user;
+grant usage on schema public to app_user;</code></pre>
+<p>Run migrations as an owner role, and run the API as <code>app_user</code>. Use two separate connection strings.</p>
+
+<h2 id="setting-the-tenant-per-request">Setting the tenant per request</h2>
+<p>Set the value inside a transaction with <code>set_config</code> and its third argument true, which makes it local to that transaction:</p>
+<pre><code>await db.transaction(async (tx) =&gt; {
+  await tx.query("select set_config('app.tenant_id', $1, true)", [tenantId]);
+  return tx.query("select * from projects");
+});</code></pre>
+<p>The local flag is essential with a connection pool. A plain session-level <code>set</code> stays on the connection after the request ends, and the next request that borrows the connection inherits the previous tenant. That is a leak that RLS was meant to prevent. With <code>set_config(..., true)</code> the value disappears at commit or rollback. If you use a pooler in transaction mode, session settings are also unreliable, which is another reason to stay with the local form.</p>
+
+<h2 id="prove-it-works-locally">Prove it works locally</h2>
+<p>The most common surprise is that RLS appears to do nothing. The Postgres container's default user, the one you create with <code>POSTGRES_USER</code>, is a superuser, and superusers bypass every policy. Roles with <code>BYPASSRLS</code> do too. If your local API connects as that user, your cross-tenant test passes for the wrong reason.</p>
+<p>Check from the same connection your app uses:</p>
+<pre><code>select current_user, rolsuper, rolbypassrls
+from pg_roles where rolname = current_user;</code></pre>
+<p>Both flags must be false. Then write a test that seeds two tenants, sets tenant A, and asserts that selecting from <code>projects</code> returns only A's rows, that an insert with B's <code>tenant_id</code> fails with an RLS error, and that a query with no setting returns zero rows.</p>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk does not create database roles for you, so put the role creation in your own migration or init SQL. What it helps with is running the check against the live stack. With a service named <code>api</code>, run a command in that service's environment:</p>
+<pre><code>flisk run api -- npm run test:tenant-isolation</code></pre>
+<p>The command gets the same environment the service has, including its database URL. If the stack uses a separate migrator resource, give the migrator the owner URL and the API the <code>app_user</code> URL through each service's <code>env</code>, with passwords coming from the project <code>.env</code> and not written into <code>service.json</code>.</p>
+
+<h2 id="when-not-to-use-it">When not to use it</h2>
+<ul>
+<li>Queries that must read across tenants, such as admin reports or background jobs, need a separate role with <code>bypassrls</code> or a policy for it. Keep that role out of the request path.</li>
+<li>Policies that call functions or subqueries on every row can slow big tables. Keep the policy a plain column comparison and index <code>tenant_id</code> first.</li>
+<li>If you run a schema or database per tenant, you already have stronger isolation and this adds little.</li>
+</ul>
+<p>Next, decide how the tenant is identified on each request. <a href="/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/">Resolving the tenant from a subdomain</a> is the usual start.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does Postgres row level security not apply to my local user?</summary><p>Superusers and roles with BYPASSRLS skip all policies, and the default user of the Postgres Docker image is a superuser. Connect the app as a plain role that does not own the tables.</p></details><details><summary>Is SET LOCAL safe with connection pooling?</summary><p>Yes, when used inside a transaction. set_config with the local flag set to true is cleared at the end of the transaction, so the next borrower of the connection starts clean.</p></details><details><summary>Does row level security replace WHERE tenant_id in queries?</summary><p>No. Keep filtering in your code for clarity and index use. RLS is the backstop for the query you forget.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"><span class="lbl">Guide</span><b>How to design a multi-tenant database in Postgres</b><span>Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</span></a><a href="/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/"><span class="lbl">Guide</span><b>How to resolve the tenant from a subdomain in local development</b><span>Many SaaS products put each customer on its own subdomain. You can build and test that routing on your laptop without a domain or a hosts file entry.</span></a><a href="/@odykyi/saas-architecture-local/audit-log-table-for-saas/"><span class="lbl">Guide</span><b>How to build an audit log table for a SaaS app</b><span>Customers ask who deleted a project, and your support team asks it twice a week. An audit log answers that, if you design it before you need it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

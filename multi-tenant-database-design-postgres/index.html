@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to design a multi-tenant database in Postgres</title>
+<meta name="description" content="Shared tables with a tenant_id, a schema per tenant or a database per tenant: how to choose, and the keys and indexes that keep tenants apart in Postgres.">
+<meta name="keywords" content="multi-tenant database design, postgres multi tenancy, tenant_id column, schema per tenant postgres, saas database design">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to design a multi-tenant database in Postgres">
+<meta property="og:description" content="Shared tables with a tenant_id, a schema per tenant or a database per tenant: how to choose, and the keys and indexes that keep tenants apart in Postgres.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to design a multi-tenant database in Postgres","description":"Shared tables with a tenant_id, a schema per tenant or a database per tenant: how to choose, and the keys and indexes that keep tenants apart in Postgres.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/","keywords":"multi-tenant database design, postgres multi tenancy, tenant_id column, schema per tenant postgres, saas database design","wordCount":798,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to design a multi-tenant database in Postgres","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/multi-tenant-database-design-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use a schema per tenant in Postgres?","acceptedAnswer":{"@type":"Answer","text":"Only if you need per-tenant restore or strong namespace separation and you have a manageable number of tenants. Each migration must run once per schema, which grows slow and error-prone with hundreds of tenants."}},{"@type":"Question","name":"Do I need a tenant_id on every table?","acceptedAnswer":{"@type":"Answer","text":"Yes for every table that holds tenant-owned data, including join tables. Shared reference data such as plan definitions is the exception, and you should document it as such."}},{"@type":"Question","name":"How do I stop a row pointing at another tenant's row?","acceptedAnswer":{"@type":"Answer","text":"Use a composite foreign key on (tenant_id, parent_id) that references a unique (tenant_id, id) on the parent table."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to design a multi-tenant database in Postgres</h1><p class="dek">Almost every SaaS app has customers whose data must never mix. The choice you make on day one decides how hard migrations, backups and bugs are later.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-three-models">The three models</a></li><li><a href="#rules-for-the-shared-table-model">Rules for the shared-table model</a></li><li><a href="#where-the-tenant-comes-from">Where the tenant comes from</a></li><li><a href="#running-it-locally-with-flisk">Running it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>For most SaaS apps, start with one database and shared tables that carry a <code>tenant_id</code> column on every row. It is the cheapest model to migrate and to run, and with a few rules about keys and indexes it keeps tenants apart reliably. Move to a schema or a database per tenant only when a concrete requirement forces you to.</p>
+
+<h2 id="the-three-models">The three models</h2>
+<table>
+<thead><tr><th>Model</th><th>Isolation</th><th>Migrations</th><th>Good fit</th></tr></thead>
+<tbody>
+<tr><td>Shared tables, <code>tenant_id</code> column</td><td>Logical, enforced by your queries or row level security</td><td>One run for everyone</td><td>Many small and medium tenants</td></tr>
+<tr><td>Schema per tenant</td><td>Separate namespaces in one database</td><td>Run once per schema</td><td>Dozens to a few hundred tenants, per-tenant restore</td></tr>
+<tr><td>Database per tenant</td><td>Strongest, separate connections and backups</td><td>Run once per database</td><td>Few large tenants, contractual isolation, data residency</td></tr>
+</tbody>
+</table>
+<p>The cost of the last two is operational. Every migration has to be applied to every schema or database, and one that fails halfway leaves tenants on different versions. Connection counts grow with tenants, and cross-tenant reporting needs extra plumbing. You pay that bill from the first day, even if you have three tenants.</p>
+
+<h2 id="rules-for-the-shared-table-model">Rules for the shared-table model</h2>
+<p>The shared model works when every table follows the same rules:</p>
+<ul>
+<li><strong>Every tenant-owned table has <code>tenant_id uuid not null</code>.</strong> No exceptions for "small" tables, they become big tables.</li>
+<li><strong>Uniqueness is per tenant.</strong> A project slug is unique within a tenant, not across the whole table.</li>
+<li><strong>Foreign keys include the tenant.</strong> A plain foreign key from <code>tasks.project_id</code> to <code>projects.id</code> lets a task in tenant A point at a project in tenant B. A composite key prevents it.</li>
+<li><strong>Indexes lead with <code>tenant_id</code>.</strong> Almost every query filters by tenant, so <code>(tenant_id, created_at)</code> serves far more queries than <code>(created_at)</code>.</li>
+</ul>
+<pre><code>create table tenants (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  created_at timestamptz not null default now()
+);
+
+create table projects (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null references tenants(id),
+  slug text not null,
+  name text not null,
+  created_at timestamptz not null default now(),
+  unique (tenant_id, slug),
+  unique (tenant_id, id)
+);
+
+create table tasks (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid not null,
+  project_id uuid not null,
+  title text not null,
+  foreign key (tenant_id, project_id) references projects (tenant_id, id)
+);
+
+create index tasks_tenant_project on tasks (tenant_id, project_id);</code></pre>
+<p>The extra <code>unique (tenant_id, id)</code> on <code>projects</code> exists only so the composite foreign key has something to point at. <code>gen_random_uuid()</code> is built into Postgres 13 and newer.</p>
+
+<h2 id="where-the-tenant-comes-from">Where the tenant comes from</h2>
+<p>Do not read the tenant from a request body. Derive it once per request from something you trust, such as the session, the API key or the host name, and pass it down explicitly. Put one function at the edge of your data layer that takes the tenant and returns a scoped repository, so a forgotten <code>where tenant_id = ...</code> is hard to write. For a stronger safety net, add database-enforced filtering, covered in <a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/">Postgres row level security for tenants</a>.</p>
+
+<h2 id="running-it-locally-with-flisk">Running it locally with Flisk</h2>
+<p>You need a real Postgres to test constraints, and a plain container is enough. If your services run as local processes, Flisk can start Postgres from an image next to them. Docker must be running for that database, and the local services need nothing else:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "postgres",
+  "appType": "bring-your-own",
+  "image": "postgres:17-alpine",
+  "port": 5432,
+  "env": {
+    "POSTGRES_USER": "${POSTGRES_USER}",
+    "POSTGRES_PASSWORD": "${POSTGRES_PASSWORD}",
+    "POSTGRES_DB": "app"
+  },
+  "healthCheck": { "command": ["pg_isready", "-U", "${POSTGRES_USER}"] },
+  "volumes": [{ "source": "postgres", "target": "/var/lib/postgresql/data", "name": "saas_postgres" }]
+}</code></pre>
+<p>The API lists <code>"dependsOn": ["postgres"]</code> and connects to <code>localhost:5432</code>. Set <code>POSTGRES_USER</code> and <code>POSTGRES_PASSWORD</code> in the project <code>.env</code>. The mount path is for Postgres 17 and older, from 18 it must be <code>/var/lib/postgresql</code>. Run <code>flisk config verify</code> after editing. For the container route, see <a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/">how to run Postgres locally</a>, and for the per-service question see <a href="/@odykyi/local-database-guide/one-database-per-service/">one database per service</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Tests with one tenant.</strong> Seed at least two tenants with overlapping slugs and ids of the same shape, and assert that tenant A can never read tenant B. Most leaks show up only with two.</li>
+<li><strong>Global tables.</strong> Plans, countries and feature definitions are shared on purpose. List them somewhere so a reviewer knows a missing <code>tenant_id</code> is intentional.</li>
+<li><strong>The noisy tenant.</strong> One huge tenant slows shared indexes for everyone. Partitioning by <code>tenant_id</code> or moving that tenant to its own database is the later escape hatch, which is a reason to keep the tenant explicit in every query now.</li>
+<li><strong>Do not shard early.</strong> If you will never have contractual isolation or tenants with terabytes, a schema per tenant is cost without benefit.</li>
+</ul>
+<p>Next, add the safety net: enable row level security so the database itself refuses cross-tenant reads, then use <a href="/@odykyi/local-database-guide/seed-a-local-database/">seed data</a> with two tenants to prove it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use a schema per tenant in Postgres?</summary><p>Only if you need per-tenant restore or strong namespace separation and you have a manageable number of tenants. Each migration must run once per schema, which grows slow and error-prone with hundreds of tenants.</p></details><details><summary>Do I need a tenant_id on every table?</summary><p>Yes for every table that holds tenant-owned data, including join tables. Shared reference data such as plan definitions is the exception, and you should document it as such.</p></details><details><summary>How do I stop a row pointing at another tenant&#39;s row?</summary><p>Use a composite foreign key on (tenant_id, parent_id) that references a unique (tenant_id, id) on the parent table.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/"><span class="lbl">Guide</span><b>How to use Postgres row level security for tenant isolation</b><span>A forgotten WHERE clause is the classic tenant leak. Row level security moves the filter into the database, so one missed query cannot expose another customer.</span></a><a href="/@odykyi/saas-architecture-local/tenant-from-subdomain-in-local-dev/"><span class="lbl">Guide</span><b>How to resolve the tenant from a subdomain in local development</b><span>Many SaaS products put each customer on its own subdomain. You can build and test that routing on your laptop without a domain or a hosts file entry.</span></a><a href="/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/"><span class="lbl">Guide</span><b>Soft delete or hard delete: removing a tenant&#39;s data in SaaS</b><span>Deleting a record is a flag. Deleting a customer means rows, files, search indexes and a billing account. They need different designs.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

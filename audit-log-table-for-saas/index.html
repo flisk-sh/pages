@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build an audit log table for a SaaS app</title>
+<meta name="description" content="Record who did what to which object, in the same transaction as the change, as an append-only table with tenant, actor, request id and a retention job.">
+<meta name="keywords" content="audit log table design, saas audit trail, audit log postgres, append only audit log, who changed what log">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/saas-architecture-local/audit-log-table-for-saas/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build an audit log table for a SaaS app">
+<meta property="og:description" content="Record who did what to which object, in the same transaction as the change, as an append-only table with tenant, actor, request id and a retention job.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/saas-architecture-local/audit-log-table-for-saas/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build an audit log table for a SaaS app","description":"Record who did what to which object, in the same transaction as the change, as an append-only table with tenant, actor, request id and a retention job.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/saas-architecture-local/audit-log-table-for-saas/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/saas-architecture-local/audit-log-table-for-saas/","keywords":"audit log table design, saas audit trail, audit log postgres, append only audit log, who changed what log","wordCount":747,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build a SaaS app locally","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/"},{"@type":"ListItem","position":3,"name":"How to build an audit log table for a SaaS app","item":"https://pages.flisk.si/@odykyi/saas-architecture-local/audit-log-table-for-saas/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should audit events be written in the same transaction as the change?","acceptedAnswer":{"@type":"Answer","text":"Yes. That guarantees the event exists if and only if the change committed, which asynchronous logging cannot promise."}},{"@type":"Question","name":"What should not go into audit metadata?","acceptedAnswer":{"@type":"Answer","text":"Secrets, tokens and full request bodies. Store identifiers and changed fields instead."}},{"@type":"Question","name":"How do I make an audit table append-only?","acceptedAnswer":{"@type":"Answer","text":"Revoke update and delete on it from the application role, and use a separate role for retention work. For strict compliance also ship events to write-once storage."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/saas-architecture-local/">Build a SaaS app locally</a></div>
+<section class="hero"><div><div class="lbl">Build a SaaS app locally</div><h1>How to build an audit log table for a SaaS app</h1><p class="dek">Customers ask who deleted a project, and your support team asks it twice a week. An audit log answers that, if you design it before you need it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#audit-log-app-log-or-history-table">Audit log, app log or history table</a></li><li><a href="#the-table">The table</a></li><li><a href="#write-it-in-the-same-transaction">Write it in the same transaction</a></li><li><a href="#what-to-put-in-metadata">What to put in metadata</a></li><li><a href="#immutability-and-retention">Immutability and retention</a></li><li><a href="#trying-it-locally-with-flisk">Trying it locally with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Write one row per meaningful action into an append-only table, in the same database transaction as the change it describes. Each row records the tenant, who acted, what they did, which object it touched and a request id. Revoke update and delete on the table from your app role, and trim it with a separate retention job.</p>
+
+<h2 id="audit-log-app-log-or-history-table">Audit log, app log or history table</h2>
+<p>Three things get mixed up. An <strong>application log</strong> is for engineers and can be dropped or sampled. A <strong>history table</strong> keeps old versions of one record so you can show or restore them. An <strong>audit log</strong> is a business record of security-relevant actions: sign-ins, role changes, key creation, exports, deletions. It must be reliable, searchable per tenant and shown to customers in some form. This article is about the third.</p>
+
+<h2 id="the-table">The table</h2>
+<pre><code>create table audit_events (
+  id bigint generated always as identity primary key,
+  tenant_id uuid not null,
+  occurred_at timestamptz not null default now(),
+  actor_type text not null,        -- 'user', 'api_key', 'system'
+  actor_id text,
+  action text not null,            -- 'member.role_changed'
+  target_type text,
+  target_id text,
+  metadata jsonb not null default '{}',
+  request_id text,
+  ip inet
+);
+
+create index audit_tenant_time on audit_events (tenant_id, occurred_at desc);
+
+revoke update, delete on audit_events from app_user;</code></pre>
+<p>Use a stable, dotted action vocabulary such as <code>project.deleted</code> or <code>apikey.created</code>, and keep a list in code so names do not drift. A typed constant beats a string typed in twenty places. Record the actor type, because a deletion by a scheduled job and one by a person are different stories.</p>
+
+<h2 id="write-it-in-the-same-transaction">Write it in the same transaction</h2>
+<pre><code>await db.transaction(async (tx) =&gt; {
+  await tx.query("update memberships set role = $1 where id = $2", [role, id]);
+  await tx.query(
+    `insert into audit_events
+       (tenant_id, actor_type, actor_id, action, target_type, target_id, metadata, request_id)
+     values ($1,'user',$2,'member.role_changed','membership',$3,$4,$5)`,
+    [tenantId, actorId, id, { from: oldRole, to: role }, requestId]);
+});</code></pre>
+<p>If the change commits, the event does too. A fire-and-forget write after the transaction loses events whenever the process dies in between, which is the exact moment you need them. The cost is a slightly longer transaction, which is fine at audit volumes. Pass the same request id you use in logs, so support can jump from an event to the log lines of that request.</p>
+
+<h2 id="what-to-put-in-metadata">What to put in metadata</h2>
+<ul>
+<li>Changed fields, as before and after values for things like roles and settings.</li>
+<li>Never secrets, tokens or full request bodies. An audit log that stores a leaked key is a second leak. Record the key id, not the key.</li>
+<li>Avoid personal data you do not need. Audit rows outlive the records they mention, which matters when you <a href="/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/">delete a tenant's data</a>.</li>
+</ul>
+
+<h2 id="immutability-and-retention">Immutability and retention</h2>
+<p>Removing update and delete rights from the app role makes accidental edits impossible, and makes tampering require a different credential. It does not stop a database admin, so for strict compliance you ship events to storage with write-once settings. For most products, the grant is enough. Table size grows forever otherwise, so partition by month with Postgres declarative partitioning and drop old partitions on a schedule, or run a retention job under a separate owner role. Pick the retention period from the plan or the contract, and tell customers.</p>
+
+<h2 id="trying-it-locally-with-flisk">Trying it locally with Flisk</h2>
+<p>A retention or export job is a background process, which Flisk calls a worker. On the container route, scaffold one and let it share the stack with the API:</p>
+<pre><code>flisk resource audit-retention --type worker --stack saas --yes</code></pre>
+<p>That creates a worker resource under <code>services/saas/audit-retention</code> with its own <code>service.json</code> and a <code>bun run worker</code> dev command, ready for your job code. Scheduling patterns are in <a href="/@odykyi/workers-and-queues/cron-jobs-in-local-dev/">how to run cron jobs in local development</a>. To test the retention logic quickly, seed events with old timestamps and run the job once by hand with <code>flisk run audit-retention -- bun run worker</code>, which runs in that service's environment while the stack is up.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Logging reads.</strong> Recording every GET fills the table. Log changes and sensitive reads, such as exports.</li>
+<li><strong>Different tenant ids.</strong> Use the same tenant column and <a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/">row level security</a> policy as other tables, so one customer never reads another's audit trail.</li>
+<li><strong>Time zones.</strong> Store <code>timestamptz</code> and format in the viewer's zone.</li>
+<li><strong>Skipping the UI.</strong> A log nobody can see answers nothing. A filterable list per tenant, by actor and action, is the first version.</li>
+</ul>
+<p>Deleting records is the action that most needs an audit trail, and it has its own design questions: see <a href="/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/">soft delete and tenant data removal</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should audit events be written in the same transaction as the change?</summary><p>Yes. That guarantees the event exists if and only if the change committed, which asynchronous logging cannot promise.</p></details><details><summary>What should not go into audit metadata?</summary><p>Secrets, tokens and full request bodies. Store identifiers and changed fields instead.</p></details><details><summary>How do I make an audit table append-only?</summary><p>Revoke update and delete on it from the application role, and use a separate role for retention work. For strict compliance also ship events to write-once storage.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build a SaaS app locally</span></div>
+<div class="rgrid"><a href="/@odykyi/saas-architecture-local/delete-tenant-data-and-soft-delete/"><span class="lbl">Guide</span><b>Soft delete or hard delete: removing a tenant&#39;s data in SaaS</b><span>Deleting a record is a flag. Deleting a customer means rows, files, search indexes and a billing account. They need different designs.</span></a><a href="/@odykyi/saas-architecture-local/team-invitations-flow-design/"><span class="lbl">Guide</span><b>How to design a team invitation flow for a SaaS app</b><span>Inviting a colleague looks like one button. Behind it are tokens, expiry, duplicates, existing accounts and seat limits that all need a decision.</span></a><a href="/@odykyi/saas-architecture-local/postgres-row-level-security-for-tenants/"><span class="lbl">Guide</span><b>How to use Postgres row level security for tenant isolation</b><span>A forgotten WHERE clause is the classic tenant leak. Row level security moves the filter into the database, so one missed query cannot expose another customer.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
