@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a Docker container as a non-root user</title>
+<meta name="description" content="Add a user in the Dockerfile, set USER, and chown what it writes. Also how to fix permission denied on bind mounts and how to set the user in Flisk.">
+<meta name="keywords" content="docker run as non-root user, dockerfile USER instruction, docker permission denied bind mount, docker non root node, compose user uid gid">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a Docker container as a non-root user">
+<meta property="og:description" content="Add a user in the Dockerfile, set USER, and chown what it writes. Also how to fix permission denied on bind mounts and how to set the user in Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a Docker container as a non-root user","description":"Add a user in the Dockerfile, set USER, and chown what it writes. Also how to fix permission denied on bind mounts and how to set the user in Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/","keywords":"docker run as non-root user, dockerfile USER instruction, docker permission denied bind mount, docker non root node, compose user uid gid","wordCount":775,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"How to run a Docker container as a non-root user","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does USER in the Dockerfile affect RUN commands before it?","acceptedAnswer":{"@type":"Answer","text":"No. Instructions before USER run as root, instructions after it run as the new user. Install system packages before USER and switch as late as possible."}},{"@type":"Question","name":"Why do I get permission denied on a bind mount only on Linux?","acceptedAnswer":{"@type":"Answer","text":"The mounted folder keeps its host uid and gid. If the container user has a different uid it cannot write. Run the container with your uid, or make the image user match. Docker Desktop on Mac and Windows hides this mismatch."}},{"@type":"Question","name":"Can I set the user without editing the image in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Yes, for a bring-your-own resource. Add a container block with user, for example 10001:10001, to service.json. It becomes the Compose user setting."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>How to run a Docker container as a non-root user</h1><p class="dek">Containers run as root unless you say otherwise. Changing that takes four lines, plus a plan for the files the app writes.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-bother-in-development">Why bother in development</a></li><li><a href="#the-dockerfile">The Dockerfile</a></li><li><a href="#permission-denied-on-a-bind-mount">Permission denied on a bind mount</a></li><li><a href="#setting-the-user-in-flisk">Setting the user in Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To run a container as a non-root user, create a user in the Dockerfile, copy your files with <code>--chown</code>, and switch with <code>USER</code> before the final <code>CMD</code>. The part that trips people up is not the instruction but file ownership: the new user must be able to read your code and write wherever the app writes.</p>
+
+<h2 id="why-bother-in-development">Why bother in development</h2>
+<p>Root in a container is root on the files you share with it. If a bind mount exposes your project folder and the container runs as root, anything it writes (a build folder, a lockfile, a cache) is owned by root on your machine and your editor cannot delete it. Running as an ordinary user also matches what most production platforms enforce, so a permission problem shows up on your laptop instead of in a deploy.</p>
+
+<h2 id="the-dockerfile">The Dockerfile</h2>
+<p>Official Node images already include a user named <code>node</code> (uid 1000), so the shortest version is:</p>
+<pre><code>FROM node:22-alpine
+WORKDIR /app
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci
+COPY --chown=node:node . .
+USER node
+CMD ["node", "server.js"]</code></pre>
+<p>Python and most other images ship no such user, so you create one. On Debian-based images:</p>
+<pre><code>FROM python:3.12-slim
+RUN groupadd --system app &amp;&amp; useradd --system --gid app --create-home app
+WORKDIR /app
+COPY --chown=app:app requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=app:app . .
+USER app
+CMD ["python", "app.py"]</code></pre>
+<p>On Alpine the commands are <code>addgroup -S app</code> and <code>adduser -S -G app app</code>. Three details matter:</p>
+<ul>
+<li><strong>Install packages before <code>USER</code>.</strong> <code>apt-get</code>, <code>apk</code> and a global <code>pip install</code> need root.</li>
+<li><strong><code>WORKDIR</code> creates the folder as root.</strong> If the app writes inside it, run <code>chown</code> on it or create the writable subfolder yourself with <code>mkdir</code> and <code>chown</code>.</li>
+<li><strong>Use ports above 1024.</strong> Binding 80 as a non-root user may be refused depending on the host, and nothing in development needs it.</li>
+</ul>
+
+<h2 id="permission-denied-on-a-bind-mount">Permission denied on a bind mount</h2>
+<p>On Linux, a bind mounted folder keeps the numeric owner from the host. If your host user is uid 1000 and the container user is uid 10001, the container cannot write to it. Two ways out: build the image with a user whose uid matches yours, or override the user at run time:</p>
+<pre><code>docker run --user "$(id -u):$(id -g)" -v "$PWD:/app" myimage</code></pre>
+<p>In Compose, set <code>user: "${HOST_UID}:${HOST_GID}"</code> and export those two variables from <code>id -u</code> and <code>id -g</code> (or put them in <code>.env</code>). On Docker Desktop for Mac and Windows the file sharing layer maps ownership for you, so this problem tends to appear only on Linux and in CI. That is a reason to test it on Linux at least once.</p>
+<p>Named volumes behave differently. When Docker creates a named volume and mounts it at a path that exists in the image, it copies the image's content and ownership into the volume the first time. If you <code>chown</code> that folder in the Dockerfile, the volume starts out writable by your user.</p>
+
+<h2 id="setting-the-user-in-flisk">Setting the user in Flisk</h2>
+<p>If you bring your own container to a Flisk stack and cannot or do not want to change its image, set the user in <code>service.json</code> instead. A <code>container</code> block turns into the matching Compose keys:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile",
+  "container": {
+    "user": "10001:10001",
+    "readOnly": true,
+    "tmpfs": ["/tmp"],
+    "capDrop": ["ALL"],
+    "securityOpt": ["no-new-privileges:true"]
+  }
+}</code></pre>
+<p><code>user</code> becomes Compose's <code>user</code>, <code>readOnly</code> becomes <code>read_only</code> and <code>tmpfs</code> gives a writable in-memory <code>/tmp</code> to a read-only root. The block applies to bring-your-own resources only, and <code>flisk config verify</code> names any key it does not know. Flisk does not change the image itself, so a <code>USER</code> line in your Dockerfile and a <code>user</code> here are two separate settings, and the Compose value wins at run time.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A read-only root breaks apps that write to their own folder.</strong> Give them a tmpfs or a volume for the places they write, such as <code>/tmp</code> and a cache folder.</li>
+<li><strong>Numeric users need an entry to have a home directory.</strong> Some tools read <code>$HOME</code>. With an arbitrary uid and no passwd entry, <code>npm</code> or <code>pip</code> may fail trying to write a cache. Set <code>HOME</code> to a writable path.</li>
+<li><strong>Dev tools that install at run time</strong> (an <code>npm install</code> in the entrypoint) need a writable <code>node_modules</code>. Install in the image instead.</li>
+<li><strong>Do not <code>chmod 777</code> to make the error go away.</strong> Find which path the app writes and own that one.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If the container still exits at start-up after you switch user, read <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a> and check the logs for a permission error. Then look at <a href="/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/">bind mounting source code</a> for the development loop.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does USER in the Dockerfile affect RUN commands before it?</summary><p>No. Instructions before USER run as root, instructions after it run as the new user. Install system packages before USER and switch as late as possible.</p></details><details><summary>Why do I get permission denied on a bind mount only on Linux?</summary><p>The mounted folder keeps its host uid and gid. If the container user has a different uid it cannot write. Run the container with your uid, or make the image user match. Docker Desktop on Mac and Windows hides this mismatch.</p></details><details><summary>Can I set the user without editing the image in Flisk?</summary><p>Yes, for a bring-your-own resource. Add a container block with user, for example 10001:10001, to service.json. It becomes the Compose user setting.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/"><span class="lbl">Guide</span><b>How to bind mount source code into a container for development</b><span>The image has your code baked in, so every edit needs a rebuild. A bind mount replaces the baked-in copy with your live folder.</span></a><a href="/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/"><span class="lbl">Guide</span><b>Docker ENTRYPOINT vs CMD: how to override them in dev</b><span>One line in a Dockerfile decides whether docker run image bash gives you a shell or passes the word bash to your app.</span></a><a href="/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/"><span class="lbl">Guide</span><b>How to write a Dockerfile HEALTHCHECK that works in dev</b><span>Slim images often lack curl, so a copied HEALTHCHECK fails forever. Write one that matches what is in your image.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

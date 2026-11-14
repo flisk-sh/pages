@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Docker ARG vs ENV: which one to use at build time and run time</title>
+<meta name="description" content="ARG exists only while the image builds, ENV stays in the image and the running container. Learn scope rules, the FROM trap, and why secrets must use neither.">
+<meta name="keywords" content="docker arg vs env, dockerfile ARG before FROM, docker build-arg, docker env variable at build time, vite env docker build">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Docker ARG vs ENV: which one to use at build time and run time">
+<meta property="og:description" content="ARG exists only while the image builds, ENV stays in the image and the running container. Learn scope rules, the FROM trap, and why secrets must use neither.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Docker ARG vs ENV: which one to use at build time and run time","description":"ARG exists only while the image builds, ENV stays in the image and the running container. Learn scope rules, the FROM trap, and why secrets must use neither.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/","keywords":"docker arg vs env, dockerfile ARG before FROM, docker build-arg, docker env variable at build time, vite env docker build","wordCount":786,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"Docker ARG vs ENV: which one to use at build time and run time","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is ARG available when the container runs?","acceptedAnswer":{"@type":"Answer","text":"No. An ARG exists only during the build. To keep a value, copy it into an ENV in the Dockerfile, or pass the value again as an environment variable when the container starts."}},{"@type":"Question","name":"Why is my ARG empty after FROM?","acceptedAnswer":{"@type":"Answer","text":"An ARG declared before FROM is only in scope for the FROM line. Declare the ARG again after FROM, and again in each stage that needs it."}},{"@type":"Question","name":"How do I pass build arguments from Flisk?","acceptedAnswer":{"@type":"Answer","text":"Add a buildArgs object to the service.json of a bring-your-own resource that has a dockerfile. Values may use Compose style variables with defaults, such as ${NODE_VERSION:-22}."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>Docker ARG vs ENV: which one to use at build time and run time</h1><p class="dek">Both set a variable, but one disappears after the build and the other ships with the image. Picking wrong leaks data or breaks the app.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-they-differ">How they differ</a></li><li><a href="#the-from-trap">The FROM trap</a></li><li><a href="#turning-an-arg-into-a-runtime-value">Turning an ARG into a runtime value</a></li><li><a href="#secrets-belong-to-neither">Secrets belong to neither</a></li><li><a href="#which-one-for-which-job">Which one for which job</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Use <code>ARG</code> for values that only matter while the image is being built, such as a base image version, and use <code>ENV</code> for values the running application reads. An <code>ARG</code> is gone from the container's environment once the build ends. An <code>ENV</code> is baked into the image and appears in every container started from it. Neither is a safe place for a secret.</p>
+
+<h2 id="how-they-differ">How they differ</h2>
+<table>
+<thead><tr><th></th><th>ARG</th><th>ENV</th></tr></thead>
+<tbody>
+<tr><td>Available during build</td><td>Yes, from its declaration on</td><td>Yes, from its declaration on</td></tr>
+<tr><td>Available in the running container</td><td>No</td><td>Yes</td></tr>
+<tr><td>Set at build time</td><td><code>--build-arg NAME=value</code></td><td>Only through an ARG you copy into it</td></tr>
+<tr><td>Override at run time</td><td>No effect</td><td><code>-e NAME=value</code> or Compose <code>environment</code></td></tr>
+<tr><td>Visible in <code>docker history</code></td><td>Yes</td><td>Yes</td></tr>
+</tbody>
+</table>
+<p>The last row is the one people miss. Build arguments are recorded in the image's metadata, so anyone who can pull the image can read them.</p>
+
+<h2 id="the-from-trap">The FROM trap</h2>
+<p>An <code>ARG</code> declared before the first <code>FROM</code> can be used in the <code>FROM</code> line, but it is not visible after that line unless you declare it again:</p>
+<pre><code>ARG NODE_VERSION=22
+FROM node:${NODE_VERSION}-alpine
+ARG NODE_VERSION
+RUN echo "building on Node ${NODE_VERSION}"</code></pre>
+<p>Without the second <code>ARG NODE_VERSION</code>, the <code>RUN</code> line prints an empty value. The same applies to each stage of a multi-stage file: declare what a stage needs inside that stage.</p>
+
+<h2 id="turning-an-arg-into-a-runtime-value">Turning an ARG into a runtime value</h2>
+<p>If the application needs a build-time value at run time, copy it with <code>ENV</code>:</p>
+<pre><code>ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION</code></pre>
+<p>That is a good use: a version string or a git commit that identifies the build. Frontend bundlers need this too. Vite replaces <code>import.meta.env.VITE_*</code> values while it builds, so an API URL must be present at build time, not only when the container starts. Changing the container's environment later does not change an already built bundle.</p>
+
+<h2 id="secrets-belong-to-neither">Secrets belong to neither</h2>
+<p>Do not pass a token with <code>--build-arg</code> and do not write it in <code>ENV</code>. For build-time secrets such as a private registry token, BuildKit has secret mounts that exist only for one <code>RUN</code> step and are not stored in a layer:</p>
+<pre><code>RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci</code></pre>
+<pre><code>docker build --secret id=npmrc,src=$HOME/.npmrc -t myapp .</code></pre>
+<p>For run-time secrets, pass them when the container starts, not when it is built.</p>
+
+<h2 id="which-one-for-which-job">Which one for which job</h2>
+<ul>
+<li><strong>Tool or base image version:</strong> <code>ARG</code>. Nothing at run time needs to know it.</li>
+<li><strong>Build identity (version, commit hash):</strong> <code>ARG</code> copied into <code>ENV</code>, so the app can report it.</li>
+<li><strong>A fixed default such as <code>NODE_ENV=production</code>:</strong> <code>ENV</code>, because the app reads it and a sensible default belongs in the image.</li>
+<li><strong>Anything that differs per machine or per environment</strong> (database URL, log level): neither. Leave it out of the image and inject it when the container starts, so the same image runs everywhere.</li>
+<li><strong>Anything secret:</strong> a BuildKit secret mount at build time, and a run-time variable or mounted file at run time.</li>
+</ul>
+<p>A useful test: if two developers would need different values, it should not be in the Dockerfile at all.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>With a <code>bring-your-own</code> resource, Flisk reads build arguments from a <code>buildArgs</code> object in <code>service.json</code> and passes them to the build. Values may use Compose variables with a default, so the file stays free of machine-specific data:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile",
+  "buildArgs": { "NODE_VERSION": "${NODE_VERSION:-22}" },
+  "env": { "LOG_LEVEL": "debug" },
+  "secrets": { "required": ["DATABASE_PASSWORD"] }
+}</code></pre>
+<p><code>buildArgs</code> is for the build (<code>ARG</code>). <code>env</code> is plain run-time configuration, and <code>secrets</code> names variables that Flisk reads from the git-ignored project <code>.env</code> file at run time, so no secret value is committed. <code>buildArgs</code> applies only to a resource built from a Dockerfile, and <code>flisk config verify</code> refuses it next to an <code>image</code>, because nothing is built then. Flisk has no field for BuildKit secret mounts, so build-time secrets stay a plain <code>docker build</code> concern. For the naming convention see <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values, in config</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Changing an ARG invalidates the cache from the point it is first used.</strong> Declare it as late as you can. See <a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">layer caching</a>.</li>
+<li><strong>An unset ARG without a default is empty, not an error.</strong> Give every ARG a default or check it in a script.</li>
+<li><strong>ENV values are literal.</strong> Docker does not expand <code>$HOME</code> inside a JSON-form <code>CMD</code>, only in shell form or in a shell you start.</li>
+<li><strong>A variable that is not loading at run time</strong> is usually a build versus run confusion. <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">How to debug it</a> walks through the checks.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>With variables sorted, keep the build context clean so those values and your local <code>.env</code> do not end up inside the image: see <a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/">what to put in .dockerignore</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is ARG available when the container runs?</summary><p>No. An ARG exists only during the build. To keep a value, copy it into an ENV in the Dockerfile, or pass the value again as an environment variable when the container starts.</p></details><details><summary>Why is my ARG empty after FROM?</summary><p>An ARG declared before FROM is only in scope for the FROM line. Declare the ARG again after FROM, and again in each stage that needs it.</p></details><details><summary>How do I pass build arguments from Flisk?</summary><p>Add a buildArgs object to the service.json of a bring-your-own resource that has a dockerfile. Values may use Compose style variables with defaults, such as ${NODE_VERSION:-22}.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/"><span class="lbl">Guide</span><b>What to put in .dockerignore (and why builds get slow without it)</b><span>If docker build starts with a long &#39;transferring context&#39; step, the fix is usually a ten-line file.</span></a><a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/"><span class="lbl">Guide</span><b>How to speed up Docker builds with layer caching</b><span>Every code edit triggers a full npm install or pip install. The fix is the order of five lines in your Dockerfile, not a faster machine.</span></a><a href="/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/"><span class="lbl">Guide</span><b>Docker ENTRYPOINT vs CMD: how to override them in dev</b><span>One line in a Dockerfile decides whether docker run image bash gives you a shell or passes the word bash to your app.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

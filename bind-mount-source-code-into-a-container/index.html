@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to bind mount source code into a container for development</title>
+<meta name="description" content="Mount your src folder into the container so edits show up without a rebuild. Covers the node_modules trap, read-only mounts, file watchers and Flisk volumes.">
+<meta name="keywords" content="docker bind mount source code, docker volume node_modules, docker mount src folder, docker dev container live edit, docker bind mount vs volume">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to bind mount source code into a container for development">
+<meta property="og:description" content="Mount your src folder into the container so edits show up without a rebuild. Covers the node_modules trap, read-only mounts, file watchers and Flisk volumes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to bind mount source code into a container for development","description":"Mount your src folder into the container so edits show up without a rebuild. Covers the node_modules trap, read-only mounts, file watchers and Flisk volumes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/","keywords":"docker bind mount source code, docker volume node_modules, docker mount src folder, docker dev container live edit, docker bind mount vs volume","wordCount":727,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"How to bind mount source code into a container for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/bind-mount-source-code-into-a-container/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my container crash with cannot find module after I mount my project?","acceptedAnswer":{"@type":"Answer","text":"Mounting the whole project hides the node_modules installed in the image. Mount only the source folders, or add an anonymous volume at /app/node_modules to keep the image's copy."}},{"@type":"Question","name":"Do bind mounts reload my app automatically?","acceptedAnswer":{"@type":"Answer","text":"No. They only make your edits visible inside the container. A watcher or dev server in the container, such as nodemon or Vite, has to restart or reload the process."}},{"@type":"Question","name":"How do I bind mount a folder in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Add an entry to the volumes list in service.json of a bring-your-own resource, with a source starting with ./ or ../ (relative to the service folder) and an absolute target path."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>How to bind mount source code into a container for development</h1><p class="dek">The image has your code baked in, so every edit needs a rebuild. A bind mount replaces the baked-in copy with your live folder.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-basic-mount">The basic mount</a></li><li><a href="#the-node-modules-trap">The node_modules trap</a></li><li><a href="#make-the-running-app-notice-changes">Make the running app notice changes</a></li><li><a href="#bind-mount-or-named-volume">Bind mount or named volume</a></li><li><a href="#in-a-flisk-stack">In a Flisk stack</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A bind mount makes a folder on your computer appear at a path inside the container, so the container sees your edits immediately. Mount only the source folders you change, leave dependency folders such as <code>node_modules</code> inside the image, and use a watcher in the container (nodemon, Vite, air, uvicorn <code>--reload</code>) to restart or reload when files change.</p>
+
+<h2 id="the-basic-mount">The basic mount</h2>
+<pre><code>docker run --rm -p 3000:3000 \
+  -v "$PWD/src:/app/src" \
+  myapp:dev</code></pre>
+<p>The same in Compose:</p>
+<pre><code>services:
+  web:
+    build:
+      context: .
+      target: dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./src:/app/src</code></pre>
+<p>Whatever the image had at <code>/app/src</code> is hidden while the mount is active, and your host folder shows instead. Edit a file in your editor and the container reads the new version at once. Nothing is rebuilt, which is the whole point.</p>
+
+<h2 id="the-node-modules-trap">The node_modules trap</h2>
+<p>The most common mistake is mounting the whole project: <code>-v "$PWD:/app"</code>. That hides the <code>node_modules</code> the image installed under <code>/app</code> and replaces it with whatever is on your host. If your host folder has none, the app crashes with "cannot find module". If it has modules built for macOS, native packages fail on Linux.</p>
+<p>Prefer mounting only source folders, as above. If you do need to mount the whole folder, mask the dependency folder with an anonymous volume so the image's copy stays visible:</p>
+<pre><code>    volumes:
+      - ./:/app
+      - /app/node_modules</code></pre>
+<p>Python virtual environments and Go module caches have the same problem. Keep them in the image, or in a named volume, never on the host mount.</p>
+
+<h2 id="make-the-running-app-notice-changes">Make the running app notice changes</h2>
+<p>A bind mount only changes the files. The process still has to reload. Use the dev command of your framework in the dev stage (<code>vite</code>, <code>next dev</code>, <code>nodemon</code>, <code>uvicorn --reload</code>, <code>air</code> for Go). Two common reasons it does not react:</p>
+<ul>
+<li><strong>File events do not cross the mount.</strong> On some setups, especially macOS and Windows with older file sharing, change events are missing. Switch the watcher to polling (for example <code>CHOKIDAR_USEPOLLING=true</code> for Chokidar based tools).</li>
+<li><strong>The editor saves by renaming.</strong> Some editors write a temporary file and rename it, which a few watchers miss. Check the tool's documentation for a flag.</li>
+</ul>
+<p>More causes and fixes are in <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working in Docker or locally</a>.</p>
+
+<h2 id="bind-mount-or-named-volume">Bind mount or named volume</h2>
+<p>Use a bind mount for files you edit (source, config) and a named volume for data the container owns (a database directory, a cache). A named volume is managed by Docker, is not tied to a host path and is often faster on macOS and Windows. Add <code>:ro</code> to a bind mount (<code>./config:/etc/app:ro</code>) when the container should only read it.</p>
+
+<h2 id="in-a-flisk-stack">In a Flisk stack</h2>
+<p>A <code>bring-your-own</code> resource takes a <code>volumes</code> list in <code>service.json</code>. A source that starts with <code>./</code> or <code>../</code> is a bind mount relative to the service folder, and a plain name is a named volume:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile.dev",
+  "volumes": [
+    { "source": "./src", "target": "/app/src" },
+    { "source": "./config", "target": "/app/config", "readOnly": true },
+    { "source": "web-cache", "target": "/app/.cache" }
+  ]
+}</code></pre>
+<p>A bind path must stay inside the project; <code>flisk up</code> and <code>flisk doctor</code> refuse one that climbs above the project root. A named volume is kept by <code>flisk down</code>. Be clear about what this does not give you: Flisk does not add a live reload to a bring-your-own container. The mount shows your edits inside it, and the process in your <code>Dockerfile.dev</code> must restart itself, for example with <code>nodemon</code>. For services Flisk generates for you, hot reload is built in and you do not write mounts.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Mount paths must be absolute inside the container.</strong> <code>target</code> is a full path such as <code>/app/src</code>.</li>
+<li><strong>Files created by the container are owned by its user.</strong> See <a href="/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/">running as a non-root user</a> for matching ids on Linux.</li>
+<li><strong>Slow file access on macOS</strong> can make a large mounted tree sluggish. Mount fewer folders and keep dependencies out of the mount.</li>
+<li><strong>Do not mount over the folder holding your build output</strong> unless you want your host's copy to win.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If edits still do not appear, check each link in the chain: mount path, watcher, restart. And if you would rather not keep a dev Dockerfile at all, <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running services without Docker</a> removes the mount layer entirely.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my container crash with cannot find module after I mount my project?</summary><p>Mounting the whole project hides the node_modules installed in the image. Mount only the source folders, or add an anonymous volume at /app/node_modules to keep the image&#39;s copy.</p></details><details><summary>Do bind mounts reload my app automatically?</summary><p>No. They only make your edits visible inside the container. A watcher or dev server in the container, such as nodemon or Vite, has to restart or reload the process.</p></details><details><summary>How do I bind mount a folder in Flisk?</summary><p>Add an entry to the volumes list in service.json of a bring-your-own resource, with a source starting with ./ or ../ (relative to the service folder) and an absolute target path.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/"><span class="lbl">Guide</span><b>How to run a Docker container as a non-root user</b><span>Containers run as root unless you say otherwise. Changing that takes four lines, plus a plan for the files the app writes.</span></a><a href="/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/"><span class="lbl">Guide</span><b>Multi-stage Dockerfile with separate dev and production stages</b><span>Production images should not carry compilers or test tools, and dev images should not run a minified build. Stages let one file serve both.</span></a><a href="/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/"><span class="lbl">Guide</span><b>Docker ARG vs ENV: which one to use at build time and run time</b><span>Both set a variable, but one disappears after the build and the other ships with the image. Picking wrong leaks data or breaks the app.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

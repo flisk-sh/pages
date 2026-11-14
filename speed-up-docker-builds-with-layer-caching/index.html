@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to speed up Docker builds with layer caching</title>
+<meta name="description" content="Docker rebuilds every layer after the first changed line. Order your Dockerfile so dependencies install before source is copied, and rebuilds finish in seconds.">
+<meta name="keywords" content="docker layer caching, speed up docker build, dockerfile copy package.json first, docker build cache invalidated, docker build slow">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to speed up Docker builds with layer caching">
+<meta property="og:description" content="Docker rebuilds every layer after the first changed line. Order your Dockerfile so dependencies install before source is copied, and rebuilds finish in seconds.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to speed up Docker builds with layer caching","description":"Docker rebuilds every layer after the first changed line. Order your Dockerfile so dependencies install before source is copied, and rebuilds finish in seconds.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/","keywords":"docker layer caching, speed up docker build, dockerfile copy package.json first, docker build cache invalidated, docker build slow","wordCount":809,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"How to speed up Docker builds with layer caching","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does Docker reinstall my dependencies on every build?","acceptedAnswer":{"@type":"Answer","text":"Because an earlier instruction changed. Usually COPY . . comes before the install, so any source edit invalidates the install layer. Copy only the manifest and lockfile first, install, then copy the rest."}},{"@type":"Question","name":"How do I know which layer broke the cache?","acceptedAnswer":{"@type":"Answer","text":"Build with docker build --progress=plain. Reused steps show CACHED. The first step without that mark, or the one right after the last CACHED line, is where the cache was invalidated."}},{"@type":"Question","name":"Does Flisk change how my own Dockerfile is cached?","acceptedAnswer":{"@type":"Answer","text":"No. A bring-your-own resource is built with the Dockerfile you provide, so layer order is up to you. Flisk's shared base images only apply to services it generates."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>How to speed up Docker builds with layer caching</h1><p class="dek">Every code edit triggers a full npm install or pip install. The fix is the order of five lines in your Dockerfile, not a faster machine.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-install-step-runs-on-every-edit">Why the install step runs on every edit</a></li><li><a href="#order-the-layers-by-how-often-they-change">Order the layers by how often they change</a></li><li><a href="#see-what-is-cached-and-what-is-not">See what is cached and what is not</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#a-worked-example-in-python">A worked example in Python</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Docker caches the result of each Dockerfile instruction as a layer, and when one instruction changes, every instruction after it runs again. To keep rebuilds fast, put the lines that change rarely (base image, system packages, dependency install) first, and the lines that change on every edit (your source code) last. In practice that means copying only your dependency manifest, installing, and then copying the rest.</p>
+
+<h2 id="why-the-install-step-runs-on-every-edit">Why the install step runs on every edit</h2>
+<p>This is the Dockerfile most people start with:</p>
+<pre><code>FROM node:22-alpine
+WORKDIR /app
+COPY . .
+RUN npm ci
+CMD ["node", "server.js"]</code></pre>
+<p>Docker decides whether a <code>COPY</code> layer is still valid by checking the files it copies. <code>COPY . .</code> includes your source, so any edited file changes the layer. Everything after it, including <code>RUN npm ci</code>, is thrown away and rebuilt. You wait for a full install although <code>package-lock.json</code> did not change.</p>
+
+<h2 id="order-the-layers-by-how-often-they-change">Order the layers by how often they change</h2>
+<p>Split the copy in two. The manifest and lockfile go first, the install runs against them, and only then does the source arrive:</p>
+<pre><code>FROM node:22-alpine
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+CMD ["node", "server.js"]</code></pre>
+<p>Now an edit to <code>server.js</code> only invalidates the last <code>COPY</code>. The <code>npm ci</code> layer is reused until the lockfile changes. The same shape works in every ecosystem:</p>
+<ul>
+<li><strong>Python:</strong> <code>COPY requirements.txt .</code>, then <code>RUN pip install -r requirements.txt</code>, then <code>COPY . .</code>.</li>
+<li><strong>Go:</strong> <code>COPY go.mod go.sum ./</code>, then <code>RUN go mod download</code>, then <code>COPY . .</code>.</li>
+<li><strong>Rust:</strong> copy <code>Cargo.toml</code> and <code>Cargo.lock</code> with a stub <code>src/main.rs</code>, build to warm the dependencies, then copy the real source.</li>
+</ul>
+<p>For system packages, put <code>apt-get update</code> and <code>apt-get install</code> in the same <code>RUN</code> line. If they are separate, Docker can reuse an old, cached <code>update</code> layer and the install then fails against a stale package index.</p>
+
+<h2 id="see-what-is-cached-and-what-is-not">See what is cached and what is not</h2>
+<p>Run the build with plain progress output and read the step list:</p>
+<pre><code>docker build --progress=plain -t myapp .</code></pre>
+<p>Steps that were reused are marked <code>CACHED</code>. The first step that is not marked is where your cache broke. Common causes are a <code>COPY . .</code> placed too early, a changing <code>ARG</code> before the install (build arguments take part in the cache key, so keep rarely used ones late), and files you did not mean to copy, such as logs or a build output folder. A <a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/">.dockerignore file</a> removes those.</p>
+
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p>If you let Flisk generate a service (a backend or frontend from <code>flisk resource</code>), you do not write this Dockerfile. Flisk builds a set of shared base images (it calls them golden images) once per machine, pulls prebuilt copies from <code>ghcr.io/flisk-sh</code> when it can, and each service's generated Dockerfile starts from them. The dependency layers are therefore shared across services instead of rebuilt per service.</p>
+<p>If you bring your own Dockerfile with a <code>bring-your-own</code> resource, Flisk builds it as written, so layer order stays your job and everything above applies unchanged. The Dockerfile is referenced from <code>service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dockerfile": "./Dockerfile"
+}</code></pre>
+<p>The build context is the resource directory unless you set <code>buildContext</code>, so a <code>COPY</code> path is relative to that folder. See <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">running an existing Dockerfile in a local dev stack</a> for the full setup.</p>
+
+<h2 id="a-worked-example-in-python">A worked example in Python</h2>
+<p>The same idea with a Python web app. Before, a one-line change to <code>app.py</code> reinstalls every package:</p>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -r requirements.txt
+CMD ["python", "app.py"]</code></pre>
+<p>After, the install layer depends only on <code>requirements.txt</code>:</p>
+<pre><code>FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "app.py"]</code></pre>
+<p>Edit <code>app.py</code> and rebuild: the first four steps report <code>CACHED</code> and only the final copy runs. Add a package to <code>requirements.txt</code> and the install runs again, which is correct. That is the whole trick, and it is worth checking in every Dockerfile you inherit.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Cache is per machine.</strong> A fresh CI runner or a new laptop starts cold. In CI you can export and import the cache with <code>docker buildx build --cache-to</code> and <code>--cache-from</code>.</li>
+<li><strong>Pruning clears it.</strong> <code>docker builder prune</code> and <code>docker system prune</code> remove build cache, so the next build is slow. That is the price of freeing disk, see <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a>.</li>
+<li><strong>Do not chain unrelated work into one <code>RUN</code>.</strong> One giant line caches as one unit and any change reruns all of it.</li>
+<li><strong>Too many layers is not the problem.</strong> Cache hits matter more than layer count for a development loop.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once layer order is right, the next saving is the package download itself. <a href="/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/">BuildKit cache mounts</a> keep the npm, pip or Go cache between builds, even when the lockfile changes.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does Docker reinstall my dependencies on every build?</summary><p>Because an earlier instruction changed. Usually COPY . . comes before the install, so any source edit invalidates the install layer. Copy only the manifest and lockfile first, install, then copy the rest.</p></details><details><summary>How do I know which layer broke the cache?</summary><p>Build with docker build --progress=plain. Reused steps show CACHED. The first step without that mark, or the one right after the last CACHED line, is where the cache was invalidated.</p></details><details><summary>Does Flisk change how my own Dockerfile is cached?</summary><p>No. A bring-your-own resource is built with the Dockerfile you provide, so layer order is up to you. Flisk&#39;s shared base images only apply to services it generates.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/buildkit-cache-mounts-for-package-managers/"><span class="lbl">Guide</span><b>Docker BuildKit cache mounts for npm, pip and Go modules</b><span>Add one package and the whole install layer reruns from scratch. A cache mount keeps the downloads so only the new package is fetched.</span></a><a href="/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/"><span class="lbl">Guide</span><b>What to put in .dockerignore (and why builds get slow without it)</b><span>If docker build starts with a long &#39;transferring context&#39; step, the fix is usually a ten-line file.</span></a><a href="/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/"><span class="lbl">Guide</span><b>Multi-stage Dockerfile with separate dev and production stages</b><span>Production images should not carry compilers or test tools, and dev images should not run a minified build. Stages let one file serve both.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

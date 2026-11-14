@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What to put in .dockerignore (and why builds get slow without it)</title>
+<meta name="description" content="A missing .dockerignore sends node_modules, .git and .env into every build. See what to exclude, how patterns differ from .gitignore and where the file goes.">
+<meta name="keywords" content=".dockerignore, docker build context too large, dockerignore node_modules, dockerignore patterns, docker copy . . cache">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What to put in .dockerignore (and why builds get slow without it)">
+<meta property="og:description" content="A missing .dockerignore sends node_modules, .git and .env into every build. See what to exclude, how patterns differ from .gitignore and where the file goes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"What to put in .dockerignore (and why builds get slow without it)","description":"A missing .dockerignore sends node_modules, .git and .env into every build. See what to exclude, how patterns differ from .gitignore and where the file goes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/","keywords":".dockerignore, docker build context too large, dockerignore node_modules, dockerignore patterns, docker copy . . cache","wordCount":746,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"What to put in .dockerignore (and why builds get slow without it)","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerignore-file-what-to-exclude/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Where does the .dockerignore file go?","acceptedAnswer":{"@type":"Answer","text":"In the root of the build context, the folder you pass to docker build. With a Flisk bring-your-own resource that is the service folder, or the buildContext folder if you set one."}},{"@type":"Question","name":"Does .dockerignore apply to bind mounts?","acceptedAnswer":{"@type":"Answer","text":"No. It only filters the build context. A volume or bind mount at run time exposes the host folder as it is."}},{"@type":"Question","name":"Why is node_modules still copied after I ignored it?","acceptedAnswer":{"@type":"Answer","text":"The pattern node_modules only matches the context root. Use **/node_modules to match it in subfolders."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>What to put in .dockerignore (and why builds get slow without it)</h1><p class="dek">If docker build starts with a long &#39;transferring context&#39; step, the fix is usually a ten-line file.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-build-context-is">What the build context is</a></li><li><a href="#a-starting-file">A starting file</a></li><li><a href="#how-the-patterns-differ-from-gitignore">How the patterns differ from .gitignore</a></li><li><a href="#check-what-a-build-actually-sends">Check what a build actually sends</a></li><li><a href="#where-it-goes-with-flisk">Where it goes with Flisk</a></li><li><a href="#a-monorepo-example">A monorepo example</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A <code>.dockerignore</code> file lists paths that are not sent to Docker as part of the build context. Put it in the root of the context (next to the Dockerfile in the usual layout) and list <code>.git</code>, dependency folders such as <code>node_modules</code>, build output, logs and every <code>.env</code> file. Builds start faster, <code>COPY . .</code> stops invalidating the cache for irrelevant files, and secrets stay out of the image.</p>
+
+<h2 id="what-the-build-context-is">What the build context is</h2>
+<p>When you run <code>docker build .</code>, the folder <code>.</code> is the build context. The client packs it up and hands it to the builder, and <code>COPY</code> can only read from inside it. Without an ignore file, that is everything: your <code>.git</code> history, a 600 MB <code>node_modules</code> built for your host OS, test videos, local databases. BuildKit transfers only what the Dockerfile actually uses in many cases, but <code>COPY . .</code> uses everything, so the full folder is hashed and copied.</p>
+
+<h2 id="a-starting-file">A starting file</h2>
+<pre><code># version control and editor files
+.git
+.gitignore
+.idea
+.vscode
+
+# dependencies and build output (rebuilt inside the image)
+**/node_modules
+**/dist
+**/__pycache__
+**/.venv
+target
+
+# secrets and local config
+.env
+.env.*
+!.env.example
+
+# logs and OS junk
+*.log
+.DS_Store
+
+# the Docker files themselves
+Dockerfile*
+docker-compose*.yml
+.dockerignore</code></pre>
+<p>Do not copy this blindly. If your Dockerfile copies <code>dist</code> from the host instead of building it, ignoring <code>dist</code> breaks the build. Ignoring <code>Dockerfile</code> is safe for <code>COPY</code>, because the builder still reads the Dockerfile itself.</p>
+
+<h2 id="how-the-patterns-differ-from-gitignore">How the patterns differ from .gitignore</h2>
+<ul>
+<li><strong>Patterns are anchored at the context root.</strong> <code>node_modules</code> matches only a top-level folder. Use <code>**/node_modules</code> to match it in every subfolder of a monorepo.</li>
+<li><strong>Later lines win.</strong> <code>!.env.example</code> after <code>.env.*</code> puts that one file back.</li>
+<li><strong>There is no per-folder ignore file.</strong> Only the one in the context root is read, not nested ones.</li>
+<li><strong>BuildKit supports a per-Dockerfile file.</strong> <code>Dockerfile.dev.dockerignore</code> next to <code>Dockerfile.dev</code> applies only to that Dockerfile, so a dev build and a production build can ignore different things.</li>
+</ul>
+
+<h2 id="check-what-a-build-actually-sends">Check what a build actually sends</h2>
+<p>You do not have to guess. Build with plain progress output and look at the context line near the top, which reports how many bytes were transferred. Add a pattern, build again, and watch the number fall. If it stays large after you ignored the obvious folders, look for a stray database dump, a <code>.venv</code> in a subfolder, or a build cache folder such as <code>.next</code> or <code>.turbo</code>. These are easy to forget because your editor hides them.</p>
+
+<h2 id="where-it-goes-with-flisk">Where it goes with Flisk</h2>
+<p>For a <code>bring-your-own</code> resource, Flisk uses the resource folder (the one holding <code>service.json</code>) as the build context. Put the <code>.dockerignore</code> there. If you set <code>buildContext</code> to a folder higher up, for example to build from a repository root, the ignore file belongs in that folder instead:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "buildContext": "../../..",
+  "dockerfile": "services/app/api/Dockerfile"
+}</code></pre>
+<p>With <code>buildContext</code> set, <code>dockerfile</code> is relative to that context. Flisk itself keeps <code>.env</code> out of version control by design, and your ignore file should keep it out of images for the same reason: a copied <code>.env</code> is readable by anyone who can pull the image.</p>
+
+<h2 id="a-monorepo-example">A monorepo example</h2>
+<p>In a monorepo you often build from the repository root so a service can copy a shared package. That makes the context huge: every other service is in it. A root <code>.dockerignore</code> that excludes whole services keeps each build small:</p>
+<pre><code>**/node_modules
+**/dist
+.git
+services/*
+!services/api
+!packages/shared</code></pre>
+<p>The wildcard drops every service folder, and the two negations put back the one being built and the shared package it needs. Order matters here: the exclusion line comes before the exceptions. If you build several services from one root with one ignore file, use the per-Dockerfile form, <code>services/api/Dockerfile.dockerignore</code>, so each build keeps only its own folders.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A <code>COPY</code> of an ignored path fails.</strong> The error is "not found", which looks like a typo. Check the ignore file first.</li>
+<li><strong>Ignoring host <code>node_modules</code> is not optional for cross-OS work.</strong> Native modules built on macOS do not run in a Linux container.</li>
+<li><strong>Bind mounts ignore it.</strong> <code>.dockerignore</code> only affects the build context. A <code>volumes</code> mount at run time shows the full host folder.</li>
+<li><strong>Check the size.</strong> The first lines of <code>docker build --progress=plain .</code> show how much was transferred. A few megabytes is normal for most apps.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>With a small context, the next cost is order inside the Dockerfile. <a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/">Layer caching</a> covers which lines to put first.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Where does the .dockerignore file go?</summary><p>In the root of the build context, the folder you pass to docker build. With a Flisk bring-your-own resource that is the service folder, or the buildContext folder if you set one.</p></details><details><summary>Does .dockerignore apply to bind mounts?</summary><p>No. It only filters the build context. A volume or bind mount at run time exposes the host folder as it is.</p></details><details><summary>Why is node_modules still copied after I ignored it?</summary><p>The pattern node_modules only matches the context root. Use **/node_modules to match it in subfolders.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/speed-up-docker-builds-with-layer-caching/"><span class="lbl">Guide</span><b>How to speed up Docker builds with layer caching</b><span>Every code edit triggers a full npm install or pip install. The fix is the order of five lines in your Dockerfile, not a faster machine.</span></a><a href="/@odykyi/dockerfiles-for-dev/multi-stage-dockerfile-dev-and-production/"><span class="lbl">Guide</span><b>Multi-stage Dockerfile with separate dev and production stages</b><span>Production images should not carry compilers or test tools, and dev images should not run a minified build. Stages let one file serve both.</span></a><a href="/@odykyi/dockerfiles-for-dev/docker-arg-vs-env/"><span class="lbl">Guide</span><b>Docker ARG vs ENV: which one to use at build time and run time</b><span>Both set a variable, but one disappears after the build and the other ships with the image. Picking wrong leaks data or breaks the app.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

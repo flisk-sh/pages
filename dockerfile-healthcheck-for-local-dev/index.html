@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write a Dockerfile HEALTHCHECK that works in dev</title>
+<meta name="description" content="A HEALTHCHECK must use a tool the image actually has. Examples without curl for Alpine, Node and Python, timing flags, and how Flisk treats health checks.">
+<meta name="keywords" content="dockerfile healthcheck, docker healthcheck without curl, docker healthcheck node, docker container unhealthy, healthcheck start-period">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write a Dockerfile HEALTHCHECK that works in dev">
+<meta property="og:description" content="A HEALTHCHECK must use a tool the image actually has. Examples without curl for Alpine, Node and Python, timing flags, and how Flisk treats health checks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write a Dockerfile HEALTHCHECK that works in dev","description":"A HEALTHCHECK must use a tool the image actually has. Examples without curl for Alpine, Node and Python, timing flags, and how Flisk treats health checks.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/","keywords":"dockerfile healthcheck, docker healthcheck without curl, docker healthcheck node, docker container unhealthy, healthcheck start-period","wordCount":717,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Dockerfiles for development","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/"},{"@type":"ListItem","position":3,"name":"How to write a Dockerfile HEALTHCHECK that works in dev","item":"https://pages.flisk.si/@odykyi/dockerfiles-for-dev/dockerfile-healthcheck-for-local-dev/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is my container unhealthy when the app works?","acceptedAnswer":{"@type":"Answer","text":"The HEALTHCHECK command probably needs a tool the image lacks, usually curl, or it tests the wrong port. Run the command with docker exec and read its exit code."}},{"@type":"Question","name":"Does Docker restart an unhealthy container?","acceptedAnswer":{"@type":"Answer","text":"Not by itself in plain Docker. The status is informational, though Compose and orchestrators can act on it, for example by waiting for service_healthy."}},{"@type":"Question","name":"Does Flisk use the HEALTHCHECK from my Dockerfile?","acceptedAnswer":{"@type":"Answer","text":"For a bring-your-own resource with a healthCheckPath, Flisk adds no container health check of its own, so the Dockerfile one stays in effect, and the router probes the path separately."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dockerfiles-for-dev/">Dockerfiles for development</a></div>
+<section class="hero"><div><div class="lbl">Dockerfiles for development</div><h1>How to write a Dockerfile HEALTHCHECK that works in dev</h1><p class="dek">Slim images often lack curl, so a copied HEALTHCHECK fails forever. Write one that matches what is in your image.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-instruction">The instruction</a></li><li><a href="#pick-a-command-your-image-has">Pick a command your image has</a></li><li><a href="#what-the-endpoint-should-check">What the endpoint should check</a></li><li><a href="#how-flisk-treats-it">How Flisk treats it</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A <code>HEALTHCHECK</code> instruction tells Docker how to test whether the app inside a container really works, not just whether the process is running. The test is a command that exits 0 for healthy and 1 for unhealthy. The usual mistake is copying a <code>curl</code> command into an image that has no curl, which marks a perfectly good container unhealthy forever.</p>
+
+<h2 id="the-instruction">The instruction</h2>
+<pre><code>HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1</code></pre>
+<ul>
+<li><code>--interval</code>: how often to run the test (default 30 seconds).</li>
+<li><code>--timeout</code>: how long one run may take before it counts as a failure.</li>
+<li><code>--start-period</code>: a grace time after start when failures are not counted, for apps that boot slowly.</li>
+<li><code>--retries</code>: how many failures in a row make the container <code>unhealthy</code>.</li>
+</ul>
+<p>The status moves from <code>starting</code> to <code>healthy</code> or <code>unhealthy</code>. Read it with:</p>
+<pre><code>docker inspect --format '{{.State.Health.Status}}' mycontainer
+docker ps --format 'table {{.Names}}\t{{.Status}}'</code></pre>
+<p>Plain Docker does not restart an unhealthy container; the state is a signal. Compose uses it for <code>depends_on</code> with <code>condition: service_healthy</code>, see <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">depends_on and healthchecks</a>.</p>
+
+<h2 id="pick-a-command-your-image-has">Pick a command your image has</h2>
+<p>The test runs inside the container, so it can only use what is installed there.</p>
+<ul>
+<li><strong>Alpine:</strong> BusyBox <code>wget</code> is present: <code>wget -qO- http://localhost:3000/health</code>. Add <code>curl</code> with <code>apk add --no-cache curl</code> only if you prefer it.</li>
+<li><strong>Debian slim:</strong> neither curl nor wget is guaranteed. Install one in the Dockerfile, or use the language runtime.</li>
+<li><strong>Node 18 or later:</strong> use the built-in <code>fetch</code>:</li>
+</ul>
+<pre><code>HEALTHCHECK CMD node -e "const u='http://localhost:3000/health';fetch(u).then(r =&amp;gt; process.exit(r.ok ? 0 : 1)).catch(() =&amp;gt; process.exit(1))"</code></pre>
+<ul>
+<li><strong>Python:</strong></li>
+</ul>
+<pre><code>HEALTHCHECK CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8000/health', timeout=2)"</code></pre>
+<p>The Python call raises on a connection error or an error status, which makes the interpreter exit non-zero. Always test against <code>localhost</code> and the port the app listens on inside the container, and make sure the app binds <code>0.0.0.0</code> or at least loopback.</p>
+
+<h2 id="what-the-endpoint-should-check">What the endpoint should check</h2>
+<p>Keep it cheap and honest. A health route that returns 200 as soon as the server accepts requests is a liveness check. If you also want "ready for traffic", have a second route that checks that the database connection works. Do not make the health route call slow downstream services: a flaky dependency then takes your container down with it. The <a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">health versus readiness</a> article draws this line for agents, and it applies to any service.</p>
+
+<h2 id="how-flisk-treats-it">How Flisk treats it</h2>
+<p>For a <code>bring-your-own</code> resource, <code>healthCheckPath</code> in <code>service.json</code> is the path Flisk's router probes. In the generated Compose service, Flisk does not add its own container health check for such a resource, because it cannot assume your image has curl. A <code>HEALTHCHECK</code> in your Dockerfile therefore stays in effect, while the router's probe works separately.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "bring-your-own",
+  "stack": "app",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Three related cases are verified in the generator. A resource with no <code>healthCheckPath</code> gets no HTTP probe, and Flisk disables the container health check so an image <code>HEALTHCHECK</code> aimed at a port nothing serves cannot mark it unhealthy. A <code>healthCheck</code> object can replace the probe with a command that runs inside the container, or a TCP port check, for services that do not speak HTTP. And <code>healthCheck: false</code> turns both the container check and the router probe off:</p>
+<pre><code>"healthCheck": {
+  "command": ["pg_isready"],
+  "startPeriod": 30
+}</code></pre>
+<p>Use <code>flisk status</code> to see the result, and read the logs if a container stays unhealthy.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A check that works on your host but not in the container.</strong> Run it with <code>docker exec &amp;lt;container&amp;gt; sh -c '...'</code> and read the exit code.</li>
+<li><strong>Using the container's published port.</strong> Inside the container the app listens on its own port, not the one mapped on your host.</li>
+<li><strong>A start period that is too short.</strong> A JVM or a framework with a cold build may need a minute, and retries run out before the app is up.</li>
+<li><strong>Health checks on one-shot jobs.</strong> A migration or seed container exits on purpose and should not have one.</li>
+<li><strong>Restart loops.</strong> If the container keeps exiting rather than turning unhealthy, see <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Once health reporting is accurate, anything that depends on the service can wait for it. See <a href="/@odykyi/microservices-local-dev/service-startup-order/">how to control startup order</a> for the Flisk side of that.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is my container unhealthy when the app works?</summary><p>The HEALTHCHECK command probably needs a tool the image lacks, usually curl, or it tests the wrong port. Run the command with docker exec and read its exit code.</p></details><details><summary>Does Docker restart an unhealthy container?</summary><p>Not by itself in plain Docker. The status is informational, though Compose and orchestrators can act on it, for example by waiting for service_healthy.</p></details><details><summary>Does Flisk use the HEALTHCHECK from my Dockerfile?</summary><p>For a bring-your-own resource with a healthCheckPath, Flisk adds no container health check of its own, so the Dockerfile one stays in effect, and the router probes the path separately.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dockerfiles for development</span></div>
+<div class="rgrid"><a href="/@odykyi/dockerfiles-for-dev/entrypoint-vs-cmd-override/"><span class="lbl">Guide</span><b>Docker ENTRYPOINT vs CMD: how to override them in dev</b><span>One line in a Dockerfile decides whether docker run image bash gives you a shell or passes the word bash to your app.</span></a><a href="/@odykyi/dockerfiles-for-dev/run-docker-container-as-non-root-user/"><span class="lbl">Guide</span><b>How to run a Docker container as a non-root user</b><span>Containers run as root unless you say otherwise. Changing that takes four lines, plus a plan for the files the app writes.</span></a><a href="/@odykyi/dockerfiles-for-dev/alpine-vs-debian-slim-for-dev-images/"><span class="lbl">Guide</span><b>Alpine or Debian slim for a development Docker image</b><span>Smaller is not always faster. For many Python and Node projects, a slim Debian image builds sooner and fails less.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
