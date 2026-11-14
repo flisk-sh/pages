@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables</title>
+<meta name="description" content="Anything in a VITE_ or NEXT_PUBLIC_ variable ends up in the browser bundle. What belongs there, what does not, and where a real secret goes instead.">
+<meta name="keywords" content="VITE_ secret exposed, NEXT_PUBLIC_ api key leak, env variables in client bundle, where to put api keys vite, flisk doctor public env secrets">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables">
+<meta property="og:description" content="Anything in a VITE_ or NEXT_PUBLIC_ variable ends up in the browser bundle. What belongs there, what does not, and where a real secret goes instead.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables","description":"Anything in a VITE_ or NEXT_PUBLIC_ variable ends up in the browser bundle. What belongs there, what does not, and where a real secret goes instead.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/","keywords":"VITE_ secret exposed, NEXT_PUBLIC_ api key leak, env variables in client bundle, where to put api keys vite, flisk doctor public env secrets","wordCount":858,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Frontend dev servers and APIs","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/"},{"@type":"ListItem","position":3,"name":"Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Are VITE_ variables secret?","acceptedAnswer":{"@type":"Answer","text":"No. Vite copies every VITE_ variable into the client bundle, so anyone who loads the page can read it. Keep secrets in server-side variables."}},{"@type":"Question","name":"Is NEXT_PUBLIC_ safe for a Stripe publishable key?","acceptedAnswer":{"@type":"Answer","text":"Yes. Publishable keys such as pk_live_ and pk_test_ are meant to be public. Secret keys starting with sk_ or rk_ are not."}},{"@type":"Question","name":"Does flisk doctor fail when it finds a secret in a public variable?","acceptedAnswer":{"@type":"Answer","text":"It reports a warning that names the variable and the file, and the command still exits 0. Read the warning and move the value to the server."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/frontend-dev-servers/">Frontend dev servers and APIs</a></div>
+<section class="hero"><div><div class="lbl">Frontend dev servers and APIs</div><h1>Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables</h1><p class="dek">The prefix is not a label for &#39;frontend config&#39;. It is the switch that publishes the value to every visitor. Here is how to tell what is safe and what to do with the rest.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-prefix-does">What the prefix does</a></li><li><a href="#what-is-safe-in-a-public-variable">What is safe in a public variable</a></li><li><a href="#what-is-not">What is not</a></li><li><a href="#where-a-secret-goes-instead">Where a secret goes instead</a></li><li><a href="#if-one-already-leaked">If one already leaked</a></li><li><a href="#what-flisk-does-here">What Flisk does here</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>A variable that starts with <code>VITE_</code> in Vite, or <code>NEXT_PUBLIC_</code> in Next.js, is copied into the JavaScript that is sent to the browser. Anyone who opens the page can read it in the bundle or the network tab. So a secret never belongs there. Keep it in a server-side variable that only your API or server code reads, and let the frontend call that code.</p>
+
+<h2 id="what-the-prefix-does">What the prefix does</h2>
+<p>Both tools use the prefix as a filter. Vite exposes only <code>VITE_*</code> variables to client code through <code>import.meta.env</code>. Next.js inlines only <code>NEXT_PUBLIC_*</code> variables into the browser bundle. Variables without the prefix stay on the server. The rule exists to protect you: if the prefix were not required, every value in the file would be published.</p>
+<p>The value is substituted at build time. That has two consequences. Changing it needs a rebuild or a dev server restart, and deleting it from the file later does not remove it from a bundle you already deployed.</p>
+
+<h2 id="what-is-safe-in-a-public-variable">What is safe in a public variable</h2>
+<ul>
+<li>The API's base URL.</li>
+<li>Feature flags that are fine for everyone to see.</li>
+<li>Publishable keys, made to be public: a Stripe <code>pk_...</code> key, an analytics site id, a map tile token that is restricted by domain.</li>
+</ul>
+<p>A useful test is this: could a stranger who has the value do damage with it? If yes, it is a secret.</p>
+
+<h2 id="what-is-not">What is not</h2>
+<ul>
+<li>Stripe <code>sk_</code> and <code>rk_</code> keys, OpenAI and Anthropic keys, database URLs with a password, signing secrets, webhook secrets, cloud access keys, GitHub tokens.</li>
+<li>A key that is "only for development". It is often the same account, and a leaked value in a bundle gets copied into a repository or a screenshot.</li>
+</ul>
+
+<h2 id="where-a-secret-goes-instead">Where a secret goes instead</h2>
+<p>Put it in a variable without the prefix and read it only in server code: your API, a Next.js route handler, a server action or a server component. The frontend calls an endpoint, the server adds the key and calls the third party, and the browser only gets the result.</p>
+<pre><code>// Next.js route handler: app/api/chat/route.ts
+const PROVIDER_URL = 'https://api.example.com/v1/chat';
+
+export async function POST(req: Request) {
+  const body = await req.json();
+  const r = await fetch(PROVIDER_URL, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.CHAT_API_KEY}` },
+    body: JSON.stringify(body),
+  });
+  return new Response(r.body, { status: r.status });
+}</code></pre>
+<p>With a Vite single-page app there is no server of its own, so the key lives in your backend, and <a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/">a dev proxy</a> lets the frontend reach it without knowing anything else. Keep <code>.env</code> out of git, and commit an example file with empty values.</p>
+
+<h2 id="if-one-already-leaked">If one already leaked</h2>
+<p>Treat the key as public. Revoke it at the provider and create a new one, and only then clean the code. Removing the line from the repository does not help, because the value is in git history and in every deployed bundle.</p>
+
+<h2 id="what-flisk-does-here">What Flisk does here</h2>
+<p><code>flisk doctor</code> has a check for exactly this. It reads the project's env files and warns when a <code>NEXT_PUBLIC_*</code> or <code>VITE_*</code> variable holds a value that looks like a secret. It recognises provider formats such as Stripe secret keys, OpenAI and Anthropic keys, AWS access key ids, GitHub tokens, Slack tokens and Google API keys, and it skips the values that are public by design, such as <code>pk_live_</code> and <code>pk_test_</code> keys and obvious placeholders. The warning names the variable and the file, and its fix text tells you to move the value to a server-side variable or an API route. In the JSON output it is a warning and the command still exits 0, so run <code>flisk doctor</code> yourself, and do not rely on a failing exit code to catch it. It looks at values with a known shape, so a custom token with no recognisable format may pass: the check helps, it does not replace review.</p>
+<p>For secrets your services need during development, Flisk can generate them rather than have you paste a real one. Declare them in a service's <code>service.json</code>:</p>
+<pre><code>{ "secrets": { "generate": { "AUTH_SECRET": "hex:32" } } }</code></pre>
+<p>On <code>flisk up</code>, a name missing from the project <code>.env</code> is appended once with a random value, an existing value is never changed, and Flisk prints the names it generated, not the values. This is for development keys that only your own stack uses. It does not create a key for a third-party service, and it should not be used to put a value into a <code>VITE_</code> variable.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The prefix added "to make it work".</strong> A variable that is <code>undefined</code> in the browser is the prefix doing its job. The answer is a server endpoint, not a rename.</li>
+<li><strong>Source maps.</strong> Shipping source maps does not make a key safer, and it does not make it less exposed.</li>
+<li><strong>Server code in the client bundle.</strong> In Next.js, a file with <code>'use client'</code> that imports a module reading <code>process.env.SECRET</code> gets <code>undefined</code> at best. Keep secret-reading code in server-only modules.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For the safe case, the public API URL, see <a href="/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/">how to set the API URL in Vite with env variables</a>. For calls that need a login, see <a href="/@odykyi/frontend-dev-servers/cookies-not-sent-from-frontend-to-local-api/">why cookies are not sent to a local API</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Are VITE_ variables secret?</summary><p>No. Vite copies every VITE_ variable into the client bundle, so anyone who loads the page can read it. Keep secrets in server-side variables.</p></details><details><summary>Is NEXT_PUBLIC_ safe for a Stripe publishable key?</summary><p>Yes. Publishable keys such as pk_live_ and pk_test_ are meant to be public. Secret keys starting with sk_ or rk_ are not.</p></details><details><summary>Does flisk doctor fail when it finds a secret in a public variable?</summary><p>It reports a warning that names the variable and the file, and the command still exits 0. Read the warning and move the value to the server.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Frontend dev servers and APIs</span></div>
+<div class="rgrid"><a href="/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/"><span class="lbl">Guide</span><b>How to set the API URL in Vite with env variables</b><span>The frontend needs to know where the API is, and that address changes per machine and per environment. Here is how Vite reads it, and what bites people.</span></a><a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/"><span class="lbl">Guide</span><b>How to proxy API requests in the Vite dev server</b><span>The Vite dev server can forward some URLs to your backend, so the browser only ever talks to one origin. Here is the config, the options that matter, and the traps.</span></a><a href="/@odykyi/frontend-dev-servers/cookies-not-sent-from-frontend-to-local-api/"><span class="lbl">Guide</span><b>Why cookies are not sent from your frontend to a local API</b><span>The login works, the cookie is set, and the next request still arrives without it. Here is the checklist, in the order that finds the cause fastest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

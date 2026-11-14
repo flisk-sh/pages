@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Vite HMR WebSocket fails behind a reverse proxy: how to fix it</title>
+<meta name="description" content="If Vite shows &#39;failed to connect to websocket&#39; behind nginx or another proxy, forward the Upgrade headers and set server.hmr host, protocol and clientPort.">
+<meta name="keywords" content="vite failed to connect to websocket, vite hmr behind nginx, vite server.hmr clientport, vite hot reload not working proxy, vite blocked request host not allowed">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Vite HMR WebSocket fails behind a reverse proxy: how to fix it">
+<meta property="og:description" content="If Vite shows &#39;failed to connect to websocket&#39; behind nginx or another proxy, forward the Upgrade headers and set server.hmr host, protocol and clientPort.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Vite HMR WebSocket fails behind a reverse proxy: how to fix it","description":"If Vite shows 'failed to connect to websocket' behind nginx or another proxy, forward the Upgrade headers and set server.hmr host, protocol and clientPort.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/","keywords":"vite failed to connect to websocket, vite hmr behind nginx, vite server.hmr clientport, vite hot reload not working proxy, vite blocked request host not allowed","wordCount":768,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Frontend dev servers and APIs","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/"},{"@type":"ListItem","position":3,"name":"Vite HMR WebSocket fails behind a reverse proxy: how to fix it","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does 'failed to connect to websocket' mean in Vite?","acceptedAnswer":{"@type":"Answer","text":"The browser could not open the HMR socket. The usual causes are a proxy that drops the Upgrade headers, the wrong host or port for the socket, or a blocked host name."}},{"@type":"Question","name":"Which Vite option sets the HMR port the browser uses?","acceptedAnswer":{"@type":"Answer","text":"server.hmr.clientPort. Use it when a proxy or a container maps the dev server to a different public port."}},{"@type":"Question","name":"Why does Vite say 'This host is not allowed'?","acceptedAnswer":{"@type":"Answer","text":"Newer Vite checks the Host header. Localhost, *.localhost and IP addresses pass by default. Add other names to server.allowedHosts."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/frontend-dev-servers/">Frontend dev servers and APIs</a></div>
+<section class="hero"><div><div class="lbl">Frontend dev servers and APIs</div><h1>Vite HMR WebSocket fails behind a reverse proxy: how to fix it</h1><p class="dek">Hot reload needs a WebSocket back to the dev server. When something sits between the browser and Vite, that socket often fails. Here is how to find which layer broke it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-the-socket-is-chosen">How the socket is chosen</a></li><li><a href="#layer-1-the-proxy-must-pass-the-upgrade">Layer 1: the proxy must pass the upgrade</a></li><li><a href="#layer-2-tell-vite-the-public-address">Layer 2: tell Vite the public address</a></li><li><a href="#layer-3-the-host-check">Layer 3: the host check</a></li><li><a href="#layer-4-file-changes-never-reach-vite">Layer 4: file changes never reach Vite</a></li><li><a href="#what-flisk-does-here">What Flisk does here</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Vite's hot module replacement uses a WebSocket from the browser to the dev server. When a reverse proxy sits in between and does not forward the <code>Upgrade</code> headers, or when the browser connects to the wrong host or port, the console prints <code>[vite] failed to connect to websocket</code> and the page stops updating on save. Fix it by forwarding the upgrade at the proxy and telling Vite the address the browser actually uses.</p>
+
+<h2 id="how-the-socket-is-chosen">How the socket is chosen</h2>
+<p>By default the Vite client connects back to the same host and port that served the page, using <code>ws</code> for <code>http</code> pages and <code>wss</code> for <code>https</code> pages. That works when you open <code>http://localhost:5173</code> directly. It breaks when the page is served on a different address than the one Vite listens on: a proxy on port 80 or 443, a container with a published port, or a tunnel. The browser asks the public address for a socket, and either nothing forwards the upgrade or the address is wrong.</p>
+
+<h2 id="layer-1-the-proxy-must-pass-the-upgrade">Layer 1: the proxy must pass the upgrade</h2>
+<p>For nginx, a location that serves Vite needs HTTP/1.1 and the two upgrade headers:</p>
+<pre><code>location / {
+  proxy_pass http://127.0.0.1:5173;
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+}</code></pre>
+<p>Caddy and Traefik forward WebSocket upgrades without extra options. If the console error shows a <code>400</code> or <code>426</code> for the socket request, the upgrade was stripped. If it shows nothing for a long time and then fails, a firewall or a timeout is the likelier cause.</p>
+
+<h2 id="layer-2-tell-vite-the-public-address">Layer 2: tell Vite the public address</h2>
+<p>When the browser must use another host or port for the socket, set it in <code>vite.config.ts</code>:</p>
+<pre><code>export default defineConfig({
+  server: {
+    host: true,
+    hmr: {
+      protocol: 'wss',
+      host: 'dev.example.test',
+      clientPort: 443,
+    },
+  },
+});</code></pre>
+<p><code>clientPort</code> is the port the browser connects to, and <code>port</code> is where Vite opens the socket server. Set <code>clientPort</code> when a proxy changes the port. Use <code>wss</code> when the page is served over HTTPS, because browsers block a plain <code>ws</code> socket from a secure page.</p>
+
+<h2 id="layer-3-the-host-check">Layer 3: the host check</h2>
+<p>Newer Vite versions refuse requests whose <code>Host</code> header is not allowed, with the message <code>Blocked request. This host is not allowed</code>. <code>localhost</code>, <code>*.localhost</code> and IP addresses are allowed by default. A custom domain through a proxy or a tunnel is not. Add it with <code>server.allowedHosts</code>. If you do this to reach the dev server from another machine, remember that the dev server then answers requests from anyone who can reach it.</p>
+
+<h2 id="layer-4-file-changes-never-reach-vite">Layer 4: file changes never reach Vite</h2>
+<p>If the socket connects but a save changes nothing, the problem is the file watcher, not the socket. That happens with bind mounts from a virtual machine, where file events may not arrive. See <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working in Docker or locally</a>.</p>
+
+<h2 id="what-flisk-does-here">What Flisk does here</h2>
+<p>The simplest fix is to leave nothing in the middle. A frontend scaffolded with <code>--local</code> runs Vite as a plain process with <code>server.host</code> set to <code>localhost</code> and <code>strictPort: true</code>, so you open the page on the very port Vite listens on and the default socket address is right:</p>
+<pre><code>flisk resource web --type frontend --local --stack app --yes
+flisk up</code></pre>
+<p>In Docker mode the engine writes the Vite config itself. It listens on <code>0.0.0.0</code>, sets an <code>hmr</code> port, and puts Traefik in front under <code>app.&lt;project&gt;.localhost</code>. Flisk's own documentation for the frontend suite says it checks that the route and the built assets are served, and that it does not cover hot reload. So if the socket fails in that mode, treat it as something to verify, not something that is promised: read the browser console, then <code>flisk logs --service &lt;frontend&gt; --tail 100</code>, and compare the address in the socket error with the one in <code>flisk networks</code>. A hand-edited generated Vite config would be overwritten, so change the settings in the source files, not in the <code>.autogenerated</code> folder.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two Vite servers.</strong> A second dev server on the same machine silently takes the next port, and the page you have open talks to the wrong one. Pin the port with <code>strictPort</code>, as in <a href="/@odykyi/frontend-dev-servers/vite-port-changes-and-breaks-cors/">why a changed Vite port breaks CORS</a>.</li>
+<li><strong>Proxying the API with <code>ws</code>.</strong> The <code>ws: true</code> option on <code>server.proxy</code> is for your backend's sockets. It is not what makes HMR work.</li>
+<li><strong>Cached service workers.</strong> An old service worker can serve a stale page that never connects. Unregister it in the browser while you debug.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If hot reload works for the frontend but not the API, see <a href="/@odykyi/microservices-local-dev/hot-reload-across-services/">how to get hot reload across several services locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does &#39;failed to connect to websocket&#39; mean in Vite?</summary><p>The browser could not open the HMR socket. The usual causes are a proxy that drops the Upgrade headers, the wrong host or port for the socket, or a blocked host name.</p></details><details><summary>Which Vite option sets the HMR port the browser uses?</summary><p>server.hmr.clientPort. Use it when a proxy or a container maps the dev server to a different public port.</p></details><details><summary>Why does Vite say &#39;This host is not allowed&#39;?</summary><p>Newer Vite checks the Host header. Localhost, *.localhost and IP addresses pass by default. Add other names to server.allowedHosts.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Frontend dev servers and APIs</span></div>
+<div class="rgrid"><a href="/@odykyi/frontend-dev-servers/vite-port-changes-and-breaks-cors/"><span class="lbl">Guide</span><b>Why Vite changes its port and breaks CORS, and how to pin it</b><span>One morning the API rejects a request that worked yesterday, and the only change is a number in the address bar. Here is why, and how to make it stop.</span></a><a href="/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/"><span class="lbl">Guide</span><b>How to make the frontend dev server wait for the API to be ready</b><span>You start both with one command, and the page loads before the API listens. Here are three ways to order the start, and why readiness beats a fixed sleep.</span></a><a href="/@odykyi/frontend-dev-servers/open-vite-dev-server-on-your-phone/"><span class="lbl">Guide</span><b>How to open your Vite dev server on your phone</b><span>The page loads on the laptop and times out on the phone. Four things stand in the way: the bind address, the address you type, the API URL and the firewall.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to make the frontend dev server wait for the API to be ready</title>
+<meta name="description" content="Stop the frontend from showing connection errors on a cold start: wait-on in a script, Compose healthchecks, or Flisk dependsOn with a health check path.">
+<meta name="keywords" content="wait for api before starting vite, wait-on http-get health, frontend starts before backend ready, docker compose depends_on service_healthy, start order frontend backend local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to make the frontend dev server wait for the API to be ready">
+<meta property="og:description" content="Stop the frontend from showing connection errors on a cold start: wait-on in a script, Compose healthchecks, or Flisk dependsOn with a health check path.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to make the frontend dev server wait for the API to be ready","description":"Stop the frontend from showing connection errors on a cold start: wait-on in a script, Compose healthchecks, or Flisk dependsOn with a health check path.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/","keywords":"wait for api before starting vite, wait-on http-get health, frontend starts before backend ready, docker compose depends_on service_healthy, start order frontend backend local","wordCount":734,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Frontend dev servers and APIs","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/"},{"@type":"ListItem","position":3,"name":"How to make the frontend dev server wait for the API to be ready","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is depends_on enough to wait for a service in Compose?","acceptedAnswer":{"@type":"Answer","text":"Not by itself. The short form waits only for the container to start. Add a healthcheck and use condition: service_healthy to wait until it reports healthy."}},{"@type":"Question","name":"What does Flisk consider ready for a local service?","acceptedAnswer":{"@type":"Answer","text":"A health URL answering below 400 when healthCheckPath is set, a port accepting connections when only port is set, or the process still running after a second when neither is set."}},{"@type":"Question","name":"How long does Flisk wait for a service?","acceptedAnswer":{"@type":"Answer","text":"Up to 60 seconds per service before it reports the failure."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/frontend-dev-servers/">Frontend dev servers and APIs</a></div>
+<section class="hero"><div><div class="lbl">Frontend dev servers and APIs</div><h1>How to make the frontend dev server wait for the API to be ready</h1><p class="dek">You start both with one command, and the page loads before the API listens. Here are three ways to order the start, and why readiness beats a fixed sleep.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-race-exists">Why the race exists</a></li><li><a href="#option-1-wait-on-in-a-script">Option 1: wait-on in a script</a></li><li><a href="#option-2-compose">Option 2: Compose</a></li><li><a href="#option-3-flisk">Option 3: Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To make a frontend wait for its API, start the API first, then poll a health URL until it answers, and only then start the dev server. You can do that with <code>wait-on</code> in an npm script, with a Compose <code>healthcheck</code> and <code>depends_on</code>, or with <code>dependsOn</code> and <code>healthCheckPath</code> in a Flisk <code>service.json</code>. A fixed <code>sleep</code> is the version that fails on the slowest day.</p>
+
+<h2 id="why-the-race-exists">Why the race exists</h2>
+<p>Starting two processes from one command does not order their readiness. The API may need a second to connect to its database or compile TypeScript. A Vite dev server starts in well under that, so the browser tab opens, the first request fails with <code>ECONNREFUSED</code> or a 502 from a proxy, and the developer reloads. It is not a bug in either app. It is a missing rule that says which one is ready first.</p>
+<p>Readiness is different from started. A process that has begun is not necessarily accepting requests. Wait for something that proves the API can answer: a TCP connection at minimum, an HTTP 200 on a health path better.</p>
+
+<h2 id="option-1-wait-on-in-a-script">Option 1: wait-on in a script</h2>
+<pre><code>npm install -D wait-on concurrently
+
+# package.json
+"scripts": {
+  "dev:api": "npm --prefix api run dev",
+  "dev:web": "wait-on -t 60000 http-get://localhost:4000/health &amp;&amp; npm --prefix web run dev",
+  "dev": "concurrently -n api,web \"npm run dev:api\" \"npm run dev:web\""
+}</code></pre>
+<p><code>wait-on</code> accepts <code>tcp:4000</code> and <code>http-get://host:port/path</code> resources, and <code>-t</code> sets a timeout in milliseconds so a broken API fails the command instead of hanging. This is a good answer for two services in one repo. It does not restart anything that crashes.</p>
+
+<h2 id="option-2-compose">Option 2: Compose</h2>
+<p>In Compose, give the API a <code>healthcheck</code> and make the frontend depend on it with the long form:</p>
+<pre><code>services:
+  api:
+    build: ./api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  web:
+    build: ./web
+    depends_on:
+      api:
+        condition: service_healthy</code></pre>
+<p>The <code>test</code> command runs inside the API container, so the image needs <code>wget</code> or <code>curl</code>. Without <code>condition: service_healthy</code>, <code>depends_on</code> only waits for the container to start.</p>
+
+<h2 id="option-3-flisk">Option 3: Flisk</h2>
+<p>With local processes, the order and the wait are fields in the manifests. The API says how to check it is up:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "npm run dev",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>and the frontend names it in <code>dependsOn</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"]
+}</code></pre>
+<p><code>flisk up</code> starts the services in <code>dependsOn</code> order. A service starts once everything it depends on is ready. Ready means the health URL answers with a status below 400. Without <code>healthCheckPath</code> it means the port accepts connections, and without a port it means the process is still running after a second. Flisk waits up to 60 seconds per service. A process that exits is started again after 1, 2, 4 and 8 seconds, and after five quick exits in a row Flisk stops restarting it and says so. Flisk also refuses to start when a program is not installed, a port is taken (it names the process that holds it), two services share a port, or a <code>dependsOn</code> name is not a service with a command.</p>
+<p>Two commands help while you work. <code>flisk up --only web</code> starts <code>web</code> and what it depends on. <code>flisk status</code> shows each service as ready, restarting or not running. A runnable pair comes from <code>flisk resource api --framework express --local</code> and <code>flisk resource web --type frontend --local</code>: the scaffold already writes <code>healthCheckPath</code> for the API and the dependency for the frontend.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A health route that lies.</strong> If <code>/health</code> returns 200 before the database connection exists, the wait ends too early. Make a separate readiness route that checks what the API needs, and point the wait at it.</li>
+<li><strong>Waiting hides slow starts.</strong> A frontend that waits 40 seconds feels broken. Print the reason: Flisk prefixes each log line with the service name, so you can see the API still building.</li>
+<li><strong>Your code should still retry.</strong> The wait protects a cold start. It does not protect you when the API restarts later. Handle a failed request with an error state, not a blank page.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>For the bigger picture of running both together, read <a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/">how to run a frontend and an API together locally</a>. To see the proxy half of the setup, go to <a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/">how to proxy API requests in the Vite dev server</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is depends_on enough to wait for a service in Compose?</summary><p>Not by itself. The short form waits only for the container to start. Add a healthcheck and use condition: service_healthy to wait until it reports healthy.</p></details><details><summary>What does Flisk consider ready for a local service?</summary><p>A health URL answering below 400 when healthCheckPath is set, a port accepting connections when only port is set, or the process still running after a second when neither is set.</p></details><details><summary>How long does Flisk wait for a service?</summary><p>Up to 60 seconds per service before it reports the failure.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Frontend dev servers and APIs</span></div>
+<div class="rgrid"><a href="/@odykyi/frontend-dev-servers/vite-hmr-websocket-fails-behind-proxy/"><span class="lbl">Guide</span><b>Vite HMR WebSocket fails behind a reverse proxy: how to fix it</b><span>Hot reload needs a WebSocket back to the dev server. When something sits between the browser and Vite, that socket often fails. Here is how to find which layer broke it.</span></a><a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/"><span class="lbl">Guide</span><b>How to proxy API requests in the Vite dev server</b><span>The Vite dev server can forward some URLs to your backend, so the browser only ever talks to one origin. Here is the config, the options that matter, and the traps.</span></a><a href="/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/"><span class="lbl">Guide</span><b>How to set the API URL in Vite with env variables</b><span>The frontend needs to know where the API is, and that address changes per machine and per environment. Here is how Vite reads it, and what bites people.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
