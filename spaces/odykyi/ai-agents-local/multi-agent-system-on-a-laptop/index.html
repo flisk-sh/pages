@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a multi-agent system on your laptop with retries</title>
+<meta name="description" content="Run a coordinator and several AI workers as separate local processes: pull-based tasks, claim timeouts, retries, state on disk and ways to break it.">
+<meta name="keywords" content="multi agent system local, run multiple ai agents locally, agent coordinator worker pattern, multi agent development setup, local agent swarm">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a multi-agent system on your laptop with retries">
+<meta property="og:description" content="Run a coordinator and several AI workers as separate local processes: pull-based tasks, claim timeouts, retries, state on disk and ways to break it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a multi-agent system on your laptop with retries","description":"Run a coordinator and several AI workers as separate local processes: pull-based tasks, claim timeouts, retries, state on disk and ways to break it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/","keywords":"multi agent system local, run multiple ai agents locally, agent coordinator worker pattern, multi agent development setup, local agent swarm","wordCount":800,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Running AI agents locally","item":"https://pages.flisk.si/@odykyi/ai-agents-local/"},{"@type":"ListItem","position":3,"name":"How to run a multi-agent system on your laptop with retries","item":"https://pages.flisk.si/@odykyi/ai-agents-local/multi-agent-system-on-a-laptop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the swarm starter need Docker?","acceptedAnswer":{"@type":"Answer","text":"No. The coordinator and the three workers each declare a command, so flisk up starts them as local processes."}},{"@type":"Question","name":"What happens when a worker dies in the middle of a task?","acceptedAnswer":{"@type":"Answer","text":"Its claim expires after CLAIM_MS (15 seconds) and the subtask goes back in the queue. A subtask that fails MAX_ATTEMPTS (3) times is marked failed together with its goal."}},{"@type":"Question","name":"How do I add more workers to the swarm?","acceptedAnswer":{"@type":"Answer","text":"Copy a worker-N folder and its service.json, change appName, WORKER_NAME and the port, and run flisk up again. Each worker runs the same worker/server.mjs file."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-agents-local/">Running AI agents locally</a></div>
+<section class="hero"><div><div class="lbl">Running AI agents locally</div><h1>How to run a multi-agent system on your laptop with retries</h1><p class="dek">A multi-agent system is a queue with opinions. Run the coordinator and the workers as real processes and the failure modes show up while they are still cheap to fix.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-pattern-that-works-locally">The pattern that works locally</a></li><li><a href="#run-the-swarm-starter">Run the swarm starter</a></li><li><a href="#break-it-on-purpose">Break it on purpose</a></li><li><a href="#adding-tools-and-a-reviewer-super-agent">Adding tools and a reviewer: super-agent</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>You can run a multi-agent system on one laptop as a handful of small processes: one coordinator that owns a queue of tasks, and several workers that claim a task, do it and report back. Each worker needs its own port and name, the coordinator must start first, and a worker that dies must lose its claim so the task is retried. Flisk has two starters, <code>swarm</code> and <code>super-agent</code>, built on this pattern.</p>
+
+<h2 id="the-pattern-that-works-locally">The pattern that works locally</h2>
+<p>Multi-agent demos often hide the plumbing inside one process. Splitting them into services shows the parts that break in practice. A simple, debuggable design is pull-based:</p>
+<ul>
+<li>A <strong>coordinator</strong> splits a goal into subtasks and keeps them in a queue.</li>
+<li>Each <strong>worker</strong> asks the coordinator for work, which marks the task as claimed. When it finishes it posts the answer. If it fails, it reports the failure.</li>
+<li>A claim has a <strong>timeout</strong>. A worker that crashes or hangs never completes the task, so after the timeout it goes back in the queue.</li>
+<li>A task has a <strong>retry limit</strong>, so a task that always fails ends the goal instead of looping forever.</li>
+<li>The coordinator <strong>saves its state to disk</strong>, so restarting it loses no goals.</li>
+</ul>
+<p>Pushing tasks to workers instead is possible, but then you have to track who is alive. Pulling keeps the coordinator ignorant of the workers, which is also how you would put them behind a queue later.</p>
+
+<h2 id="run-the-swarm-starter">Run the swarm starter</h2>
+<p>Install Flisk (<code>npm install -g @flisk-sh/flisk</code>) and create the project. It needs no Docker:</p>
+<pre><code>flisk project swarm --path swarm-demo --yes
+cd swarm-demo
+flisk up
+curl -X POST localhost:4100/goals -H 'content-type: application/json' \
+  -d '{"goal":"Read the docs. Summarize them and list the risks"}'
+curl localhost:4100/goals</code></pre>
+<p>That starts one coordinator on port 4100 and three workers on ports 4101 to 4103. The coordinator also serves a small page at <code>/</code> where you can submit goals, and <code>GET /goals</code> lists goals and their subtasks. Each worker has a manifest like this:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "worker-1",
+  "appType": "worker",
+  "command": "node ../worker/server.mjs",
+  "port": 4101,
+  "healthCheckPath": "/health",
+  "env": {
+    "WORKER_NAME": "worker-1",
+    "COORDINATOR_URL": "http://localhost:4100"
+  },
+  "dependsOn": ["coordinator"]
+}</code></pre>
+<p>All three workers run the same file, <code>worker/server.mjs</code>, and differ only in name and port. <code>dependsOn</code> makes each wait for the coordinator. To add a fourth worker, copy a <code>worker-N</code> folder and its <code>service.json</code>, change the name and use the next free port. The <code>work</code> function in <code>worker/server.mjs</code> is where you call a model or a tool.</p>
+
+<h2 id="break-it-on-purpose">Break it on purpose</h2>
+<p>A multi-agent system is only trustworthy once you have seen it fail. The starter documents the numbers: a claim expires after <code>CLAIM_MS</code> (15 seconds), a failed subtask is retried up to <code>MAX_ATTEMPTS</code> (3) times, and then the subtask and its goal are marked <code>failed</code>. Try three things:</p>
+<ol>
+<li>Set <code>FAIL_RATE=0.5</code> in one worker's <code>env</code> and submit a goal. Some subtasks fail and are retried, possibly by another worker.</li>
+<li>Stop a worker while it holds a task. After the claim timeout, a different worker finishes it.</li>
+<li>Kill the coordinator and start it again. Goals come back, because it saves them to <code>coordinator/.data/swarm-state.json</code>.</li>
+</ol>
+
+<h2 id="adding-tools-and-a-reviewer-super-agent">Adding tools and a reviewer: super-agent</h2>
+<p>The <code>super-agent</code> starter adds the structure most real agent teams grow into. A planner turns a goal into steps, an MCP tool server provides a <code>lookup</code> tool, and three sub-agents pull steps: a researcher that calls the tool, a writer that composes the answer, and a checker that sends back research that came back empty. The checker may send work back <code>MAX_REVISIONS</code> (2) times. Ports are 4300 for the planner, 4301 for tools and 4302 to 4304 for the sub-agents. Without <code>ANTHROPIC_API_KEY</code> the planner splits the goal with rules, so it works offline, and <code>BAD_RATE=0.5</code> on the researcher shows the checker working.</p>
+<pre><code>flisk project super-agent --path super-agent-demo --yes
+cd super-agent-demo
+flisk up
+curl -X POST localhost:4300/goals -H 'content-type: application/json' \
+  -d '{"goal":"Explain flisk and mcp and retries"}'
+curl localhost:4300/goals</code></pre>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Pick ports on purpose.</strong> Seven or eight agents plus tools is easy to clash with something else on your laptop. A project file gives each service one fixed port. See <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">fixing "port already in use"</a> if one is taken.</li>
+<li><strong>Memory budget.</strong> Every worker is a full process. Start only what you need while developing, as covered in <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">starting only the services you need</a>.</li>
+<li><strong>Runaway cost.</strong> With a real model, a retry loop is a bill. Keep the attempt limit low and log every model call.</li>
+<li><strong>Several copies of one service.</strong> Flisk's own docs say running several instances of one service is not supported yet. The swarm uses separate folders per worker instead.</li>
+</ul>
+
+<p>Next, make each agent's conversation survive a restart with <a href="/@odykyi/ai-agents-local/durable-agent-sessions-and-checkpoints/">durable agent sessions</a>, or hand tasks over a real queue with <a href="/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/">a database and a queue</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the swarm starter need Docker?</summary><p>No. The coordinator and the three workers each declare a command, so flisk up starts them as local processes.</p></details><details><summary>What happens when a worker dies in the middle of a task?</summary><p>Its claim expires after CLAIM_MS (15 seconds) and the subtask goes back in the queue. A subtask that fails MAX_ATTEMPTS (3) times is marked failed together with its goal.</p></details><details><summary>How do I add more workers to the swarm?</summary><p>Copy a worker-N folder and its service.json, change appName, WORKER_NAME and the port, and run flisk up again. Each worker runs the same worker/server.mjs file.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Running AI agents locally</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-agents-local/agent-with-a-database-and-a-queue/"><span class="lbl">Guide</span><b>How to give an AI agent a database and a job queue locally</b><span>An agent that answers inside the request breaks the first time a model call takes a minute. Put the state in a database and the slow work behind a queue.</span></a><a href="/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/"><span class="lbl">Guide</span><b>How to run an AI agent locally with MCP tools and a mock model</b><span>An agent with tools is three processes and two URLs. Here is how to run all of them on your machine, test the loop offline, and switch to a real model later.</span></a><a href="/@odykyi/ai-agents-local/route-requests-by-session-id/"><span class="lbl">Guide</span><b>How to route requests by session ID to an AI agent</b><span>A session ID is a key, not an address. Treat it that way and any restart, replica or deploy stops being a conversation-ending event.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
