@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to deprecate an API endpoint with a Sunset header</title>
+<meta name="description" content="Retire an API endpoint without surprising clients: announce it with Deprecation and Sunset headers, link to the replacement, watch usage and then remove it.">
+<meta name="keywords" content="sunset header, deprecation header api, deprecate api endpoint, rfc 8594 sunset, api deprecation policy">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to deprecate an API endpoint with a Sunset header">
+<meta property="og:description" content="Retire an API endpoint without surprising clients: announce it with Deprecation and Sunset headers, link to the replacement, watch usage and then remove it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to deprecate an API endpoint with a Sunset header","description":"Retire an API endpoint without surprising clients: announce it with Deprecation and Sunset headers, link to the replacement, watch usage and then remove it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/","keywords":"sunset header, deprecation header api, deprecate api endpoint, rfc 8594 sunset, api deprecation policy","wordCount":796,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to deprecate an API endpoint with a Sunset header","item":"https://pages.flisk.si/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between Deprecation and Sunset?","acceptedAnswer":{"@type":"Answer","text":"Deprecation says a resource is deprecated and since when. Sunset says when it will stop working. A resource can be deprecated for a long time before its sunset date."}},{"@type":"Question","name":"What status code should a removed endpoint return?","acceptedAnswer":{"@type":"Answer","text":"410 Gone is the clearest, ideally with a body pointing to the replacement. 404 also works but says less."}},{"@type":"Question","name":"What format does the Deprecation header use?","acceptedAnswer":{"@type":"Answer","text":"A Structured Fields date: an @ followed by a Unix timestamp in seconds, for example Deprecation: @1767225600. Sunset uses an ordinary HTTP date."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to deprecate an API endpoint with a Sunset header</h1><p class="dek">Removing an endpoint is a breaking change. A dated warning in every response gives clients time to move.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-standard-headers">The standard headers</a></li><li><a href="#add-it-in-one-place">Add it in one place</a></li><li><a href="#a-deprecation-plan-that-works">A deprecation plan that works</a></li><li><a href="#test-the-headers">Test the headers</a></li><li><a href="#what-to-tell-consumers">What to tell consumers</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To deprecate an endpoint, keep it working, add a <code>Deprecation</code> header to its responses, add a <code>Sunset</code> header with the date it will stop working, link to the replacement with a <code>Link</code> header, tell your consumers outside HTTP too, and remove it only after the date and after traffic has dropped to zero. The headers are standard, so tools and client libraries can read them.</p>
+
+<h2 id="the-standard-headers">The standard headers</h2>
+<p>Two RFCs cover this:</p>
+<ul>
+<li><strong><code>Deprecation</code></strong> (RFC 9745) says the resource is deprecated, and since when. Its value is a date written as a Structured Fields date, which is a Unix timestamp with an <code>@</code> prefix.</li>
+<li><strong><code>Sunset</code></strong> (RFC 8594) says when the resource is expected to become unavailable. Its value is an ordinary HTTP date.</li>
+</ul>
+<p>A response for a deprecated endpoint looks like this:</p>
+<pre><code>HTTP/1.1 200 OK
+Deprecation: @1767225600
+Sunset: Wed, 30 Sep 2026 23:59:59 GMT
+Link: &lt;https://api.example.com/v2/orders&gt;; rel="successor-version",
+      &lt;https://docs.example.com/migrate-orders&gt;; rel="deprecation"; type="text/html"
+Content-Type: application/json</code></pre>
+<p><code>@1767225600</code> is the timestamp of 1 January 2026 in UTC. The <code>Link</code> relations tell a human or a script where to go next: <code>successor-version</code> for the replacement and <code>deprecation</code> for the migration notes. Sunset must not come before the deprecation date, and you should treat the Sunset date as a promise, not a guess.</p>
+
+<h2 id="add-it-in-one-place">Add it in one place</h2>
+<p>Do not add headers by hand to each handler. Use a middleware that wraps a route or a router:</p>
+<pre><code>const deprecated = ({ since, sunset, successor }) =&gt; (req, res, next) =&gt; {
+  res.set('Deprecation', `@${Math.floor(new Date(since).getTime() / 1000)}`);
+  res.set('Sunset', new Date(sunset).toUTCString());
+  res.append('Link', `&lt;${successor}&gt;; rel="successor-version"`);
+  next();
+};
+
+app.use('/v1/orders', deprecated({
+  since: '2026-01-01T00:00:00Z',
+  sunset: '2026-09-30T23:59:59Z',
+  successor: 'https://api.example.com/v2/orders',
+}), ordersV1);</code></pre>
+<p>Also mark the operation in your OpenAPI file with <code>deprecated: true</code>. Docs, generated clients and linters then show the warning, and a Spectral rule can require every <code>deprecated</code> operation to have a description that names the replacement (see <a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">linting your spec</a>). Removing the operation later will show up in the spec diff as breaking, which is expected (<a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">detecting breaking changes</a>).</p>
+
+<h2 id="a-deprecation-plan-that-works">A deprecation plan that works</h2>
+<ol>
+<li><strong>Ship the replacement first.</strong> The new endpoint must be live and documented before the old one is marked deprecated. See <a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/">running two versions side by side</a>.</li>
+<li><strong>Announce through more than headers.</strong> Most clients never read headers. Email known consumers, add a changelog entry and a banner in the docs.</li>
+<li><strong>Pick a period you can defend.</strong> For a public API, months, not weeks. For an internal API with a few known callers, a sprint may do. Write the period in your API policy.</li>
+<li><strong>Measure usage.</strong> Log each call to a deprecated route with the caller's identity (API key, client ID or user agent). Use that to chase the stragglers by name.</li>
+<li><strong>Brown out, then remove.</strong> A few days before the date, make the endpoint fail for short, announced windows. Clients that ignored all warnings notice, and you find them while rollback is still easy.</li>
+<li><strong>After the date, return <code>410 Gone</code></strong> with a problem-details body that names the replacement (<a href="/@odykyi/api-design-local/api-error-responses-problem-details/">error response format</a>), and keep that answer for a while before deleting the route.</li>
+</ol>
+
+<h2 id="test-the-headers">Test the headers</h2>
+<p>A deprecation header is part of the contract, so assert it. A quick manual check:</p>
+<pre><code>curl -sI http://localhost:4000/v1/orders | grep -iE '^(deprecation|sunset|link):'</code></pre>
+<p>Replace the URL with your service's. Better, make it a request test that fails when the header goes missing, so a refactor cannot silently drop it.</p>
+
+<h2 id="what-to-tell-consumers">What to tell consumers</h2>
+<p>A good deprecation notice is short and answers five questions: what is deprecated, what replaces it, what changes for the caller (a field renamed, a new required header), the date it stops working, and who to contact. Send the same text by email, put it at the top of the endpoint's documentation and link it from the <code>deprecation</code> link relation shown above. If a consumer cannot meet the date, they should be able to tell you before the date, not after the outage. Keep a list of affected consumers and tick them off as their traffic moves, which is much easier when usage is logged by client as suggested in step four.</p>
+<p>For internal APIs the same rules apply on a smaller scale. Even if you can read every caller's code, a sunset date in the response and a note in the team channel prevents the case where a service nobody remembers still calls the old route.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Silent deprecation.</strong> A header nobody reads is not an announcement. Contact the owners.</li>
+<li><strong>Moving the date.</strong> Extending a Sunset is fine. Shortening it breaks trust and agreements.</li>
+<li><strong>Header support in clients.</strong> Many HTTP libraries ignore these headers. Some API gateways and SDK generators surface them, but do not rely on it.</li>
+<li><strong>Caches and proxies.</strong> Make sure they pass the headers through, and that cached responses do not outlive the removal.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between Deprecation and Sunset?</summary><p>Deprecation says a resource is deprecated and since when. Sunset says when it will stop working. A resource can be deprecated for a long time before its sunset date.</p></details><details><summary>What status code should a removed endpoint return?</summary><p>410 Gone is the clearest, ideally with a body pointing to the replacement. 404 also works but says less.</p></details><details><summary>What format does the Deprecation header use?</summary><p>A Structured Fields date: an @ followed by a Unix timestamp in seconds, for example Deprecation: @1767225600. Sunset uses an ordinary HTTP date.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/"><span class="lbl">Guide</span><b>How to run two API versions side by side locally</b><span>Before you retire v1 you need to prove it still works while v2 exists. Running both on your laptop is the cheapest way to do that.</span></a><a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/"><span class="lbl">Guide</span><b>How to detect breaking API changes before you merge</b><span>Most API outages from a deploy are a field someone renamed. A diff of the spec catches that in the pull request, not in production.</span></a><a href="/@odykyi/api-design-local/api-error-responses-problem-details/"><span class="lbl">Guide</span><b>API error responses: use RFC 9457 problem details</b><span>Clients write one error handler if every endpoint fails the same way. RFC 9457 gives you that shape without inventing your own.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

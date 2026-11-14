@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>API error responses: use RFC 9457 problem details</title>
+<meta name="description" content="Return one consistent error shape from every endpoint with RFC 9457 problem details: fields, status codes, validation errors, and what to keep out of them.">
+<meta name="keywords" content="rfc 9457 problem details, api error response format, application/problem+json, rest api error handling, validation error response json">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/api-error-responses-problem-details/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="API error responses: use RFC 9457 problem details">
+<meta property="og:description" content="Return one consistent error shape from every endpoint with RFC 9457 problem details: fields, status codes, validation errors, and what to keep out of them.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/api-error-responses-problem-details/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"API error responses: use RFC 9457 problem details","description":"Return one consistent error shape from every endpoint with RFC 9457 problem details: fields, status codes, validation errors, and what to keep out of them.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/api-error-responses-problem-details/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/api-error-responses-problem-details/","keywords":"rfc 9457 problem details, api error response format, application/problem+json, rest api error handling, validation error response json","wordCount":765,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"API error responses: use RFC 9457 problem details","item":"https://pages.flisk.si/@odykyi/api-design-local/api-error-responses-problem-details/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between RFC 7807 and RFC 9457?","acceptedAnswer":{"@type":"Answer","text":"RFC 9457 obsoletes RFC 7807 and keeps the same format, with clarifications and guidance for multiple problems in one response."}},{"@type":"Question","name":"What media type do problem details use?","acceptedAnswer":{"@type":"Answer","text":"application/problem+json, or application/problem+xml for XML. Send it in the Content-Type header."}},{"@type":"Question","name":"Can I add my own fields?","acceptedAnswer":{"@type":"Answer","text":"Yes. The RFC allows extension members, such as an errors array for field validation or a trace_id. Clients must ignore ones they do not know."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>API error responses: use RFC 9457 problem details</h1><p class="dek">Clients write one error handler if every endpoint fails the same way. RFC 9457 gives you that shape without inventing your own.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-problem-with-ad-hoc-errors">The problem with ad-hoc errors</a></li><li><a href="#the-shape">The shape</a></li><li><a href="#implement-it-once">Implement it once</a></li><li><a href="#pick-status-codes-on-purpose">Pick status codes on purpose</a></li><li><a href="#check-it-on-a-running-service">Check it on a running service</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>RFC 9457 "Problem Details for HTTP APIs" defines a JSON error body with the media type <code>application/problem+json</code> and five standard members: <code>type</code>, <code>title</code>, <code>status</code>, <code>detail</code> and <code>instance</code>. Return that shape from every endpoint and clients can write one error handler instead of one per route. It replaces RFC 7807, with the same format.</p>
+
+<h2 id="the-problem-with-ad-hoc-errors">The problem with ad-hoc errors</h2>
+<p>Without a convention, one endpoint returns <code>{"error": "not found"}</code>, another <code>{"message": "Invalid", "code": 12}</code>, and a third an HTML page from the framework's default handler. A client then needs a parser per endpoint and still cannot tell a validation error from an outage. A shared shape fixes this, and a standard shape means existing libraries and your own future self already know it.</p>
+
+<h2 id="the-shape">The shape</h2>
+<pre><code>HTTP/1.1 422 Unprocessable Content
+Content-Type: application/problem+json
+
+{
+  "type": "https://api.example.com/problems/validation-error",
+  "title": "Your request is not valid",
+  "status": 422,
+  "detail": "The field quantity must be at least 1.",
+  "instance": "/orders",
+  "errors": [
+    { "pointer": "/quantity", "message": "must be at least 1" }
+  ],
+  "trace_id": "01HZX3K4..."
+}</code></pre>
+<ul>
+<li><code>type</code> is a URI that identifies the kind of problem. Clients branch on it, not on the text. It may be a page that documents the problem, and if you omit it the default is <code>about:blank</code>.</li>
+<li><code>title</code> is a short, human-readable summary that stays the same for one <code>type</code>.</li>
+<li><code>status</code> repeats the HTTP status, useful when the body is logged without headers.</li>
+<li><code>detail</code> explains this occurrence. Write it for a developer, not for end users.</li>
+<li><code>instance</code> identifies this occurrence, often the request path or an ID.</li>
+<li><code>errors</code> and <code>trace_id</code> are <strong>extension members</strong>. The RFC lets you add your own. Use one for field-level validation errors and one for a request or trace ID that matches your logs.</li>
+</ul>
+
+<h2 id="implement-it-once">Implement it once</h2>
+<p>Do it in a single place, an error-handling middleware, so no route can forget. In Express:</p>
+<pre><code>app.use((err, req, res, next) =&gt; {
+  const status = err.status ?? 500;
+  res.status(status).type('application/problem+json').json({
+    type: err.type ?? 'about:blank',
+    title: status &lt; 500 ? err.title ?? 'Request failed' : 'Internal error',
+    status,
+    detail: status &lt; 500 ? err.message : undefined,
+    instance: req.originalUrl,
+    trace_id: req.id,
+  });
+});</code></pre>
+<p>Note what the handler does for a <code>5xx</code>: it hides the message. A stack trace, an SQL error or an internal hostname must never reach the client. Log the full error on the server with the same <code>trace_id</code>. FastAPI users override the exception handlers for <code>HTTPException</code> and <code>RequestValidationError</code> to return the same shape, since its default <code>422</code> body is a different format.</p>
+
+<h2 id="pick-status-codes-on-purpose">Pick status codes on purpose</h2>
+<ul>
+<li><code>400</code> for a malformed request, <code>422</code> for a well-formed one that fails validation. Choose one convention for validation and keep it.</li>
+<li><code>401</code> when the caller is not authenticated, <code>403</code> when they are but may not do this, <code>404</code> when the thing does not exist (or you do not want to reveal it does).</li>
+<li><code>409</code> for a conflict such as a duplicate; <code>429</code> with a <code>Retry-After</code> header for rate limits.</li>
+<li><code>5xx</code> only for your faults. A client sending bad input and getting <code>500</code> hides a bug in your validation.</li>
+</ul>
+<p>Document the error schema once in OpenAPI as a reusable component and reference it from every <code>4xx</code> and <code>5xx</code> response. A Spectral rule can enforce that (<a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">linting your spec</a>).</p>
+
+<h2 id="check-it-on-a-running-service">Check it on a running service</h2>
+<p>Start the service and look at a failing call, headers included, because the media type is part of the contract:</p>
+<pre><code>flisk up
+curl -i -X POST http://localhost:4000/orders -H 'Content-Type: application/json' -d '{"quantity":0}'
+flisk logs --service orders-api --tail 50</code></pre>
+<p>Use your service name, URL and port. <code>flisk logs --service &lt;name&gt; --tail &lt;n&gt;</code> prints the recent output of one service, so you can match the <code>trace_id</code> in the response to the log line with the real cause. If it is not there, your handler is not logging the original error. For more on reading logs across services, see <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">reading logs from every service</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not parse <code>title</code> or <code>detail</code> in clients.</strong> They are for humans and can change. Branch on <code>type</code> or your own stable code.</li>
+<li><strong>Leaking internals.</strong> Detail strings that echo a SQL fragment or a file path are a security problem. Review them like you review logs.</li>
+<li><strong>Proxies and gateways.</strong> An HTML <code>502</code> from a proxy will not follow your format. Clients still need a fallback for non-JSON bodies.</li>
+<li><strong>Success shapes too.</strong> A consistent error format does not help if success and failure share a <code>200</code>. Use the status code.</li>
+</ul>
+<p>Mock these errors in the frontend with a documented <code>404</code> example and a <code>Prefer: code=404</code> header, as shown in <a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/">the Prism mock guide</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between RFC 7807 and RFC 9457?</summary><p>RFC 9457 obsoletes RFC 7807 and keeps the same format, with clarifications and guidance for multiple problems in one response.</p></details><details><summary>What media type do problem details use?</summary><p>application/problem+json, or application/problem+xml for XML. Send it in the Content-Type header.</p></details><details><summary>Can I add my own fields?</summary><p>Yes. The RFC allows extension members, such as an errors array for field validation or a trace_id. Clients must ignore ones they do not know.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/"><span class="lbl">Guide</span><b>How to lint an OpenAPI spec with Spectral and fail CI on mistakes</b><span>A linter turns your API style guide from a document nobody reads into a check that runs on every pull request.</span></a><a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/"><span class="lbl">Guide</span><b>How to run a mock API server from an OpenAPI file with Prism</b><span>A mock built from the spec lets the frontend team work today and keeps requests honest, because Prism rejects calls that break the contract.</span></a><a href="/@odykyi/api-design-local/cursor-vs-offset-pagination/"><span class="lbl">Guide</span><b>Cursor vs offset pagination: which one to build</b><span>Pagination is easy to add and hard to change once clients depend on it, so choose with the data in mind.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

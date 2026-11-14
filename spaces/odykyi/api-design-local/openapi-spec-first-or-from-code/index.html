@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OpenAPI: write the spec first or generate it from code?</title>
+<meta name="description" content="Spec-first or code-first OpenAPI: what each gives you, how to export a spec from FastAPI, and how to keep the committed file honest with a CI check.">
+<meta name="keywords" content="openapi spec first vs code first, generate openapi from code, fastapi openapi.json, openapi design first, swagger ui local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/openapi-spec-first-or-from-code/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="OpenAPI: write the spec first or generate it from code?">
+<meta property="og:description" content="Spec-first or code-first OpenAPI: what each gives you, how to export a spec from FastAPI, and how to keep the committed file honest with a CI check.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/openapi-spec-first-or-from-code/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"OpenAPI: write the spec first or generate it from code?","description":"Spec-first or code-first OpenAPI: what each gives you, how to export a spec from FastAPI, and how to keep the committed file honest with a CI check.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/openapi-spec-first-or-from-code/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/openapi-spec-first-or-from-code/","keywords":"openapi spec first vs code first, generate openapi from code, fastapi openapi.json, openapi design first, swagger ui local","wordCount":750,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"OpenAPI: write the spec first or generate it from code?","item":"https://pages.flisk.si/@odykyi/api-design-local/openapi-spec-first-or-from-code/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I use both spec-first and code-first?","acceptedAnswer":{"@type":"Answer","text":"Yes. A common setup generates the spec from code, commits it, and reviews its diff in pull requests. CI regenerates the file and fails when it differs from the committed copy."}},{"@type":"Question","name":"Where does FastAPI serve the OpenAPI schema?","acceptedAnswer":{"@type":"Answer","text":"At /openapi.json by default, with Swagger UI at /docs and ReDoc at /redoc. You can also print it without a server with app.openapi()."}},{"@type":"Question","name":"Does Flisk generate an OpenAPI spec?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk starts and watches your service. The spec comes from your framework or from a file you write."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>OpenAPI: write the spec first or generate it from code?</h1><p class="dek">Both approaches work. The mistake is having two sources of truth that drift apart, so pick one and let a check enforce it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-two-approaches">The two approaches</a></li><li><a href="#export-the-spec-from-a-fastapi-service">Export the spec from a FastAPI service</a></li><li><a href="#see-the-live-docs-while-you-edit">See the live docs while you edit</a></li><li><a href="#spec-first-without-losing-the-server">Spec-first without losing the server</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Write the OpenAPI spec first when other teams or clients need to agree on the API before the code exists. Generate it from code when one team owns both sides and the code is the thing you actually change every day. Whichever you choose, commit the spec file and add a check that fails when the file and the running API disagree.</p>
+
+<h2 id="the-two-approaches">The two approaches</h2>
+<p><strong>Spec-first (design-first)</strong> means you write <code>openapi.yaml</code> by hand, review it like code, and then build the server and clients against it. Frontend and backend can start on the same day, because a mock server can answer from the spec while the real one is still empty. The cost is that the spec is a second place to edit, and a handler that returns a field the spec does not list is easy to miss.</p>
+<p><strong>Code-first</strong> means the framework builds the spec from your routes and types. FastAPI does this by default: it serves the schema at <code>/openapi.json</code> and a Swagger UI at <code>/docs</code>. In the Node world you add a library, for example <code>@hono/zod-openapi</code> for Hono or <code>swagger-jsdoc</code> with <code>swagger-ui-express</code> for Express. The spec is always as accurate as your annotations, but design review happens after code is written, and a refactor can change the public contract without anyone noticing.</p>
+<table>
+<thead><tr><th>Question</th><th>Spec-first</th><th>Code-first</th></tr></thead>
+<tbody>
+<tr><td>Several teams or outside consumers</td><td>Fits well</td><td>Review the generated diff</td></tr>
+<tr><td>One team, typed framework</td><td>Extra editing</td><td>Fits well</td></tr>
+<tr><td>Spec drifts from code</td><td>Needs a validation step</td><td>Rare, but the contract can change by accident</td></tr>
+<tr><td>Mock before code exists</td><td>Yes</td><td>No</td></tr>
+</tbody>
+</table>
+<p>A common middle path: generate the spec from code, commit it, and review its diff in every pull request. You get the accuracy of code-first and the design review of spec-first.</p>
+
+<h2 id="export-the-spec-from-a-fastapi-service">Export the spec from a FastAPI service</h2>
+<p>You do not need a running server to get the file. FastAPI builds the schema from the app object:</p>
+<pre><code>python -c "import json; from main import app; print(json.dumps(app.openapi(), indent=2, sort_keys=True))" &gt; openapi.json</code></pre>
+<p>Sorting keys keeps the diff small. Commit <code>openapi.json</code>, and in CI regenerate it and compare:</p>
+<pre><code>python -c "import json; from main import app; print(json.dumps(app.openapi(), indent=2, sort_keys=True))" &gt; /tmp/openapi.generated.json
+diff openapi.json /tmp/openapi.generated.json</code></pre>
+<p>If the diff is not empty, someone changed the API without updating the committed contract. The same idea works in any framework that can print its schema.</p>
+
+<h2 id="see-the-live-docs-while-you-edit">See the live docs while you edit</h2>
+<p>Swagger UI is most useful when it reloads with your code. With Flisk, describe the service as a local process. This <code>service.json</code> runs FastAPI with uvicorn's own reload:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "command": "uvicorn main:app --reload --port ${PORT:-8000}",
+  "port": 8000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Run <code>flisk up</code> from the project folder. Flisk starts the process, waits until <code>/health</code> answers, and prints <code>http://localhost:8000</code>. Open <code>/docs</code> there. Without Docker, the reload comes from <code>--reload</code> in the command, not from Flisk. To fetch the spec from the running service instead of importing the app:</p>
+<pre><code>curl -s http://localhost:8000/openapi.json -o openapi.json</code></pre>
+<p>This is the better route when the spec depends on things the running app builds, such as plugins or routes registered at startup. Your service needs a <code>/health</code> route for <code>healthCheckPath</code>; without one, drop that line and Flisk waits for the port instead.</p>
+
+<h2 id="spec-first-without-losing-the-server">Spec-first without losing the server</h2>
+<p>If you write the YAML yourself, make the spec do real work: lint it (see <a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">linting with Spectral</a>), run a mock from it (<a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/">mock server with Prism</a>), and test the real server against it. A tool such as Schemathesis reads the spec and sends generated requests to the running API, reporting responses that break it. The related question of keeping a frontend in sync is covered in <a href="/@odykyi/testing-and-shipping/contract-between-frontend-and-backend/">keeping a frontend and backend contract in sync</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not hand-edit a generated spec.</strong> The next export overwrites your change. Fix the annotations or the model instead.</li>
+<li><strong>Examples matter.</strong> Mocks and docs are only as useful as the <code>example</code> values in the schema. Generated specs often lack them, so add them to your models.</li>
+<li><strong>Internal routes leak.</strong> Code-first tools document every route by default. Hide admin and debug endpoints from the public spec with the framework's option for it (in FastAPI, <code>include_in_schema=False</code>).</li>
+<li><strong>Version the file, not just the API.</strong> The <code>info.version</code> field is yours to maintain; generators fill it with a placeholder unless you set it.</li>
+</ul>
+<p>Once you have a committed spec, the next useful step is guarding it against accidental breaking changes, which is the subject of <a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">detecting breaking API changes</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I use both spec-first and code-first?</summary><p>Yes. A common setup generates the spec from code, commits it, and reviews its diff in pull requests. CI regenerates the file and fails when it differs from the committed copy.</p></details><details><summary>Where does FastAPI serve the OpenAPI schema?</summary><p>At /openapi.json by default, with Swagger UI at /docs and ReDoc at /redoc. You can also print it without a server with app.openapi().</p></details><details><summary>Does Flisk generate an OpenAPI spec?</summary><p>No. Flisk starts and watches your service. The spec comes from your framework or from a file you write.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/"><span class="lbl">Guide</span><b>How to lint an OpenAPI spec with Spectral and fail CI on mistakes</b><span>A linter turns your API style guide from a document nobody reads into a check that runs on every pull request.</span></a><a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/"><span class="lbl">Guide</span><b>How to run a mock API server from an OpenAPI file with Prism</b><span>A mock built from the spec lets the frontend team work today and keeps requests honest, because Prism rejects calls that break the contract.</span></a><a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/"><span class="lbl">Guide</span><b>How to detect breaking API changes before you merge</b><span>Most API outages from a deploy are a field someone renamed. A diff of the spec catches that in the pull request, not in production.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

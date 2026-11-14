@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a mock API server from an OpenAPI file with Prism</title>
+<meta name="description" content="Start a mock API from an OpenAPI file with Prism so the frontend can build before the backend exists, force error responses, and run it beside your stack.">
+<meta name="keywords" content="prism mock server, mock api from openapi, stoplight prism cli, openapi mock server local, mock rest api frontend">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/mock-api-server-from-openapi-prism/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a mock API server from an OpenAPI file with Prism">
+<meta property="og:description" content="Start a mock API from an OpenAPI file with Prism so the frontend can build before the backend exists, force error responses, and run it beside your stack.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/mock-api-server-from-openapi-prism/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a mock API server from an OpenAPI file with Prism","description":"Start a mock API from an OpenAPI file with Prism so the frontend can build before the backend exists, force error responses, and run it beside your stack.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/mock-api-server-from-openapi-prism/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/mock-api-server-from-openapi-prism/","keywords":"prism mock server, mock api from openapi, stoplight prism cli, openapi mock server local, mock rest api frontend","wordCount":796,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to run a mock API server from an OpenAPI file with Prism","item":"https://pages.flisk.si/@odykyi/api-design-local/mock-api-server-from-openapi-prism/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What port does Prism use?","acceptedAnswer":{"@type":"Answer","text":"4010 by default. Change it with the -p flag, for example prism mock -p 5000 openapi.yaml."}},{"@type":"Question","name":"How do I make Prism return an error response?","acceptedAnswer":{"@type":"Answer","text":"Send the header Prefer: code=404 (or another documented status) and Prism answers with that response from the spec."}},{"@type":"Question","name":"Does Prism keep state between requests?","acceptedAnswer":{"@type":"Answer","text":"No. A POST does not change what a later GET returns. Use a real service or a hand-written fake for stateful flows."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to run a mock API server from an OpenAPI file with Prism</h1><p class="dek">A mock built from the spec lets the frontend team work today and keeps requests honest, because Prism rejects calls that break the contract.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-spec-driven-mock-gives-you">What a spec-driven mock gives you</a></li><li><a href="#start-the-mock">Start the mock</a></li><li><a href="#run-it-next-to-the-rest-of-your-stack">Run it next to the rest of your stack</a></li><li><a href="#use-the-mock-in-tests-as-well">Use the mock in tests as well</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Prism, from Stoplight, reads an OpenAPI file and serves a mock API from it. Run <code>npx @stoplight/prism-cli mock openapi.yaml</code> and every path in the spec answers with its documented example response on port 4010. Frontend work can start before the backend does, and the spec stays the single source of truth.</p>
+
+<h2 id="what-a-spec-driven-mock-gives-you">What a spec-driven mock gives you</h2>
+<p>A hand-written mock (a JSON file behind a tiny server) tends to drift. A mock generated from the spec cannot invent endpoints the spec does not have, and it checks the requests you send. Prism validates the request body, parameters and security headers against the spec. A bad request gets a <code>422</code> with the reasons, so you find a wrong field name in the frontend while building it, not at integration time.</p>
+<p>The limits are real: a mock has no state. A <code>POST</code> does not make the next <code>GET</code> return the new item. For flows that depend on data you need a real service or a hand-written fake (see <a href="/@odykyi/testing-and-shipping/mock-or-run-the-real-service/">mock or run the real service</a>).</p>
+
+<h2 id="start-the-mock">Start the mock</h2>
+<p>Take a small spec:</p>
+<pre><code>openapi: 3.0.3
+info: { title: Orders, version: 1.0.0 }
+paths:
+  /orders/{id}:
+    get:
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: One order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string, enum: [pending, paid, shipped] }
+                example: { id: "o_1", status: paid }
+        "404":
+          description: Not found
+          content:
+            application/json:
+              example: { title: Not found, status: 404 }</code></pre>
+<p>Then run:</p>
+<pre><code>npx @stoplight/prism-cli mock -p 4010 openapi.yaml
+curl -i http://127.0.0.1:4010/orders/o_1</code></pre>
+<p>You get the <code>200</code> example. Prism picks the response from the request:</p>
+<ul>
+<li><code>Prefer: code=404</code> returns the documented 404. This is how you test the error path in a UI without touching a database.</li>
+<li><code>Prefer: example=name</code> picks one of several named examples.</li>
+<li><code>-d</code> (dynamic mode) generates values from the schema instead of using the static example.</li>
+</ul>
+<pre><code>curl -i -H "Prefer: code=404" http://127.0.0.1:4010/orders/o_1</code></pre>
+<p>Prism also has a <code>proxy</code> mode that forwards requests to a real upstream and reports where the traffic differs from the spec. That is useful once the backend exists and you want to find drift without writing tests first.</p>
+
+<h2 id="run-it-next-to-the-rest-of-your-stack">Run it next to the rest of your stack</h2>
+<p>You want the mock to start with everything else, not in a forgotten terminal tab. With Flisk, give the mock its own folder, put <code>openapi.yaml</code> in it, and add a <code>service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders-mock",
+  "appType": "backend",
+  "command": "npx @stoplight/prism-cli mock -h 127.0.0.1 -p ${PORT:-4010} openapi.yaml",
+  "port": 4010
+}</code></pre>
+<p>The command runs from the service folder, so <code>openapi.yaml</code> resolves there. Prism has no health route, so there is no <code>healthCheckPath</code>: Flisk treats the service as ready when the port accepts connections. Then point the frontend at it:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["orders-mock"],
+  "env": { "API_URL": "http://localhost:4010" }
+}</code></pre>
+<p><code>flisk up</code> starts the mock first, then the site. When the real API is ready, change one line: the <code>API_URL</code> value. The frontend code does not change, which is the point. How the env var reaches your dev server depends on the tool; for Vite, see <a href="/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/">the Vite API URL guide</a>.</p>
+<p>Check the first start with <code>flisk up --dry-run</code>, which prints each service, its command and the start order without running anything. If the port is taken, Flisk names the process holding it and stops.</p>
+
+<h2 id="use-the-mock-in-tests-as-well">Use the mock in tests as well</h2>
+<p>The same mock can back automated frontend tests, so they do not depend on a database or on another team's service being up. Start it in the test setup, point the app at its URL and use the <code>Prefer</code> header to drive the error cases: a loading state, an empty list, a <code>404</code>, a <code>500</code>. Because the answers come from the spec, a test that passes today will still pass tomorrow unless the contract changes, and then the failure points at the spec diff instead of at a flaky network.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Examples decide everything.</strong> A spec with no examples gives Prism nothing realistic to return, so it produces generic values. Write examples for the responses the UI depends on.</li>
+<li><strong>The mock only knows the spec.</strong> If the spec is wrong, the mock is wrong in the same way. Check the real service against the spec too.</li>
+<li><strong>Auth.</strong> If the spec declares a security scheme, Prism requires the header to be present, though it does not verify a token. Send any value while testing.</li>
+<li><strong>Do not use it for load or for stateful flows.</strong> It is a contract tool, not a fake database.</li>
+</ul>
+<p>Once the spec is good enough to mock, protect it: lint it with <a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">Spectral</a> so examples and descriptions stay present.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What port does Prism use?</summary><p>4010 by default. Change it with the -p flag, for example prism mock -p 5000 openapi.yaml.</p></details><details><summary>How do I make Prism return an error response?</summary><p>Send the header Prefer: code=404 (or another documented status) and Prism answers with that response from the spec.</p></details><details><summary>Does Prism keep state between requests?</summary><p>No. A POST does not change what a later GET returns. Use a real service or a hand-written fake for stateful flows.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/openapi-spec-first-or-from-code/"><span class="lbl">Guide</span><b>OpenAPI: write the spec first or generate it from code?</b><span>Both approaches work. The mistake is having two sources of truth that drift apart, so pick one and let a check enforce it.</span></a><a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/"><span class="lbl">Guide</span><b>How to lint an OpenAPI spec with Spectral and fail CI on mistakes</b><span>A linter turns your API style guide from a document nobody reads into a check that runs on every pull request.</span></a><a href="/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/"><span class="lbl">Guide</span><b>How to keep API requests as test files in git with Hurl</b><span>A pile of curl commands in a wiki goes stale. A folder of request files in git can run in CI and doubles as living documentation.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
