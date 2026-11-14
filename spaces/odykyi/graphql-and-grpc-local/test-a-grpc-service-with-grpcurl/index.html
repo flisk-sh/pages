@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test a gRPC service locally with grpcurl</title>
+<meta name="description" content="Call a gRPC method from the terminal with grpcurl: list services with reflection, describe messages, send JSON requests and use .proto files without it.">
+<meta name="keywords" content="grpcurl example, test grpc service locally, grpcurl plaintext list, grpc reflection, call grpc from command line">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test a gRPC service locally with grpcurl">
+<meta property="og:description" content="Call a gRPC method from the terminal with grpcurl: list services with reflection, describe messages, send JSON requests and use .proto files without it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test a gRPC service locally with grpcurl","description":"Call a gRPC method from the terminal with grpcurl: list services with reflection, describe messages, send JSON requests and use .proto files without it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/","keywords":"grpcurl example, test grpc service locally, grpcurl plaintext list, grpc reflection, call grpc from command line","wordCount":756,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to test a gRPC service locally with grpcurl","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does grpcurl say 'first record does not look like a TLS handshake'?","acceptedAnswer":{"@type":"Answer","text":"grpcurl uses TLS by default. A local server without TLS needs the -plaintext flag."}},{"@type":"Question","name":"Can I use curl for gRPC?","acceptedAnswer":{"@type":"Answer","text":"Not in a practical way. gRPC needs HTTP/2 with Protobuf framing and trailers. Use grpcurl or buf curl. Servers that also speak the Connect protocol can be called with plain curl and JSON."}},{"@type":"Question","name":"Is grpcurl reflection safe to leave on?","acceptedAnswer":{"@type":"Answer","text":"Reflection reveals your full API definition, so keep it on for development and turn it off in production unless you have a reason."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to test a gRPC service locally with grpcurl</h1><p class="dek">curl cannot speak gRPC, but grpcurl can. With server reflection on, you can explore and call a local service in a minute.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-curl-is-not-enough">Why curl is not enough</a></li><li><a href="#turn-on-reflection-in-the-server">Turn on reflection in the server</a></li><li><a href="#list-describe-call">List, describe, call</a></li><li><a href="#without-reflection">Without reflection</a></li><li><a href="#check-the-standard-health-service">Check the standard health service</a></li><li><a href="#run-the-server-first-with-flisk-if-you-like">Run the server first, with Flisk if you like</a></li><li><a href="#use-it-in-a-repeatable-script">Use it in a repeatable script</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use grpcurl to test a gRPC service from the terminal: <code>grpcurl -plaintext localhost:50051 list</code> shows the services, <code>describe</code> shows their messages, and <code>-d '{...}'</code> with a full method name calls one. It needs the server to expose reflection, or you pass the <code>.proto</code> files yourself. This is the gRPC equivalent of curl and works against any language.</p>
+<h2 id="why-curl-is-not-enough">Why curl is not enough</h2>
+<p>gRPC runs over HTTP/2, sends Protocol Buffers instead of JSON, and uses trailers for the status. You cannot reproduce that with a plain curl call. grpcurl takes JSON you type, converts it to Protobuf using the service definition, calls the server and prints the reply as JSON. Alternatives with the same idea are <code>buf curl</code>, grpcui (a browser UI built on the same library) and GUI clients such as Postman and Bruno. Install grpcurl with <code>brew install grpcurl</code> or download a release from its GitHub page.</p>
+<h2 id="turn-on-reflection-in-the-server">Turn on reflection in the server</h2>
+<p>grpcurl needs to learn the schema. The easy way is gRPC server reflection, a standard service the server registers. In Go:</p>
+<pre><code>import "google.golang.org/grpc/reflection"
+
+s := grpc.NewServer()
+pb.RegisterOrdersServer(s, &amp;ordersServer{})
+reflection.Register(s)
+</code></pre>
+<p>Node has the <code>@grpc/reflection</code> package and Python has <code>grpcio-reflection</code>. Reflection exposes your whole API shape, so enable it for development only, for example behind an environment variable.</p>
+<h2 id="list-describe-call">List, describe, call</h2>
+<p>A local development server normally has no TLS, so every command needs <code>-plaintext</code>. Without it grpcurl tries TLS and fails with a handshake error.</p>
+<pre><code># which services exist
+grpcurl -plaintext localhost:50051 list
+
+# methods of one service
+grpcurl -plaintext localhost:50051 list shop.v1.Orders
+
+# the request and response messages
+grpcurl -plaintext localhost:50051 describe shop.v1.Orders.GetOrder
+grpcurl -plaintext localhost:50051 describe shop.v1.GetOrderRequest
+
+# call a method: full service name, a slash, the method
+grpcurl -plaintext -d '{"id": "42"}' localhost:50051 shop.v1.Orders/GetOrder
+</code></pre>
+<p>Field names in the JSON use the proto names (<code>order_id</code>) or the lowerCamelCase form (<code>orderId</code>); both are accepted. Metadata such as an auth token goes in with <code>-H 'authorization: Bearer dev-token'</code>. For a server-streaming method grpcurl prints each message as it arrives. For a client-streaming method, give <code>-d @</code> and feed several JSON objects on standard input.</p>
+<h2 id="without-reflection">Without reflection</h2>
+<p>Point grpcurl at the proto files:</p>
+<pre><code>grpcurl -plaintext \
+  -import-path ./proto -proto shop/v1/orders.proto \
+  -d '{"id": "42"}' localhost:50051 shop.v1.Orders/GetOrder
+</code></pre>
+<p>Imports resolve against <code>-import-path</code>. If your project uses Buf, <code>buf build -o image.binpb</code> produces a descriptor file that grpcurl reads with <code>-protoset image.binpb</code>, which also covers imports of third-party protos.</p>
+<h2 id="check-the-standard-health-service">Check the standard health service</h2>
+<p>If the server registers the standard gRPC health service, you can ask it directly. An empty <code>service</code> name means the whole server:</p>
+<pre><code>grpcurl -plaintext -d '{"service": ""}' localhost:50051 grpc.health.v1.Health/Check
+</code></pre>
+<p>A healthy reply is <code>{"status": "SERVING"}</code>. The same service is what <a href="/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/">a readiness check for a local stack</a> uses.</p>
+<h2 id="run-the-server-first-with-flisk-if-you-like">Run the server first, with Flisk if you like</h2>
+<p>You need the server running and its port known. If the gRPC server is one of several services, a <code>service.json</code> with a <code>command</code> and a <code>port</code> lets <code>flisk up</code> start it as a local process and print where it listens (<code>localhost:50051</code> here, not an HTTP link, so read the port rather than clicking). Install with <code>npm install -g @flisk-sh/flisk</code>. Flisk does not wrap grpcurl or know about Protobuf; it only keeps the server running.</p>
+<h2 id="use-it-in-a-repeatable-script">Use it in a repeatable script</h2>
+<p>Once a call works, save it. A shell script with three or four grpcurl lines (health, one read, one write) becomes a smoke test you can run after every change and in CI. Print only the reply with <code>-format json</code>, which is the default, and pipe it to <code>jq</code> to assert on one field:</p>
+<pre><code>grpcurl -plaintext -d '{"id": "42"}' localhost:50051 shop.v1.Orders/GetOrder | jq -e '.status == "PAID"'</code></pre>
+<p>A failing call prints the gRPC status code, such as <code>NotFound</code> or <code>InvalidArgument</code>, and exits non-zero, so the script stops on the first failure. Add <code>-max-time 5</code> so a hung call cannot block the script.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Handshake or "first record does not look like a TLS handshake".</strong> You are mixing plaintext and TLS. Add <code>-plaintext</code> for a dev server without TLS.</li>
+<li><strong>"Server does not support the reflection API".</strong> Register reflection, or use <code>-proto</code> or <code>-protoset</code>.</li>
+<li><strong>Connection refused on localhost.</strong> Some servers listen on IPv4 only and <code>localhost</code> can resolve to IPv6. Try <code>127.0.0.1:50051</code>.</li>
+<li><strong>Behind a gateway.</strong> A proxy that only understands HTTP/1.1 breaks gRPC. Call the service port directly while developing.</li>
+</ul>
+<p>With the calls working, wire the same service into the rest of your stack: <a href="/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/">how gRPC services find each other locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does grpcurl say &#39;first record does not look like a TLS handshake&#39;?</summary><p>grpcurl uses TLS by default. A local server without TLS needs the -plaintext flag.</p></details><details><summary>Can I use curl for gRPC?</summary><p>Not in a practical way. gRPC needs HTTP/2 with Protobuf framing and trailers. Use grpcurl or buf curl. Servers that also speak the Connect protocol can be called with plain curl and JSON.</p></details><details><summary>Is grpcurl reflection safe to leave on?</summary><p>Reflection reveals your full API definition, so keep it on for development and turn it off in production unless you have a reason.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/"><span class="lbl">Guide</span><b>How to add a gRPC health check so a local stack waits for it</b><span>A gRPC server has no /health URL. You need another way to say &#39;ready&#39;, or the service that calls it will start too early and fail.</span></a><a href="/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/"><span class="lbl">Guide</span><b>How to generate gRPC and Protobuf code with buf locally</b><span>protoc works, but its flags grow fast. buf keeps the plugins, inputs and output paths in two small files you can commit and run the same way everywhere.</span></a><a href="/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/"><span class="lbl">Guide</span><b>How to let gRPC services find each other in local development</b><span>gRPC clients dial host:port, nothing more. Locally, the whole problem is choosing ports, passing addresses and starting servers before their callers.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

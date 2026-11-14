@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run GraphQL federation locally: subgraphs and a router</title>
+<meta name="description" content="Run Apollo Federation on a laptop: start subgraph servers, compose a supergraph with Rover, and put the Apollo Router in front of them in the right order.">
+<meta name="keywords" content="graphql federation local, apollo router local development, rover supergraph compose, federated graphql subgraphs, apollo federation tutorial">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run GraphQL federation locally: subgraphs and a router">
+<meta property="og:description" content="Run Apollo Federation on a laptop: start subgraph servers, compose a supergraph with Rover, and put the Apollo Router in front of them in the right order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run GraphQL federation locally: subgraphs and a router","description":"Run Apollo Federation on a laptop: start subgraph servers, compose a supergraph with Rover, and put the Apollo Router in front of them in the right order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/","keywords":"graphql federation local, apollo router local development, rover supergraph compose, federated graphql subgraphs, apollo federation tutorial","wordCount":776,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to run GraphQL federation locally: subgraphs and a router","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a router for GraphQL federation?","acceptedAnswer":{"@type":"Answer","text":"Yes. A router (Apollo Router, Apollo Gateway or an alternative) receives client queries and splits them across subgraphs. Subgraphs alone cannot answer a query that spans several of them."}},{"@type":"Question","name":"Can I run federation without Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. Subgraphs are normal servers, Rover is a CLI and the Apollo Router is a single binary, so all of them can run as local processes."}},{"@type":"Question","name":"Why does rover supergraph compose fail?","acceptedAnswer":{"@type":"Answer","text":"Composition checks that the subgraph schemas fit together. The error message names the type or field that conflicts, such as a field defined with different types in two subgraphs."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to run GraphQL federation locally: subgraphs and a router</h1><p class="dek">Federation splits one GraphQL schema across services. Locally that means several processes, one composed schema file and a router, all started in the right order.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-runs-where">What runs where</a></li><li><a href="#compose-the-supergraph">Compose the supergraph</a></li><li><a href="#start-the-router">Start the router</a></li><li><a href="#start-everything-with-flisk">Start everything with Flisk</a></li><li><a href="#test-the-graph-with-curl">Test the graph with curl</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run GraphQL federation locally you start each subgraph as its own server, compose their schemas into a supergraph file with Rover, and start a router that reads that file and sends queries to the subgraphs. Three things must agree: the subgraph URLs, the composed supergraph and the router's listen address. Most local problems are one of those drifting out of sync.</p>
+<h2 id="what-runs-where">What runs where</h2>
+<p>In Apollo Federation (version 2) each team owns a subgraph, an ordinary GraphQL server that also describes how its types connect to other subgraphs, for example with <code>@key</code>. Clients never talk to subgraphs. They talk to a router, which plans a query across them. Apollo Router is a standalone binary; Apollo Gateway is the older Node library. Other routers exist (WunderGraph Cosmo, Hive Gateway, GraphQL Mesh) and the local steps below are similar for them.</p>
+<p>A typical local layout:</p>
+<ul>
+<li><code>products</code> subgraph on port 4001</li>
+<li><code>reviews</code> subgraph on port 4002</li>
+<li>the router on port 4000, which is the only URL the frontend knows</li>
+</ul>
+<h2 id="compose-the-supergraph">Compose the supergraph</h2>
+<p>Rover is Apollo's CLI. Describe the subgraphs in <code>supergraph.yaml</code>:</p>
+<pre><code>federation_version: =2.9.0
+subgraphs:
+  products:
+    routing_url: http://localhost:4001/graphql
+    schema:
+      subgraph_url: http://localhost:4001/graphql
+  reviews:
+    routing_url: http://localhost:4002/graphql
+    schema:
+      subgraph_url: http://localhost:4002/graphql
+</code></pre>
+<p>With <code>subgraph_url</code>, Rover introspects the running subgraph, so the subgraphs must be up first. If you would rather not depend on a running server, point <code>schema</code> at a file with <code>file: ./products/schema.graphql</code> instead. Then compose:</p>
+<pre><code>rover supergraph compose --config supergraph.yaml &gt; supergraph.graphql
+</code></pre>
+<p>The first run may ask you to accept the Elastic License v2 for the composition code; set <code>APOLLO_ELV2_LICENSE=accept</code> in non-interactive scripts. Composition fails loudly when two subgraphs define the same field incompatibly. That error is the point of doing it locally: you see it before a pipeline does.</p>
+<h2 id="start-the-router">Start the router</h2>
+<p>Download the router binary from Apollo's install script or releases page, then run it against the file:</p>
+<pre><code>./router --supergraph supergraph.graphql --config router.yaml --dev
+</code></pre>
+<p>A minimal <code>router.yaml</code> sets the listen address:</p>
+<pre><code>supergraph:
+  listen: 127.0.0.1:4000
+</code></pre>
+<p>The <code>--dev</code> flag turns on development defaults such as the Apollo Sandbox page and introspection. The router also has a hot-reload option for the supergraph file; check <code>./router --help</code> for the exact flag in your version, because it has changed over releases.</p>
+<h2 id="start-everything-with-flisk">Start everything with Flisk</h2>
+<p>Each subgraph and the router are plain commands, so each gets a <code>service.json</code> with a <code>command</code> and a <code>dependsOn</code> list. Flisk starts them in dependency order as local processes, with no Docker. Subgraph <code>products/service.json</code>:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "products",
+  "appType": "backend",
+  "command": "node --watch server.mjs",
+  "port": 4001
+}
+</code></pre>
+<p>The router service waits for both subgraphs and runs the compose step first, so the supergraph is never stale:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "router",
+  "appType": "backend",
+  "command": "rover supergraph compose --config supergraph.yaml &gt; supergraph.graphql &amp;&amp; ./router --supergraph supergraph.graphql --config router.yaml --dev",
+  "port": 4000,
+  "env": { "APOLLO_ELV2_LICENSE": "accept" },
+  "dependsOn": ["products", "reviews"]
+}
+</code></pre>
+<p>The <code>command</code> is a shell command, so <code>&amp;&amp;</code> works. Flisk passes <code>PORT</code> but the router ignores it; keep <code>port</code> equal to the address in <code>router.yaml</code> so the readiness check and the printed URL are right. Run <code>flisk up --dry-run</code> to see the start order before you start anything, and <code>flisk logs --service router</code> to read one service's output.</p>
+<h2 id="test-the-graph-with-curl">Test the graph with curl</h2>
+<p>Query the router, not a subgraph, and ask for fields that live in different subgraphs in one request:</p>
+<pre><code>curl -s http://localhost:4000/ \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ products { name reviews { body } } }"}'
+</code></pre>
+<p>The router path is <code>/</code> by default, not <code>/graphql</code>; it can be changed in <code>router.yaml</code>. If one subgraph is down, the router returns an error for the fields it owns and still serves the rest where the schema allows it. Call each subgraph directly on its own port to tell a subgraph bug from a planning bug. Many routers can also print the query plan in dev mode, which shows which subgraph each field came from.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Stale supergraph.</strong> Changing a subgraph schema does nothing until you compose again. Restarting the router service in the setup above re-composes.</li>
+<li><strong>Wrong routing URL.</strong> The <code>routing_url</code> is what the router calls. If it says <code>localhost</code> and the router runs in a container, that is the container itself. Run the router as a local process, or use the host address your runtime provides.</li>
+<li><strong>Do you need federation at all?</strong> One team and one service means one schema. Federation adds a router, a composition step and a deploy contract. Start with a single server such as the one in <a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/">run a GraphQL server locally</a> and split when team boundaries demand it.</li>
+</ul>
+<p>When the router answers, point your frontend at port 4000 only and handle browser access with <a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">CORS settings on the router</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a router for GraphQL federation?</summary><p>Yes. A router (Apollo Router, Apollo Gateway or an alternative) receives client queries and splits them across subgraphs. Subgraphs alone cannot answer a query that spans several of them.</p></details><details><summary>Can I run federation without Docker?</summary><p>Yes. Subgraphs are normal servers, Rover is a CLI and the Apollo Router is a single binary, so all of them can run as local processes.</p></details><details><summary>Why does rover supergraph compose fail?</summary><p>Composition checks that the subgraph schemas fit together. The error message names the type or field that conflicts, such as a field defined with different types in two subgraphs.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/"><span class="lbl">Guide</span><b>How to run a GraphQL server locally and query it with curl</b><span>A GraphQL API is one HTTP endpoint. Once you can hit it with curl, every other tool (a frontend, a codegen step, a test) is easy to wire up.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/"><span class="lbl">Guide</span><b>GraphQL Codegen in watch mode: typed queries while you code</b><span>Typed queries only help while they match the schema. Watch mode regenerates them on every save, so TypeScript flags a bad field before the browser does.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/"><span class="lbl">Guide</span><b>How to test GraphQL subscriptions locally: SSE and WebSocket</b><span>A subscription is a query that keeps the connection open. Test it from the terminal first, then from the browser, and fix the proxy that eats it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

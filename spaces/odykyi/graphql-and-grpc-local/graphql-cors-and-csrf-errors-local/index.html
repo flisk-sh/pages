@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GraphQL CORS and CSRF errors from a local frontend: how to fix</title>
+<meta name="description" content="Fix &#39;blocked by CORS policy&#39; and the Apollo CSRF prevention error when a browser app calls a local GraphQL API, with server settings and a Vite proxy.">
+<meta name="keywords" content="graphql cors error, apollo server csrf prevention error, vite proxy graphql, blocked by cors policy graphql, graphql preflight options">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GraphQL CORS and CSRF errors from a local frontend: how to fix">
+<meta property="og:description" content="Fix &#39;blocked by CORS policy&#39; and the Apollo CSRF prevention error when a browser app calls a local GraphQL API, with server settings and a Vite proxy.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GraphQL CORS and CSRF errors from a local frontend: how to fix","description":"Fix 'blocked by CORS policy' and the Apollo CSRF prevention error when a browser app calls a local GraphQL API, with server settings and a Vite proxy.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/","keywords":"graphql cors error, apollo server csrf prevention error, vite proxy graphql, blocked by cors policy graphql, graphql preflight options","wordCount":787,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"GraphQL CORS and CSRF errors from a local frontend: how to fix","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my GraphQL query work in curl but fail in the browser?","acceptedAnswer":{"@type":"Answer","text":"CORS and CSRF checks are enforced by browsers and some servers, not by curl. A cross-origin JSON POST triggers a preflight request that the server must answer."}},{"@type":"Question","name":"How do I fix the Apollo Server CSRF prevention error?","acceptedAnswer":{"@type":"Answer","text":"Send a content-type such as application/json, or add a non-empty apollo-require-preflight header. Keep CSRF prevention on."}},{"@type":"Question","name":"Is a dev proxy better than enabling CORS?","acceptedAnswer":{"@type":"Answer","text":"A proxy avoids CORS in development, but it hides a CORS problem you may have in production if the browser calls a separate API host. Test it once."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>GraphQL CORS and CSRF errors from a local frontend: how to fix</h1><p class="dek">The query works in curl but the browser refuses it. That is almost always CORS or CSRF prevention, and both are fixed on the server or with a dev proxy.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-curl-works-and-the-browser-does-not">Why curl works and the browser does not</a></li><li><a href="#fix-1-allow-your-dev-origin-on-the-server">Fix 1: allow your dev origin on the server</a></li><li><a href="#fix-2-let-the-dev-server-proxy">Fix 2: let the dev server proxy</a></li><li><a href="#the-csrf-prevention-error">The CSRF prevention error</a></li><li><a href="#wire-the-urls-without-hard-coding-them">Wire the URLs without hard-coding them</a></li><li><a href="#a-quick-debugging-routine">A quick debugging routine</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>If a GraphQL query works in curl but fails in the browser with "blocked by CORS policy", the server did not answer the preflight request or did not allow your page's origin. If Apollo Server answers with a message about a potential Cross-Site Request Forgery, the request lacked a header the server requires. You fix the first by configuring CORS for your dev origin, or avoid it altogether with a dev-server proxy, and the second by sending a JSON content type.</p>
+<h2 id="why-curl-works-and-the-browser-does-not">Why curl works and the browser does not</h2>
+<p>CORS is enforced by the browser. A page on <code>http://localhost:3000</code> calling <code>http://localhost:4000/graphql</code> is a cross-origin request, because the port is part of the origin. A GraphQL POST with <code>content-type: application/json</code> is not a "simple" request, so the browser first sends an <code>OPTIONS</code> preflight asking whether it may. If the server does not reply with the right <code>Access-Control-Allow-*</code> headers, the browser blocks the real request. The server never sees a problem, which is why logs look clean.</p>
+<p>Open the Network tab and look for the <code>OPTIONS</code> request. If it is missing, the error is something else. If it returns 404 or 405, the server has no CORS handling. If it returns 204 without <code>Access-Control-Allow-Origin</code>, the origin is not allowed.</p>
+<h2 id="fix-1-allow-your-dev-origin-on-the-server">Fix 1: allow your dev origin on the server</h2>
+<p>With GraphQL Yoga:</p>
+<pre><code>const yoga = createYoga({
+  schema,
+  cors: {
+    origin: 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['content-type', 'authorization'],
+  },
+})
+</code></pre>
+<p>With Apollo Server 4 and Express, add the <code>cors</code> middleware in front of <code>expressMiddleware</code>:</p>
+<pre><code>app.use('/graphql',
+  cors({ origin: 'http://localhost:3000', credentials: true }),
+  express.json(),
+  expressMiddleware(server))
+</code></pre>
+<p>Use an exact origin, not <code>*</code>, when you send cookies: browsers reject a wildcard with credentials. Remember that <code>http://localhost:3000</code> and <code>http://127.0.0.1:3000</code> are different origins. Read the origin from an environment variable so each developer or port setup works.</p>
+<h2 id="fix-2-let-the-dev-server-proxy">Fix 2: let the dev server proxy</h2>
+<p>If the browser only talks to the frontend's own origin, there is no CORS at all. Vite can forward a path to the API:</p>
+<pre><code>// vite.config.ts
+export default defineConfig({
+  server: {
+    proxy: { '/graphql': 'http://localhost:4000' },
+  },
+})
+</code></pre>
+<p>Then the client uses the relative URL <code>/graphql</code>. This also matches production if you serve both behind one host. For WebSocket subscriptions add <code>ws: true</code> to the proxy entry; <a href="/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/">GraphQL subscriptions locally</a> shows the detail. The trade-off: dev now differs from a setup where the browser calls a separate API host, so test CORS once before shipping if that is how production works.</p>
+<h2 id="the-csrf-prevention-error">The CSRF prevention error</h2>
+<p>Apollo Server 4 has CSRF prevention on by default. It rejects requests that a plain HTML form could send, to protect cookie-based sessions. A normal client sending <code>content-type: application/json</code> passes. You hit the error when you send a GET query without a header, or a POST with <code>text/plain</code> or form encoding. The error text names the fix: set a non-simple <code>content-type</code>, or send a non-empty <code>apollo-require-preflight</code> or <code>x-apollo-operation-name</code> header. Apollo Client and most tools do this already. Do not switch the protection off to make a dev error go away; fix the request.</p>
+<h2 id="wire-the-urls-without-hard-coding-them">Wire the URLs without hard-coding them</h2>
+<p>Put the API address in one place. With Flisk's local-process mode, the frontend's <code>service.json</code> carries it in <code>env</code> and starts after the API:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npx vite --port 3000",
+  "port": 3000,
+  "dependsOn": ["graphql-api"],
+  "env": { "VITE_API_URL": "http://localhost:4000/graphql", "CORS_ORIGIN": "http://localhost:3000" }
+}
+</code></pre>
+<p>Vite exposes variables that start with <code>VITE_</code> to the browser code. Install Flisk with <code>npm install -g @flisk-sh/flisk</code> and run <code>flisk up</code>. For the full recipe see <a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/">Express API and Vite frontend in one dev command</a>. Flisk has no GraphQL-specific CORS handling; the server settings above are yours.</p>
+<h2 id="a-quick-debugging-routine">A quick debugging routine</h2>
+<ol>
+<li>Reproduce with curl, including the header the browser sends: <code>curl -i -X OPTIONS http://localhost:4000/graphql -H 'origin: http://localhost:3000' -H 'access-control-request-method: POST' -H 'access-control-request-headers: content-type'</code>.</li>
+<li>Look at the status and at <code>access-control-allow-origin</code> in the answer. No such header means the server is not doing CORS for that route.</li>
+<li>Check that the allowed origin equals the page origin exactly, including scheme and port.</li>
+<li>Only then look at the request itself: content type, auth header, method.</li>
+</ol>
+<p>This takes the browser out of the loop and shows what the server really sends, which is usually clearer than the console message.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Credentials and wildcard.</strong> <code>*</code> plus cookies is rejected; use an exact origin.</li>
+<li><strong>Auth header not allowed.</strong> A custom header must be listed in <code>Access-Control-Allow-Headers</code>.</li>
+<li><strong>Error looks like a network failure.</strong> A blocked request shows as "Failed to fetch" in the code. The console message says CORS.</li>
+<li><strong>Mixed content.</strong> An https page cannot call an http API. Keep dev on http or use a local certificate; see <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of ports</a>.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my GraphQL query work in curl but fail in the browser?</summary><p>CORS and CSRF checks are enforced by browsers and some servers, not by curl. A cross-origin JSON POST triggers a preflight request that the server must answer.</p></details><details><summary>How do I fix the Apollo Server CSRF prevention error?</summary><p>Send a content-type such as application/json, or add a non-empty apollo-require-preflight header. Keep CSRF prevention on.</p></details><details><summary>Is a dev proxy better than enabling CORS?</summary><p>A proxy avoids CORS in development, but it hides a CORS problem you may have in production if the browser calls a separate API host. Test it once.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/"><span class="lbl">Guide</span><b>How to run a GraphQL server locally and query it with curl</b><span>A GraphQL API is one HTTP endpoint. Once you can hit it with curl, every other tool (a frontend, a codegen step, a test) is easy to wire up.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/"><span class="lbl">Guide</span><b>How to test GraphQL subscriptions locally: SSE and WebSocket</b><span>A subscription is a query that keeps the connection open. Test it from the terminal first, then from the browser, and fix the proxy that eats it.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/"><span class="lbl">Guide</span><b>GraphQL Codegen in watch mode: typed queries while you code</b><span>Typed queries only help while they match the schema. Watch mode regenerates them on every save, so TypeScript flags a bad field before the browser does.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

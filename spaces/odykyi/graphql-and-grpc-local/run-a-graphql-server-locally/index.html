@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a GraphQL server locally and query it with curl</title>
+<meta name="description" content="Run a GraphQL server on your machine with GraphQL Yoga, query it with curl and GraphiQL, and start it with a port that other services can find.">
+<meta name="keywords" content="run graphql server locally, graphql yoga tutorial, query graphql with curl, graphql local development, graphql endpoint localhost">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a GraphQL server locally and query it with curl">
+<meta property="og:description" content="Run a GraphQL server on your machine with GraphQL Yoga, query it with curl and GraphiQL, and start it with a port that other services can find.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a GraphQL server locally and query it with curl","description":"Run a GraphQL server on your machine with GraphQL Yoga, query it with curl and GraphiQL, and start it with a port that other services can find.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/","keywords":"run graphql server locally, graphql yoga tutorial, query graphql with curl, graphql local development, graphql endpoint localhost","wordCount":771,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to run a GraphQL server locally and query it with curl","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What URL does a GraphQL server use?","acceptedAnswer":{"@type":"Answer","text":"Usually a single endpoint, most often /graphql, that accepts POST requests with a JSON body. The path is a convention of the server library, not part of GraphQL itself."}},{"@type":"Question","name":"Why does curl return a 400 error from my GraphQL server?","acceptedAnswer":{"@type":"Answer","text":"The most common causes are a missing content-type: application/json header or a body that is not valid JSON. Check the quoting of the JSON string in your shell."}},{"@type":"Question","name":"Do I need Docker to run a GraphQL server locally?","acceptedAnswer":{"@type":"Answer","text":"No. A GraphQL server is an ordinary process. Docker is only needed for things like databases that you prefer to run in a container."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to run a GraphQL server locally and query it with curl</h1><p class="dek">A GraphQL API is one HTTP endpoint. Once you can hit it with curl, every other tool (a frontend, a codegen step, a test) is easy to wire up.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-minimal-server">A minimal server</a></li><li><a href="#query-it-with-curl">Query it with curl</a></li><li><a href="#start-it-together-with-your-other-services">Start it together with your other services</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run a GraphQL server locally, install a server library such as GraphQL Yoga, define a schema with resolvers, listen on a port, and send queries as a JSON POST to <code>/graphql</code>. You can check it from the command line with curl before any frontend exists. This article builds the smallest useful server and shows how to start it with the rest of your app.</p>
+<h2 id="a-minimal-server">A minimal server</h2>
+<p>GraphQL Yoga is a server that runs on plain Node.js, Bun and Deno. Apollo Server, Mercurius (Fastify) and Strawberry (Python) are good alternatives and work the same way for what follows: a schema, resolvers and one HTTP endpoint.</p>
+<pre><code>mkdir shop-graphql &amp;&amp; cd shop-graphql
+npm init -y
+npm install graphql graphql-yoga
+</code></pre>
+<p>Create <code>server.mjs</code> (set <code>"type": "module"</code> in <code>package.json</code>, or keep the <code>.mjs</code> extension):</p>
+<pre><code>import { createServer } from 'node:http'
+import { createSchema, createYoga } from 'graphql-yoga'
+
+const products = [
+  { id: '1', name: 'Espresso beans', priceCents: 1200 },
+  { id: '2', name: 'Milk jug', priceCents: 800 },
+]
+
+const yoga = createYoga({
+  schema: createSchema({
+    typeDefs: /* GraphQL */ `
+      type Product { id: ID!, name: String!, priceCents: Int! }
+      type Query {
+        products: [Product!]!
+        product(id: ID!): Product
+      }
+    `,
+    resolvers: {
+      Query: {
+        products: () =&gt; products,
+        product: (_, { id }) =&gt; products.find((p) =&gt; p.id === id) ?? null,
+      },
+    },
+  }),
+})
+
+const port = Number(process.env.PORT ?? 4000)
+createServer(yoga).listen(port, () =&gt; {
+  console.log(`GraphQL on http://localhost:${port}/graphql`)
+})
+</code></pre>
+<p>Reading the port from <code>PORT</code> matters later: many process runners pass the port that way, and it avoids a hard-coded number in two places.</p>
+<h2 id="query-it-with-curl">Query it with curl</h2>
+<p>A GraphQL request is a POST with a JSON body that has a <code>query</code> field. The response is always JSON with <code>data</code> and, when something went wrong, <code>errors</code>.</p>
+<pre><code>node server.mjs
+
+curl -s http://localhost:4000/graphql \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ products { id name priceCents } }"}'
+</code></pre>
+<p>You get <code>{"data":{"products":[...]}}</code>. Two habits save time. First, always send <code>content-type: application/json</code>; several servers answer a request without it with a confusing 400. Second, remember that GraphQL reports many failures with HTTP 200 and an <code>errors</code> array, so look at the body, not only the status code.</p>
+<p>To see the schema itself, ask for introspection:</p>
+<pre><code>curl -s http://localhost:4000/graphql \
+  -H 'content-type: application/json' \
+  -d '{"query":"{ __schema { queryType { name } types { name } } }"}'
+</code></pre>
+<p>Open <code>http://localhost:4000/graphql</code> in a browser and Yoga serves GraphiQL, an in-browser editor with autocomplete from that same introspection. Introspection is on by default in development; many teams turn it off in production, so do not rely on it there.</p>
+<h2 id="start-it-together-with-your-other-services">Start it together with your other services</h2>
+<p>A GraphQL server rarely runs alone. A frontend calls it and often something else (a database, another service) sits behind it. With Flisk you can describe the server as a plain local process: no Docker, no generated files. Install it once:</p>
+<pre><code>npm install -g @flisk-sh/flisk</code></pre>
+<p>Add a <code>service.json</code> next to <code>server.mjs</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "graphql-api",
+  "appType": "backend",
+  "command": "node --watch server.mjs",
+  "port": 4000
+}
+</code></pre>
+<p>Then run <code>flisk up</code> in that folder. Flisk starts the command with <code>PORT=4000</code>, waits until the port accepts connections (there is no <code>healthCheckPath</code> here, so an open port counts as ready), prefixes the logs with the service name and prints <code>http://localhost:4000</code>. <code>node --watch</code> gives you restart on save, because Flisk's local-process mode does not watch files for you; use your runtime's own watch mode. <code>flisk down</code> stops it, and if the process crashes Flisk restarts it with a growing delay and stops after five quick exits in a row.</p>
+<p>Add a frontend as a second service with <code>"dependsOn": ["graphql-api"]</code> and an <code>env</code> entry holding the API URL, and it will start after the API is ready. The <a href="/@odykyi/microservices-local-dev/run-frontend-and-api-together/">frontend and API together</a> article walks through that wiring.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Port already in use.</strong> A leftover server from yesterday holds 4000. Find the holder with <code>lsof -i :4000</code>; Flisk also refuses to start and names the process. See <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix port already in use</a>.</li>
+<li><strong>Binding to the wrong interface.</strong> <code>listen(port)</code> on all interfaces is fine for development, but on a shared network it exposes your dev server. Bind to <code>127.0.0.1</code> if you do not need other devices to reach it.</li>
+<li><strong>GET queries.</strong> Many servers accept <code>GET /graphql?query=...</code> for queries only. Mutations over GET are refused by design.</li>
+<li><strong>Schema drift.</strong> When the schema changes, clients with generated types need a regeneration step. See <a href="/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/">GraphQL codegen in watch mode</a>.</li>
+</ul>
+<p>Once the endpoint answers curl, the next step is letting a browser app call it: <a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">fix CORS and CSRF errors</a> is the usual first wall.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What URL does a GraphQL server use?</summary><p>Usually a single endpoint, most often /graphql, that accepts POST requests with a JSON body. The path is a convention of the server library, not part of GraphQL itself.</p></details><details><summary>Why does curl return a 400 error from my GraphQL server?</summary><p>The most common causes are a missing content-type: application/json header or a body that is not valid JSON. Check the quoting of the JSON string in your shell.</p></details><details><summary>Do I need Docker to run a GraphQL server locally?</summary><p>No. A GraphQL server is an ordinary process. Docker is only needed for things like databases that you prefer to run in a container.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/"><span class="lbl">Guide</span><b>How to test a gRPC service locally with grpcurl</b><span>curl cannot speak gRPC, but grpcurl can. With server reflection on, you can explore and call a local service in a minute.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/"><span class="lbl">Guide</span><b>GraphQL CORS and CSRF errors from a local frontend: how to fix</b><span>The query works in curl but the browser refuses it. That is almost always CORS or CSRF prevention, and both are fixed on the server or with a dev proxy.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/"><span class="lbl">Guide</span><b>GraphQL Codegen in watch mode: typed queries while you code</b><span>Typed queries only help while they match the schema. Watch mode regenerates them on every save, so TypeScript flags a bad field before the browser does.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

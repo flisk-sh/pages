@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to let gRPC services find each other in local development</title>
+<meta name="description" content="Give each gRPC service a fixed port, pass its address to callers with an env var, and order startup with dependsOn so no client dials a server that is not up.">
+<meta name="keywords" content="grpc service discovery local, grpc client address environment variable, grpc localhost connection refused, grpc.NewClient insecure, microservices grpc local dev">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to let gRPC services find each other in local development">
+<meta property="og:description" content="Give each gRPC service a fixed port, pass its address to callers with an env var, and order startup with dependsOn so no client dials a server that is not up.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to let gRPC services find each other in local development","description":"Give each gRPC service a fixed port, pass its address to callers with an env var, and order startup with dependsOn so no client dials a server that is not up.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/","keywords":"grpc service discovery local, grpc client address environment variable, grpc localhost connection refused, grpc.NewClient insecure, microservices grpc local dev","wordCount":759,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to let gRPC services find each other in local development","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do gRPC services find each other locally?","acceptedAnswer":{"@type":"Answer","text":"Give each server a fixed port, pass the host:port address to callers through an environment variable, and start servers before their callers."}},{"@type":"Question","name":"Why do I get Unavailable when calling a local gRPC service?","acceptedAnswer":{"@type":"Answer","text":"Nothing is listening at that address yet, the address is wrong, or you mix TLS and plaintext. Check the port, the start order and the credentials."}},{"@type":"Question","name":"Is there a scheme like http:// in a gRPC address?","acceptedAnswer":{"@type":"Answer","text":"No. A target is host:port, for example localhost:50051. In Go the target can optionally carry a resolver scheme such as dns:///."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to let gRPC services find each other in local development</h1><p class="dek">gRPC clients dial host:port, nothing more. Locally, the whole problem is choosing ports, passing addresses and starting servers before their callers.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-target-is-an-address-not-a-url">A target is an address, not a URL</a></li><li><a href="#pick-ports-on-purpose">Pick ports on purpose</a></li><li><a href="#describe-the-topology-in-service-json">Describe the topology in service.json</a></li><li><a href="#when-one-service-runs-in-docker">When one service runs in Docker</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>gRPC clients connect to a <code>host:port</code> target, so local service discovery is just three decisions: a fixed port for every gRPC server, an environment variable that carries that address to each caller, and a start order that brings servers up first. Keep the address out of the code, and every developer's machine and your CI use the same code with different values.</p>
+<h2 id="a-target-is-an-address-not-a-url">A target is an address, not a URL</h2>
+<p>A gRPC target is written <code>localhost:50051</code>, with no <code>http://</code>. Clients in each language take it as a string, and a dev server without TLS needs insecure credentials explicitly:</p>
+<pre><code>// Go
+conn, err := grpc.NewClient(os.Getenv("INVENTORY_ADDR"),
+    grpc.WithTransportCredentials(insecure.NewCredentials()))
+
+// Node, @grpc/grpc-js
+const client = new InventoryClient(process.env.INVENTORY_ADDR,
+    grpc.credentials.createInsecure())
+
+# Python
+channel = grpc.insecure_channel(os.environ["INVENTORY_ADDR"])
+</code></pre>
+<p>Connections are lazy in modern clients: <code>NewClient</code> returns without dialing, so a wrong address only shows up as <code>Unavailable</code> on the first call. Treat <code>code = Unavailable</code> as "no server at that address, or it is not ready" and check the address and start order before the code.</p>
+<h2 id="pick-ports-on-purpose">Pick ports on purpose</h2>
+<p>Do not let each service choose a random free port; callers cannot guess it. Write a small table in your README and keep it in the service config. A convention that avoids clashes with HTTP ports: 4xxx for HTTP APIs, 50051 and up for gRPC. Use <code>127.0.0.1</code> instead of <code>localhost</code> if a server binds only IPv4 and your resolver prefers IPv6; the symptom is "connection refused" on a port that is plainly open.</p>
+<h2 id="describe-the-topology-in-service-json">Describe the topology in service.json</h2>
+<p>With Flisk's local-process mode, each service has a <code>command</code>, a <code>port</code> and an <code>env</code> map. The orders service calls inventory, so it depends on it and receives its address:</p>
+<pre><code>// inventory/service.json
+{
+  "schemaVersion": 1,
+  "appName": "inventory",
+  "appType": "backend",
+  "command": "go run ./cmd/inventory",
+  "port": 50051,
+  "healthCheck": { "port": 50051 }
+}
+
+// orders/service.json
+{
+  "schemaVersion": 1,
+  "appName": "orders",
+  "appType": "backend",
+  "command": "go run ./cmd/orders",
+  "port": 50052,
+  "healthCheck": { "port": 50052 },
+  "dependsOn": ["inventory"],
+  "env": { "INVENTORY_ADDR": "localhost:50051" }
+}
+</code></pre>
+<p>Install with <code>npm install -g @flisk-sh/flisk</code>, then <code>flisk up</code>. It starts <code>inventory</code>, waits until port 50051 accepts connections, then starts <code>orders</code> and passes <code>INVENTORY_ADDR</code>. Before starting, it refuses to run if two services share a port or a port is already taken, and says which process holds it. <code>flisk up --dry-run</code> prints the order; <code>flisk logs --service orders --tail 50</code> reads one service's output. Add a language toolchain constraint with <code>"toolchain": "go@1.23"</code> if you want a version mismatch to stop the start. The values in <code>env</code> can read from your shell or a <code>.env</code> file with <code>${VAR:-default}</code>, so a developer can point <code>INVENTORY_ADDR</code> at a shared environment without editing the file.</p>
+<p>The wait is only as good as the probe. A port probe says the port is open; if the server needs its database first, use the gRPC health protocol (<a href="/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/">gRPC health checks for a local stack</a>). General ordering rules are in <a href="/@odykyi/microservices-local-dev/service-startup-order/">how to control service startup order</a>.</p>
+<h2 id="when-one-service-runs-in-docker">When one service runs in Docker</h2>
+<p>Mixing is common: a database or a legacy gRPC service in a container, your code as local processes. Flisk can run a ready-made image next to local processes; the container's port is published on <code>127.0.0.1</code> at the same number, and a local process reaches it at <code>localhost</code>, not by service name, because those containers share no Docker network. If everything runs in containers on the Docker path, containers reach each other by service name on the Docker network instead, so the address in <code>env</code> changes to the name. Keep the address in an environment variable and this is a one-line change per mode. A project cannot mix a Dockerfile-built service with local processes, so check <code>flisk up --dry-run</code> if it refuses to start.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Circular calls.</strong> If A calls B and B calls A at startup, <code>dependsOn</code> cannot order them. Make one call lazy, or retry.</li>
+<li><strong>Calls at startup.</strong> A server that dials a dependency in <code>main</code> and exits on failure turns an ordering bug into a restart loop. Connect lazily and let the first request fail with a retry.</li>
+<li><strong>Retries and deadlines.</strong> Set a deadline on every call. A call without one waits forever on a dead address. gRPC can retry on its own with a service config; enable it deliberately.</li>
+<li><strong>Testing one service.</strong> You do not need the whole graph. Start just one with its dependencies using <code>flisk up --only orders</code>.</li>
+</ul>
+<p>Next, check each service in isolation with <a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/">grpcurl</a>, and browse the broader local-routing story in <a href="/@odykyi/microservices-local-dev/how-to-run-microservices-locally/">how to run microservices locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do gRPC services find each other locally?</summary><p>Give each server a fixed port, pass the host:port address to callers through an environment variable, and start servers before their callers.</p></details><details><summary>Why do I get Unavailable when calling a local gRPC service?</summary><p>Nothing is listening at that address yet, the address is wrong, or you mix TLS and plaintext. Check the port, the start order and the credentials.</p></details><details><summary>Is there a scheme like http:// in a gRPC address?</summary><p>No. A target is host:port, for example localhost:50051. In Go the target can optionally carry a resolver scheme such as dns:///.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/"><span class="lbl">Guide</span><b>How to add a gRPC health check so a local stack waits for it</b><span>A gRPC server has no /health URL. You need another way to say &#39;ready&#39;, or the service that calls it will start too early and fail.</span></a><a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/"><span class="lbl">Guide</span><b>How to test a gRPC service locally with grpcurl</b><span>curl cannot speak gRPC, but grpcurl can. With server reflection on, you can explore and call a local service in a minute.</span></a><a href="/@odykyi/graphql-and-grpc-local/call-grpc-from-a-browser-locally/"><span class="lbl">Guide</span><b>How to call a gRPC service from a browser: gRPC-Web and Connect</b><span>A browser cannot open a raw gRPC connection. You need a protocol it can speak: gRPC-Web through a proxy, or a server that understands Connect.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
