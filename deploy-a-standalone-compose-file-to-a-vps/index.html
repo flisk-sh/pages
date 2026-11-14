@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to deploy a standalone Compose file to a VPS</title>
+<meta name="description" content="Export a Compose file that runs without Flisk, copy it and an .env to a server, start it, put Caddy in front and keep published ports off the public internet.">
+<meta name="keywords" content="deploy docker compose vps, standalone docker compose file, flisk export compose, caddy reverse proxy docker, docker compose production server">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to deploy a standalone Compose file to a VPS">
+<meta property="og:description" content="Export a Compose file that runs without Flisk, copy it and an .env to a server, start it, put Caddy in front and keep published ports off the public internet.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to deploy a standalone Compose file to a VPS","description":"Export a Compose file that runs without Flisk, copy it and an .env to a server, start it, put Caddy in front and keep published ports off the public internet.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/","keywords":"deploy docker compose vps, standalone docker compose file, flisk export compose, caddy reverse proxy docker, docker compose production server","wordCount":723,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Test the real stack, then hand it off","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/"},{"@type":"ListItem","position":3,"name":"How to deploy a standalone Compose file to a VPS","item":"https://pages.flisk.si/@odykyi/testing-and-shipping/deploy-a-standalone-compose-file-to-a-vps/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the exported Compose file need Flisk on the server?","acceptedAnswer":{"@type":"Answer","text":"No. It has no external networks and no Flisk-specific variables. The server needs Docker with the Compose plugin, the file and an .env with the values for the variables the file references."}},{"@type":"Question","name":"Which services does flisk export compose include?","acceptedAnswer":{"@type":"Answer","text":"Bring-your-own resources, meaning services defined by an image or a Dockerfile. Native services that run as local processes with a command, and other resource types, are not exported."}},{"@type":"Question","name":"How do I stop the exported file going stale?","acceptedAnswer":{"@type":"Answer","text":"Run flisk export compose --check in CI. It exits 1 when the committed file differs from what the service.json files would produce."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/testing-and-shipping/">Test the real stack, then hand it off</a></div>
+<section class="hero"><div><div class="lbl">Test the real stack, then hand it off</div><h1>How to deploy a standalone Compose file to a VPS</h1><p class="dek">A small server with Docker is enough for many apps. The export gives you a Compose file with no dependency on your development tool.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-general-approach">The general approach</a></li><li><a href="#the-flisk-way-export-it">The Flisk way: export it</a></li><li><a href="#run-it-on-the-server">Run it on the server</a></li><li><a href="#put-https-in-front">Put HTTPS in front</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To deploy to a single server, export a standalone Compose file with <code>flisk export compose</code>, publish your images to a registry, copy the file and an <code>.env</code> to the server, and run <code>docker compose up -d</code>. Put a reverse proxy such as Caddy in front for HTTPS, and bind application ports to <code>127.0.0.1</code> so only the proxy is reachable from outside. The file works without Flisk, so the server never needs it.</p>
+
+<h2 id="the-general-approach">The general approach</h2>
+<p>A VPS with Docker and the Compose plugin is a legitimate production target for small apps and internal tools. The pattern is old and plain: images come from a registry, one Compose file describes the services, an <code>.env</code> holds the values, and a proxy terminates TLS. What goes wrong is the file. A development Compose file uses bind mounts, local build contexts and networks that only exist on your machine. You need a file that refers to pushed images and nothing local.</p>
+
+<h2 id="the-flisk-way-export-it">The Flisk way: export it</h2>
+<p>The exporter reads <code>service.json</code> files and writes <code>.autogenerated/docker-compose.yml</code>. It covers bring-your-own resources only: services with an <code>image</code> or a Dockerfile, plus their env, <code>secrets.required</code>, volumes, health checks, <code>dependsOn</code> and <code>extraPorts</code>.</p>
+<pre><code>flisk export compose --dry-run   # print, write nothing
+flisk export compose             # write .autogenerated/docker-compose.yml
+flisk export compose --check     # exit 1 if the file is out of date</code></pre>
+<p>A trimmed result for an API, a Postgres database and a one-shot migration job looks like this:</p>
+<pre><code>name: "shop"
+
+services:
+  api:
+    image: "ghcr.io/example/api:1.0.0"
+    init: true
+    restart: "unless-stopped"
+    environment:
+      DATABASE_URL: "${DATABASE_URL}"
+      LOG_LEVEL: "info"
+      SESSION_SECRET: "${SESSION_SECRET}"
+    ports:
+      - "0.0.0.0:4000:4000/tcp"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  db:
+    image: "postgres:17-alpine"
+    environment:
+      POSTGRES_DB: "shop"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - "pgdata:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      start_period: "10s"
+
+  migrate:
+    image: "ghcr.io/example/api:1.0.0"
+    restart: "no"
+    command: ["node", "migrate.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:</code></pre>
+<p>Points worth knowing:</p>
+<ul>
+<li>Each required secret becomes a <code>${NAME}</code> reference, so a name missing from the server's <code>.env</code> reaches the container as an empty value, with only a warning from Compose. Check that every name appears in the server's <code>.env</code>.</li>
+<li>A dependency with a health check becomes <code>service_healthy</code>. A job with <code>restart: "no"</code> becomes <code>service_completed_successfully</code>, so migrations finish before the API starts.</li>
+<li>No ports are published unless you list <code>extraPorts</code>. When a port is published it defaults to <code>127.0.0.1</code>. A <code>bind: "0.0.0.0"</code> setting opens it to the world, as the <code>api</code> entry above shows, so set it only deliberately.</li>
+<li>Services need images that exist. Build and push them in CI first, and pin a version tag instead of <code>latest</code>.</li>
+</ul>
+
+<h2 id="run-it-on-the-server">Run it on the server</h2>
+<ol>
+<li>Install Docker Engine and the Compose plugin from Docker's documentation.</li>
+<li>Copy the file and your env: <code>scp .autogenerated/docker-compose.yml .env deploy@server:/srv/shop/</code>. Set <code>chmod 600 .env</code>, and use production values, never your laptop's.</li>
+<li>Log in to the registry if the images are private, then start: <code>docker compose --env-file .env -f docker-compose.yml up -d</code>.</li>
+<li>Check <code>docker compose ps</code> and the logs of the migration job.</li>
+</ol>
+<p>To update, change the image tag, run <code>docker compose pull</code>, then repeat the <code>up -d</code> command. Take a database backup before a migration that changes data.</p>
+
+<h2 id="put-https-in-front">Put HTTPS in front</h2>
+<p>Caddy gets certificates automatically. A short <code>Caddyfile</code> is enough:</p>
+<pre><code>shop.example.com {
+  reverse_proxy 127.0.0.1:4000
+}</code></pre>
+<p>Point the DNS record at the server and run Caddy on the host or as another service. Now the API only needs to listen on <code>127.0.0.1:4000</code>, so change <code>bind</code> back to the default in <code>service.json</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Docker bypasses ufw.</strong> A port published as <code>0.0.0.0:4000</code> can be reachable even if your firewall says otherwise, because Docker writes its own iptables rules. Binding to <code>127.0.0.1</code> is the dependable fix.</li>
+<li><strong>Back up the volume.</strong> <code>pgdata</code> is the only copy of your data. Schedule a dump and test a restore.</li>
+<li><strong>Keep the export honest.</strong> Run <code>flisk export compose --check</code> in CI so the committed file matches the manifests. See <a href="/@odykyi/docker-compose-guide/export-a-standalone-compose-file/">export a standalone Compose file</a>.</li>
+<li><strong>One server is one failure domain.</strong> If you need rolling deploys or several machines, a managed platform is a better fit than more scripts. See <a href="/@odykyi/testing-and-shipping/from-local-to-render/">from local to Render</a>.</li>
+<li><strong>Leaving later.</strong> The point of a plain file is that nothing locks you in. <a href="/@odykyi/team-dev-environments/leave-a-tool-without-lock-in/">Leave a tool without lock-in</a> covers it.</li>
+</ul>
+
+<p>Next, check how the <code>.env</code> on the server should be managed: <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the exported Compose file need Flisk on the server?</summary><p>No. It has no external networks and no Flisk-specific variables. The server needs Docker with the Compose plugin, the file and an .env with the values for the variables the file references.</p></details><details><summary>Which services does flisk export compose include?</summary><p>Bring-your-own resources, meaning services defined by an image or a Dockerfile. Native services that run as local processes with a command, and other resource types, are not exported.</p></details><details><summary>How do I stop the exported file going stale?</summary><p>Run flisk export compose --check in CI. It exits 1 when the committed file differs from what the service.json files would produce.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Test the real stack, then hand it off</span></div>
+<div class="rgrid"><a href="/@odykyi/testing-and-shipping/from-local-to-render/"><span class="lbl">Guide</span><b>How to go from a local stack to a Render Blueprint</b><span>Your local stack already describes ports, health checks and environment names. A generated starting file saves retyping them, as long as you know what it skips.</span></a><a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/"><span class="lbl">Guide</span><b>How to keep env var names, not values, in committed config</b><span>The repository should say which settings exist. It should never say what the production password is.</span></a><a href="/@odykyi/testing-and-shipping/keep-kubernetes-out-of-local-dev/"><span class="lbl">Guide</span><b>Why you can keep Kubernetes out of local development</b><span>Production may be a cluster. That does not mean every laptop needs one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
