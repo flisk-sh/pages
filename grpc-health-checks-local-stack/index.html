@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to add a gRPC health check so a local stack waits for it</title>
+<meta name="description" content="Add the standard grpc.health.v1 service, check it with grpcurl or grpc_health_probe, and use a port or command probe so dependent services start in order.">
+<meta name="keywords" content="grpc health check, grpc_health_probe, grpc readiness local, grpc.health.v1, wait for grpc service ready">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to add a gRPC health check so a local stack waits for it">
+<meta property="og:description" content="Add the standard grpc.health.v1 service, check it with grpcurl or grpc_health_probe, and use a port or command probe so dependent services start in order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to add a gRPC health check so a local stack waits for it","description":"Add the standard grpc.health.v1 service, check it with grpcurl or grpc_health_probe, and use a port or command probe so dependent services start in order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/","keywords":"grpc health check, grpc_health_probe, grpc readiness local, grpc.health.v1, wait for grpc service ready","wordCount":713,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to add a gRPC health check so a local stack waits for it","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/grpc-health-checks-local-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does gRPC have a /health endpoint?","acceptedAnswer":{"@type":"Answer","text":"Not by default. The standard way is the grpc.health.v1.Health service, which you register in your server and query with a gRPC client such as grpc_health_probe or grpcurl."}},{"@type":"Question","name":"Can Flisk wait for a gRPC service to be ready?","acceptedAnswer":{"@type":"Answer","text":"Yes. In service.json, healthCheck accepts a TCP port or a command such as grpc_health_probe, and services that depend on it start after the probe passes."}},{"@type":"Question","name":"Is an open port enough to call a gRPC service ready?","acceptedAnswer":{"@type":"Answer","text":"Only for simple cases. An open port means the process is listening, not that its database is connected. Use the health service when that difference matters."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to add a gRPC health check so a local stack waits for it</h1><p class="dek">A gRPC server has no /health URL. You need another way to say &#39;ready&#39;, or the service that calls it will start too early and fail.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-standard-health-service">The standard health service</a></li><li><a href="#check-it-from-the-shell">Check it from the shell</a></li><li><a href="#readiness-in-a-flisk-stack">Readiness in a Flisk stack</a></li><li><a href="#which-probe-to-pick">Which probe to pick</a></li><li><a href="#what-to-test-after-you-add-it">What to test after you add it</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A gRPC server has no HTTP health path, so you check readiness in one of three ways: an open TCP port, the standard <code>grpc.health.v1.Health</code> service queried with <code>grpc_health_probe</code>, or a probe of your own. In a local stack, use the port check while you are starting out and the health protocol when "port open" is not the same as "ready to serve".</p>
+<h2 id="the-standard-health-service">The standard health service</h2>
+<p>The gRPC project defines a health protocol in <code>grpc.health.v1</code>. A server registers a <code>Health</code> service with one unary method, <code>Check</code>, that returns <code>SERVING</code> or <code>NOT_SERVING</code>, plus a streaming <code>Watch</code>. Most language libraries ship an implementation. In Go:</p>
+<pre><code>import (
+  "google.golang.org/grpc/health"
+  healthpb "google.golang.org/grpc/health/grpc_health_v1"
+)
+
+hs := health.NewServer()
+healthpb.RegisterHealthServer(s, hs)
+// once the database connection works:
+hs.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+</code></pre>
+<p>The empty string is the whole server; you can also register a status per service name. Set <code>NOT_SERVING</code> at startup and flip it only after your dependencies (database, cache) answer. That is the difference between "the process is listening" and "it can handle a request".</p>
+<h2 id="check-it-from-the-shell">Check it from the shell</h2>
+<p>With grpcurl:</p>
+<pre><code>grpcurl -plaintext -d '{"service": ""}' localhost:50051 grpc.health.v1.Health/Check</code></pre>
+<p>With <code>grpc_health_probe</code>, a small binary from the gRPC ecosystem made for exactly this, which exits 0 when the status is <code>SERVING</code> and non-zero otherwise:</p>
+<pre><code>grpc_health_probe -addr=localhost:50051</code></pre>
+<p>Kubernetes can call the health protocol natively through a <code>grpc</code> probe, and Docker Compose healthchecks usually run <code>grpc_health_probe</code> inside the image, which means the binary must be in the image. Locally you do not need either.</p>
+<h2 id="readiness-in-a-flisk-stack">Readiness in a Flisk stack</h2>
+<p>Flisk can gate <code>dependsOn</code> on a TCP port or on a command, not only an HTTP path. The <code>healthCheck</code> field takes exactly one probe: <code>path</code>, <code>port</code> or <code>command</code>. For a gRPC server as a local process, a port probe:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-grpc",
+  "appType": "backend",
+  "command": "go run ./cmd/orders",
+  "port": 50051,
+  "healthCheck": { "port": 50051 }
+}
+</code></pre>
+<p>If you want the real protocol, make the command the probe. For a local process it runs on your host from the service folder and counts as ready when it exits 0:</p>
+<pre><code>"healthCheck": { "command": ["grpc_health_probe", "-addr=localhost:50051"] }</code></pre>
+<p>Services that list <code>"dependsOn": ["orders-grpc"]</code> start only after the probe passes. For a service that runs in a container (a bring-your-own image), the command runs inside the container, so the probe binary has to be in that image and the address is the container's own. With <code>port</code> or <code>command</code> Flisk gives the gateway no HTTP health path for the service. Check what you wrote with <code>flisk config verify</code>, and <code>flisk status</code> shows whether each service is ready.</p>
+<p>How long does Flisk wait? In local-process mode it waits up to 60 seconds per service. If your server needs a slow migration first, run that migration as its own earlier step instead of making the server's start slower; see <a href="/@odykyi/microservices-local-dev/service-startup-order/">how to control service startup order</a>.</p>
+<h2 id="which-probe-to-pick">Which probe to pick</h2>
+<table><thead><tr><th>Probe</th><th>What it proves</th><th>Use when</th></tr></thead><tbody>
+<tr><td>TCP port</td><td>The process accepted a connection</td><td>Early development, simple servers</td></tr>
+<tr><td>grpc_health_probe</td><td>The server reports SERVING</td><td>The server checks its own dependencies</td></tr>
+<tr><td>Your own call</td><td>A real method works</td><td>A cheap read-only method exists</td></tr>
+</tbody></table>
+<h2 id="what-to-test-after-you-add-it">What to test after you add it</h2>
+<p>Start the server with its database stopped and call the health method: it should answer <code>NOT_SERVING</code> or fail, not <code>SERVING</code>. Then start the database and check that it flips. The streaming <code>Watch</code> method lets a client see the change without polling; <code>grpcurl</code> can call it too and prints each status change. This takes five minutes and finds the common bug where a service reports healthy while its connection pool is empty.</p>
+<p>You can also report status per logical service. Registering <code>shop.v1.Orders</code> with its own status lets a caller ask about one part of a server that hosts several. Keep the names equal to the full service name from your proto file.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Always SERVING.</strong> A health service that returns SERVING from the first millisecond is a port check with extra steps.</li>
+<li><strong>Probe not installed.</strong> A command probe on the host needs the binary on <code>PATH</code>; install it before blaming the service.</li>
+<li><strong>TLS mismatch.</strong> <code>grpc_health_probe</code> needs TLS flags if the server uses TLS. Local servers usually do not.</li>
+</ul>
+<p>Next, see how the dependent services learn the address: <a href="/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/">gRPC services finding each other locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does gRPC have a /health endpoint?</summary><p>Not by default. The standard way is the grpc.health.v1.Health service, which you register in your server and query with a gRPC client such as grpc_health_probe or grpcurl.</p></details><details><summary>Can Flisk wait for a gRPC service to be ready?</summary><p>Yes. In service.json, healthCheck accepts a TCP port or a command such as grpc_health_probe, and services that depend on it start after the probe passes.</p></details><details><summary>Is an open port enough to call a gRPC service ready?</summary><p>Only for simple cases. An open port means the process is listening, not that its database is connected. Use the health service when that difference matters.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/"><span class="lbl">Guide</span><b>How to test a gRPC service locally with grpcurl</b><span>curl cannot speak gRPC, but grpcurl can. With server reflection on, you can explore and call a local service in a minute.</span></a><a href="/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/"><span class="lbl">Guide</span><b>How to let gRPC services find each other in local development</b><span>gRPC clients dial host:port, nothing more. Locally, the whole problem is choosing ports, passing addresses and starting servers before their callers.</span></a><a href="/@odykyi/graphql-and-grpc-local/call-grpc-from-a-browser-locally/"><span class="lbl">Guide</span><b>How to call a gRPC service from a browser: gRPC-Web and Connect</b><span>A browser cannot open a raw gRPC connection. You need a protocol it can speak: gRPC-Web through a proxy, or a server that understands Connect.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

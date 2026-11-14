@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GraphQL Codegen in watch mode: typed queries while you code</title>
+<meta name="description" content="Set up GraphQL Code Generator with a codegen.ts file, run it in watch mode next to your dev server and avoid stale types when the schema changes.">
+<meta name="keywords" content="graphql codegen watch, graphql-codegen typescript setup, codegen.ts example, graphql typed queries, generate graphql types from schema">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GraphQL Codegen in watch mode: typed queries while you code">
+<meta property="og:description" content="Set up GraphQL Code Generator with a codegen.ts file, run it in watch mode next to your dev server and avoid stale types when the schema changes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GraphQL Codegen in watch mode: typed queries while you code","description":"Set up GraphQL Code Generator with a codegen.ts file, run it in watch mode next to your dev server and avoid stale types when the schema changes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/","keywords":"graphql codegen watch, graphql-codegen typescript setup, codegen.ts example, graphql typed queries, generate graphql types from schema","wordCount":733,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"GraphQL Codegen in watch mode: typed queries while you code","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-codegen-watch-mode-local/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I run GraphQL Code Generator in watch mode?","acceptedAnswer":{"@type":"Answer","text":"Run graphql-codegen --watch (or add --watch to your codegen script). It regenerates when files matched by documents, and local schema files, change."}},{"@type":"Question","name":"Should codegen read the schema from a URL or a file?","acceptedAnswer":{"@type":"Answer","text":"A committed schema file is the most reliable and shows changes in diffs. A URL is convenient but needs the server running and introspection on."}},{"@type":"Question","name":"Why does codegen keep restarting under a process runner?","acceptedAnswer":{"@type":"Answer","text":"A command that runs once and exits looks like a crash to a runner that restarts exited processes. Use watch mode, or turn restart off for that service."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>GraphQL Codegen in watch mode: typed queries while you code</h1><p class="dek">Typed queries only help while they match the schema. Watch mode regenerates them on every save, so TypeScript flags a bad field before the browser does.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#install-and-configure">Install and configure</a></li><li><a href="#where-the-schema-comes-from">Where the schema comes from</a></li><li><a href="#run-it-next-to-the-dev-server-with-flisk">Run it next to the dev server with Flisk</a></li><li><a href="#using-the-generated-types">Using the generated types</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>GraphQL Code Generator reads your schema and your query documents and writes TypeScript types for them. Run <code>graphql-codegen --watch</code> in a terminal next to your dev server, point <code>schema</code> at a file or the running endpoint, and the generated types update when your <code>.graphql</code> or <code>.ts</code> documents change. The trick is deciding where the schema comes from and making sure the generator starts after the thing that produces it.</p>
+<h2 id="install-and-configure">Install and configure</h2>
+<pre><code>npm install --save-dev @graphql-codegen/cli @graphql-codegen/client-preset
+</code></pre>
+<p>Create <code>codegen.ts</code> in the frontend folder:</p>
+<pre><code>import type { CodegenConfig } from '@graphql-codegen/cli'
+
+const config: CodegenConfig = {
+  schema: 'http://localhost:4000/graphql',
+  documents: ['src/**/*.{ts,tsx,graphql}'],
+  generates: {
+    './src/gql/': { preset: 'client' },
+  },
+}
+export default config
+</code></pre>
+<p>The <code>client</code> preset generates a typed <code>graphql()</code> function: write the query in a template string, and the result type is inferred. Run once with <code>npx graphql-codegen</code>, or continuously with <code>npx graphql-codegen --watch</code>. Add both as scripts so teammates do not need to remember them.</p>
+<h2 id="where-the-schema-comes-from">Where the schema comes from</h2>
+<p>You have three options, with different trade-offs:</p>
+<ul>
+<li><strong>The running endpoint (URL).</strong> Always current, but the server must be up when codegen starts, and the schema is fetched once at start, so after a schema change re-run the command. Introspection must be enabled.</li>
+<li><strong>A schema file in the repo</strong> (<code>schema.graphql</code> or a glob). Works offline and with the server off, and watch mode sees edits to it. The server has to write or share that file, which some code-first libraries can do on startup.</li>
+<li><strong>The server's code.</strong> Code-first setups such as Pothos or Nexus can print the schema to a file; make codegen read that file.</li>
+</ul>
+<p>For a single repo, a committed <code>schema.graphql</code> is the most reliable. It also shows schema changes in pull request diffs, which is the point of having a contract. The article on <a href="/@odykyi/testing-and-shipping/contract-between-frontend-and-backend/">keeping a frontend and backend contract in sync</a> covers that side.</p>
+<h2 id="run-it-next-to-the-dev-server-with-flisk">Run it next to the dev server with Flisk</h2>
+<p>Treat the generator as one more long-running service. With Flisk, local processes are declared with a <code>command</code>; a process with no <code>port</code> counts as ready when it is still running after a second. The generator depends on the API so the schema URL exists:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "codegen",
+  "appType": "backend",
+  "command": "npx graphql-codegen --watch",
+  "dependsOn": ["graphql-api"]
+}
+</code></pre>
+<p>Install Flisk with <code>npm install -g @flisk-sh/flisk</code>, then <code>flisk up</code> starts the API, waits for it to be ready (give it a <code>port</code> in its own <code>service.json</code>), then starts codegen and the frontend in order. Check the order first with <code>flisk up --dry-run</code>. The output of each service is prefixed with its name, so a schema error from codegen is easy to tell apart from a Vite error; <code>flisk logs --service codegen</code> shows only it.</p>
+<p>If you run codegen once instead of watching (for example <code>npx graphql-codegen</code>, which exits), set <code>"restart": "no"</code> in that service. Without it Flisk treats an exit as a crash and starts the command again, with growing delays.</p>
+<p>There is no GraphQL-specific generator in Flisk, so keep codegen as shown here.</p>
+<h2 id="using-the-generated-types">Using the generated types</h2>
+<p>With the client preset, import the generated <code>graphql</code> function and write the document in place:</p>
+<pre><code>import { graphql } from './gql'
+
+const ProductsQuery = graphql(`
+  query Products { products { id name priceCents } }
+`)
+</code></pre>
+<p>Pass <code>ProductsQuery</code> to your client (Apollo Client, urql or <code>graphql-request</code>) and the result is typed. Rename <code>priceCents</code> on the server, let codegen run, and TypeScript marks every component that still reads the old field. That feedback loop, within a second or two of saving, is the reason to run it in watch mode instead of once in CI.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Introspection disabled.</strong> A URL schema fails with an error about introspection. Enable it in development, or switch to a schema file.</li>
+<li><strong>Stale types after a schema change.</strong> With a URL schema, restart codegen. With a file schema, watch mode picks it up.</li>
+<li><strong>Documents not found.</strong> "Unable to find any GraphQL type definitions" or an empty output usually means the <code>documents</code> glob matches no files. Run from the folder that holds <code>codegen.ts</code>.</li>
+<li><strong>Generated folder committed or not.</strong> Decide, and add it to <code>.gitignore</code> or keep it. Do not hand-edit it.</li>
+<li><strong>Editor lag.</strong> Large schemas make watch mode slow; limit <code>documents</code> to the folders you use.</li>
+</ul>
+<p>With types in place, a browser still needs permission to call the API: see <a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">CORS and CSRF errors with GraphQL</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I run GraphQL Code Generator in watch mode?</summary><p>Run graphql-codegen --watch (or add --watch to your codegen script). It regenerates when files matched by documents, and local schema files, change.</p></details><details><summary>Should codegen read the schema from a URL or a file?</summary><p>A committed schema file is the most reliable and shows changes in diffs. A URL is convenient but needs the server running and introspection on.</p></details><details><summary>Why does codegen keep restarting under a process runner?</summary><p>A command that runs once and exits looks like a crash to a runner that restarts exited processes. Use watch mode, or turn restart off for that service.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/"><span class="lbl">Guide</span><b>How to run a GraphQL server locally and query it with curl</b><span>A GraphQL API is one HTTP endpoint. Once you can hit it with curl, every other tool (a frontend, a codegen step, a test) is easy to wire up.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/"><span class="lbl">Guide</span><b>GraphQL CORS and CSRF errors from a local frontend: how to fix</b><span>The query works in curl but the browser refuses it. That is almost always CORS or CSRF prevention, and both are fixed on the server or with a dev proxy.</span></a><a href="/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/"><span class="lbl">Guide</span><b>How to generate gRPC and Protobuf code with buf locally</b><span>protoc works, but its flags grow fast. buf keeps the plugins, inputs and output paths in two small files you can commit and run the same way everywhere.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

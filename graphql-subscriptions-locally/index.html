@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test GraphQL subscriptions locally: SSE and WebSocket</title>
+<meta name="description" content="Build and test a GraphQL subscription locally: a countdown with GraphQL Yoga over SSE, the graphql-ws WebSocket option, and the Vite proxy settings.">
+<meta name="keywords" content="graphql subscriptions local, graphql subscription sse curl, graphql-ws websocket example, test graphql subscription, apollo client subscriptions setup">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test GraphQL subscriptions locally: SSE and WebSocket">
+<meta property="og:description" content="Build and test a GraphQL subscription locally: a countdown with GraphQL Yoga over SSE, the graphql-ws WebSocket option, and the Vite proxy settings.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test GraphQL subscriptions locally: SSE and WebSocket","description":"Build and test a GraphQL subscription locally: a countdown with GraphQL Yoga over SSE, the graphql-ws WebSocket option, and the Vite proxy settings.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/","keywords":"graphql subscriptions local, graphql subscription sse curl, graphql-ws websocket example, test graphql subscription, apollo client subscriptions setup","wordCount":736,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to test GraphQL subscriptions locally: SSE and WebSocket","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/graphql-subscriptions-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I test a GraphQL subscription with curl?","acceptedAnswer":{"@type":"Answer","text":"Yes, if the server supports Server-Sent Events, as GraphQL Yoga does. Send the query with accept: text/event-stream and use curl -N."}},{"@type":"Question","name":"Which library should I use for GraphQL subscriptions over WebSocket?","acceptedAnswer":{"@type":"Answer","text":"graphql-ws, which implements the graphql-transport-ws protocol. The older subscriptions-transport-ws is unmaintained."}},{"@type":"Question","name":"Why do my subscription events arrive all at once?","acceptedAnswer":{"@type":"Answer","text":"A proxy or compression layer between client and server is buffering the response. Remove it for the test and then add it back with buffering off."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to test GraphQL subscriptions locally: SSE and WebSocket</h1><p class="dek">A subscription is a query that keeps the connection open. Test it from the terminal first, then from the browser, and fix the proxy that eats it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#two-transports">Two transports</a></li><li><a href="#a-subscription-in-graphql-yoga">A subscription in GraphQL Yoga</a></li><li><a href="#the-websocket-route">The WebSocket route</a></li><li><a href="#running-it-with-the-rest-of-the-app">Running it with the rest of the app</a></li><li><a href="#through-a-vite-dev-proxy">Through a Vite dev proxy</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A GraphQL subscription keeps one connection open and pushes results as events happen. Locally you can test it with curl if the server supports Server-Sent Events (GraphQL Yoga does by default), or from the browser through the <code>graphql-ws</code> WebSocket protocol. Most failures come from a proxy in the middle that buffers or does not upgrade the connection.</p>
+<h2 id="two-transports">Two transports</h2>
+<ul>
+<li><strong>Server-Sent Events (SSE).</strong> A normal HTTP request whose response stays open. It works with curl, passes through most HTTP proxies and needs no extra port.</li>
+<li><strong>WebSocket with graphql-ws.</strong> The <code>graphql-transport-ws</code> protocol, implemented by the <code>graphql-ws</code> library. It is what Apollo Client's <code>GraphQLWsLink</code> expects. The older <code>subscriptions-transport-ws</code> library is unmaintained; do not start new work on it.</li>
+</ul>
+<p>Check which one your client and server pair uses. A client for one cannot talk to a server that offers only the other.</p>
+<h2 id="a-subscription-in-graphql-yoga">A subscription in GraphQL Yoga</h2>
+<p>Add a <code>Subscription</code> type with an async generator. Compared with the server in <a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/">run a GraphQL server locally</a>, only the schema and resolvers change:</p>
+<pre><code>typeDefs: /* GraphQL */ `
+  type Query { hello: String! }
+  type Subscription { countdown(from: Int!): Int! }
+`,
+resolvers: {
+  Query: { hello: () =&gt; 'hi' },
+  Subscription: {
+    countdown: {
+      subscribe: async function* (_, { from }) {
+        for (let i = from; i &gt;= 0; i--) {
+          await new Promise((r) =&gt; setTimeout(r, 1000))
+          yield { countdown: i }
+        }
+      },
+      resolve: (payload) =&gt; payload.countdown,
+    },
+  },
+},
+</code></pre>
+<p>Now call it from the terminal. <code>-N</code> turns off curl's output buffering so events print as they arrive:</p>
+<pre><code>curl -N http://localhost:4000/graphql \
+  -H 'accept: text/event-stream' \
+  -H 'content-type: application/json' \
+  -d '{"query":"subscription { countdown(from: 3) }"}'
+</code></pre>
+<p>You see a few <code>event: next</code> lines with data, one per second, then <code>event: complete</code>. If the whole reply arrives at once at the end, something between curl and the server is buffering.</p>
+<h2 id="the-websocket-route">The WebSocket route</h2>
+<p>For a client that needs WebSocket, attach <code>graphql-ws</code> to your server. In a Node server with the <code>ws</code> package:</p>
+<pre><code>import { WebSocketServer } from 'ws'
+import { useServer } from 'graphql-ws/lib/use/ws'
+
+const wss = new WebSocketServer({ server: httpServer, path: '/graphql' })
+useServer({ schema }, wss)
+</code></pre>
+<p>On the client, Apollo Client combines an HTTP link for queries and mutations with a WebSocket link for subscriptions, using <code>split</code>:</p>
+<pre><code>import { createClient } from 'graphql-ws'
+import { GraphQLWsLink } from '@apollo/client/link/subscriptions'
+
+const wsLink = new GraphQLWsLink(createClient({ url: 'ws://localhost:4000/graphql' }))
+</code></pre>
+<p>The URL scheme is <code>ws://</code> for plain HTTP and <code>wss://</code> for HTTPS. For a quick command-line check, <code>websocat</code> or <code>wscat</code> can connect to the endpoint with the <code>graphql-transport-ws</code> subprotocol and send a <code>connection_init</code> message first.</p>
+<h2 id="running-it-with-the-rest-of-the-app">Running it with the rest of the app</h2>
+<p>A subscription server is still one process. In Flisk local-process mode it is a <code>service.json</code> with a <code>command</code> and a <code>port</code>, exactly like a plain GraphQL API, and WebSocket upgrades on that port work because nothing sits in between. Install with <code>npm install -g @flisk-sh/flisk</code>. The <code>flisk logs --service graphql-api</code> command is a handy way to watch connection and disconnect messages while you test. If you route traffic through Flisk's container gateway, Flisk lists a <code>websocket</code> feature for services, but I have not verified an end-to-end GraphQL subscription through that gateway, so test yours and fall back to the direct port. See <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of ports</a> for how gateway URLs work.</p>
+<h2 id="through-a-vite-dev-proxy">Through a Vite dev proxy</h2>
+<p>A proxy entry for <code>/graphql</code> forwards HTTP only. Add <code>ws: true</code> so upgrade requests are forwarded:</p>
+<pre><code>server: { proxy: { '/graphql': { target: 'http://localhost:4000', ws: true } } }</code></pre>
+<p>Then use <code>ws://localhost:3000/graphql</code> in the client (the page's own origin). If you call the API origin directly, you need CORS for HTTP and an origin check on the WebSocket; see <a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/">GraphQL CORS errors</a>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Buffering proxies.</strong> Compression or buffering in a proxy delays SSE. Test without the proxy first.</li>
+<li><strong>Connection limits.</strong> Browsers allow a limited number of simultaneous HTTP/1.1 connections per origin (6 is the common limit), and each SSE stream uses one. HTTP/2 lifts this.</li>
+<li><strong>Leaks.</strong> Clean up listeners when a client disconnects, or restarts leave timers behind. An async generator's <code>finally</code> block runs on disconnect.</li>
+<li><strong>Auth.</strong> The WebSocket handshake cannot set arbitrary headers from a browser; pass credentials in <code>connectionParams</code> and check them in the server's <code>onConnect</code>.</li>
+</ul>
+<p>A server-push feature is easier to trust when events come from a real queue; the next step in that direction is <a href="/@odykyi/workers-and-queues/nats-for-local-development/">NATS for local development</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I test a GraphQL subscription with curl?</summary><p>Yes, if the server supports Server-Sent Events, as GraphQL Yoga does. Send the query with accept: text/event-stream and use curl -N.</p></details><details><summary>Which library should I use for GraphQL subscriptions over WebSocket?</summary><p>graphql-ws, which implements the graphql-transport-ws protocol. The older subscriptions-transport-ws is unmaintained.</p></details><details><summary>Why do my subscription events arrive all at once?</summary><p>A proxy or compression layer between client and server is buffering the response. Remove it for the test and then add it back with buffering off.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/run-a-graphql-server-locally/"><span class="lbl">Guide</span><b>How to run a GraphQL server locally and query it with curl</b><span>A GraphQL API is one HTTP endpoint. Once you can hit it with curl, every other tool (a frontend, a codegen step, a test) is easy to wire up.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-cors-and-csrf-errors-local/"><span class="lbl">Guide</span><b>GraphQL CORS and CSRF errors from a local frontend: how to fix</b><span>The query works in curl but the browser refuses it. That is almost always CORS or CSRF prevention, and both are fixed on the server or with a dev proxy.</span></a><a href="/@odykyi/graphql-and-grpc-local/graphql-federation-local-subgraphs/"><span class="lbl">Guide</span><b>How to run GraphQL federation locally: subgraphs and a router</b><span>Federation splits one GraphQL schema across services. Locally that means several processes, one composed schema file and a router, all started in the right order.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

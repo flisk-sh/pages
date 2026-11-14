@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to generate gRPC and Protobuf code with buf locally</title>
+<meta name="description" content="Set up buf to lint .proto files and generate Go and TypeScript code from them, keep generated code in sync, and catch breaking changes before you push.">
+<meta name="keywords" content="buf generate, protobuf code generation, buf.gen.yaml example, buf lint breaking, generate grpc code go typescript">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to generate gRPC and Protobuf code with buf locally">
+<meta property="og:description" content="Set up buf to lint .proto files and generate Go and TypeScript code from them, keep generated code in sync, and catch breaking changes before you push.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to generate gRPC and Protobuf code with buf locally","description":"Set up buf to lint .proto files and generate Go and TypeScript code from them, keep generated code in sync, and catch breaking changes before you push.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/","keywords":"buf generate, protobuf code generation, buf.gen.yaml example, buf lint breaking, generate grpc code go typescript","wordCount":755,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"GraphQL and gRPC in local dev","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/"},{"@type":"ListItem","position":3,"name":"How to generate gRPC and Protobuf code with buf locally","item":"https://pages.flisk.si/@odykyi/graphql-and-grpc-local/generate-protobuf-code-with-buf/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between buf and protoc?","acceptedAnswer":{"@type":"Answer","text":"protoc is the Protobuf compiler. buf is a CLI that wraps a compiler and adds a config-file workflow, linting and breaking-change detection."}},{"@type":"Question","name":"Should I commit generated Protobuf code?","acceptedAnswer":{"@type":"Answer","text":"Both work. Committing lets people build without buf; ignoring it keeps diffs clean but requires a generate step after checkout. Choose one and document it."}},{"@type":"Question","name":"Does buf generate need internet access?","acceptedAnswer":{"@type":"Answer","text":"Not with local plugins. Remote plugins from the Buf Schema Registry need network access."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/graphql-and-grpc-local/">GraphQL and gRPC in local dev</a></div>
+<section class="hero"><div><div class="lbl">GraphQL and gRPC in local dev</div><h1>How to generate gRPC and Protobuf code with buf locally</h1><p class="dek">protoc works, but its flags grow fast. buf keeps the plugins, inputs and output paths in two small files you can commit and run the same way everywhere.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-buf-instead-of-raw-protoc">Why buf instead of raw protoc</a></li><li><a href="#lay-out-the-module">Lay out the module</a></li><li><a href="#configure-generation">Configure generation</a></li><li><a href="#keep-generated-code-in-sync-while-you-work">Keep generated code in sync while you work</a></li><li><a href="#run-it-in-ci">Run it in CI</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>With buf, you describe your proto module in <code>buf.yaml</code>, list the code generators in <code>buf.gen.yaml</code>, and run <code>buf generate</code> to write the Go, TypeScript or Python code for your gRPC service. <code>buf lint</code> checks style and <code>buf breaking</code> compares against an older version so you do not break clients by accident. The same three commands work on every machine.</p>
+<h2 id="why-buf-instead-of-raw-protoc">Why buf instead of raw protoc</h2>
+<p><code>protoc</code> is the reference compiler and still works. A realistic invocation has an include path, a plugin binary per language, plugin options and an output directory for each, and nobody remembers it. buf wraps the compiler (it ships its own) and moves all of that into configuration. It also gives you linting and breaking-change detection that protoc does not have. Install with <code>brew install bufbuild/buf/buf</code> or <code>npm install --save-dev @bufbuild/buf</code>.</p>
+<h2 id="lay-out-the-module">Lay out the module</h2>
+<pre><code>proto/
+  shop/v1/orders.proto
+buf.yaml
+buf.gen.yaml
+gen/            # generated, output of buf generate
+</code></pre>
+<p>A small proto file:</p>
+<pre><code>syntax = "proto3";
+package shop.v1;
+option go_package = "example.com/shop/gen/go/shop/v1;shopv1";
+
+service Orders {
+  rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+}
+message GetOrderRequest { string id = 1; }
+message GetOrderResponse { string id = 1; string status = 2; }
+</code></pre>
+<p><code>buf.yaml</code> (the v2 format) says where the module lives and which lint rules apply:</p>
+<pre><code>version: v2
+modules:
+  - path: proto
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE
+</code></pre>
+<h2 id="configure-generation">Configure generation</h2>
+<p><code>buf.gen.yaml</code> lists one entry per plugin. Local plugins are binaries on your <code>PATH</code>, so they run offline and are pinned by the version you install:</p>
+<pre><code>version: v2
+plugins:
+  - local: protoc-gen-go
+    out: gen/go
+    opt: paths=source_relative
+  - local: protoc-gen-go-grpc
+    out: gen/go
+    opt: paths=source_relative
+  - local: protoc-gen-es
+    out: gen/ts
+    opt: target=ts
+</code></pre>
+<p>Install the Go plugins with <code>go install google.golang.org/protobuf/cmd/protoc-gen-go@latest</code> and <code>go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest</code>, and the TypeScript one with <code>npm install --save-dev @bufbuild/protoc-gen-es</code> (put <code>node_modules/.bin</code> on <code>PATH</code>, or run through <code>npx</code>). Pin versions in your project; "latest" is fine for a first try but not for a team. buf also supports <code>remote</code> plugins hosted on the Buf Schema Registry, which need no local install but need network access.</p>
+<pre><code>buf lint
+buf generate
+buf breaking --against '.git#branch=main'
+</code></pre>
+<p><code>buf breaking</code> builds the module from the <code>main</code> branch and reports changes that would break existing clients, such as removing a field or changing its type. Run it before you open a pull request.</p>
+<h2 id="keep-generated-code-in-sync-while-you-work">Keep generated code in sync while you work</h2>
+<p>Two common policies: commit <code>gen/</code> (clients that do not have buf can still build, but diffs get noisy) or ignore it and generate on every checkout (clean history, one more step to run). Pick one and write it in your README. In either case, regenerate before the service starts so code and proto cannot disagree.</p>
+<p>If you start your services with Flisk, the <code>command</code> in <code>service.json</code> is a shell command, so you can put generation in front of the server:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-grpc",
+  "appType": "backend",
+  "command": "buf generate &amp;&amp; go run ./cmd/orders",
+  "port": 50051,
+  "healthCheck": { "port": 50051 }
+}
+</code></pre>
+<p>Flisk restarts a crashed process after a delay, so a failing <code>buf generate</code> will show up in <code>flisk logs --service orders-grpc</code> and stop the start. Flisk does not know about Protobuf and does not run buf by itself; this is just a shell command. Install Flisk with <code>npm install -g @flisk-sh/flisk</code>. For live reload after an edit, add your language's file watcher (for Go, a tool such as air) rather than expecting Flisk to watch the files.</p>
+<h2 id="run-it-in-ci">Run it in CI</h2>
+<p>The same three commands work in a pipeline: <code>buf lint</code> and <code>buf breaking</code> as checks, and <code>buf generate</code> followed by <code>git diff --exit-code</code> if you commit generated code, so the job fails when someone forgot to regenerate. For the breaking check the job needs the full history or the target branch fetched, or <code>--against</code> has nothing to compare with. Run these checks on pull requests only; they cost seconds on a normal module.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Plugin not found.</strong> "protoc-gen-go: program not found" means the plugin is not on <code>PATH</code>. <code>go install</code> puts it in <code>$(go env GOPATH)/bin</code>.</li>
+<li><strong>Wrong <code>go_package</code>.</strong> Generated imports are wrong when it does not match your module path.</li>
+<li><strong>Renumbering fields.</strong> Never reuse a field number; mark old ones <code>reserved</code>. buf breaking catches the common cases.</li>
+<li><strong>Generated files edited by hand.</strong> They are overwritten on the next run. Fix the proto instead.</li>
+</ul>
+<p>Once the code generates cleanly, <a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/">test the running service with grpcurl</a>, and for the contract between frontend and backend in general read <a href="/@odykyi/testing-and-shipping/contract-between-frontend-and-backend/">how to keep an API contract in sync</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between buf and protoc?</summary><p>protoc is the Protobuf compiler. buf is a CLI that wraps a compiler and adds a config-file workflow, linting and breaking-change detection.</p></details><details><summary>Should I commit generated Protobuf code?</summary><p>Both work. Committing lets people build without buf; ignoring it keeps diffs clean but requires a generate step after checkout. Choose one and document it.</p></details><details><summary>Does buf generate need internet access?</summary><p>Not with local plugins. Remote plugins from the Buf Schema Registry need network access.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GraphQL and gRPC in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/test-a-grpc-service-with-grpcurl/"><span class="lbl">Guide</span><b>How to test a gRPC service locally with grpcurl</b><span>curl cannot speak gRPC, but grpcurl can. With server reflection on, you can explore and call a local service in a minute.</span></a><a href="/@odykyi/graphql-and-grpc-local/call-grpc-from-a-browser-locally/"><span class="lbl">Guide</span><b>How to call a gRPC service from a browser: gRPC-Web and Connect</b><span>A browser cannot open a raw gRPC connection. You need a protocol it can speak: gRPC-Web through a proxy, or a server that understands Connect.</span></a><a href="/@odykyi/graphql-and-grpc-local/grpc-services-find-each-other-locally/"><span class="lbl">Guide</span><b>How to let gRPC services find each other in local development</b><span>gRPC clients dial host:port, nothing more. Locally, the whole problem is choosing ports, passing addresses and starting servers before their callers.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
