@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Caddy as a local HTTPS reverse proxy</title>
+<meta name="description" content="Use a four-line Caddyfile to serve your local services over HTTPS with its built-in local CA, and route several hosts to different ports on your laptop.">
+<meta name="keywords" content="caddy local https, caddy reverse proxy localhost, caddy tls internal, local https reverse proxy">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Caddy as a local HTTPS reverse proxy">
+<meta property="og:description" content="Use a four-line Caddyfile to serve your local services over HTTPS with its built-in local CA, and route several hosts to different ports on your laptop.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Caddy as a local HTTPS reverse proxy","description":"Use a four-line Caddyfile to serve your local services over HTTPS with its built-in local CA, and route several hosts to different ports on your laptop.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/","keywords":"caddy local https, caddy reverse proxy localhost, caddy tls internal, local https reverse proxy","wordCount":770,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Local URLs, routing and HTTPS","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/"},{"@type":"ListItem","position":3,"name":"How to run Caddy as a local HTTPS reverse proxy","item":"https://pages.flisk.si/@odykyi/local-routing-and-https/caddy-local-https-reverse-proxy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does tls internal do in Caddy?","acceptedAnswer":{"@type":"Answer","text":"It tells Caddy to issue the certificate from its own local certificate authority instead of asking a public CA such as Let's Encrypt. Run caddy trust so your system accepts that authority."}},{"@type":"Question","name":"Can Caddy and Flisk run at the same time?","acceptedAnswer":{"@type":"Answer","text":"Yes, if they do not fight over ports. In the Docker path Flisk's Traefik prefers host ports 80 and 443, so run Caddy on different ports, or proxy to the ports of local-process services."}},{"@type":"Question","name":"Do I need to change my app to use Caddy?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Your app keeps serving plain HTTP. Check that it respects X-Forwarded-Proto if it builds absolute URLs or redirects."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-routing-and-https/">Local URLs, routing and HTTPS</a></div>
+<section class="hero"><div><div class="lbl">Local URLs, routing and HTTPS</div><h1>How to run Caddy as a local HTTPS reverse proxy</h1><p class="dek">Caddy issues and renews local certificates by itself. You write the routes, it does the TLS.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-minimal-caddyfile">A minimal Caddyfile</a></li><li><a href="#one-host-several-services">One host, several services</a></li><li><a href="#using-caddy-with-flisk">Using Caddy with Flisk</a></li><li><a href="#run-it-every-day-without-friction">Run it every day without friction</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To run Caddy as a local HTTPS reverse proxy, write a Caddyfile with one site block per host name, add <code>tls internal</code>, and point <code>reverse_proxy</code> at your service's port. Caddy creates a local certificate authority, issues certificates for the names you list, and serves them over HTTPS. Run <code>caddy trust</code> once so your system trusts that authority.</p>
+
+<h2 id="a-minimal-caddyfile">A minimal Caddyfile</h2>
+<p>Install Caddy (<code>brew install caddy</code> on macOS, or your package manager). Then create a <code>Caddyfile</code>:</p>
+<pre><code>app.shop.localhost {
+  tls internal
+  reverse_proxy localhost:3000
+}
+
+api.shop.localhost {
+  tls internal
+  reverse_proxy localhost:4000
+}</code></pre>
+<p>Run it and trust the local authority:</p>
+<pre><code>caddy trust
+caddy run --config Caddyfile</code></pre>
+<p><code>caddy trust</code> installs Caddy's root certificate in the system store (it may ask for your password). After that, <code>https://app.shop.localhost</code> and <code>https://api.shop.localhost</code> show a padlock. Caddy listens on ports 80 and 443, redirects HTTP to HTTPS, and sets the <code>X-Forwarded-*</code> headers for your upstream.</p>
+<p>Caddy picks an internal certificate on its own for <code>localhost</code> and IP addresses, but writing <code>tls internal</code> makes the intent clear for any other name.</p>
+
+<h2 id="one-host-several-services">One host, several services</h2>
+<p>You can also put everything behind a single name and split by path, which keeps cookies first-party and avoids CORS:</p>
+<pre><code>shop.localhost {
+  tls internal
+  handle_path /api/* {
+    reverse_proxy localhost:4000
+  }
+  handle {
+    reverse_proxy localhost:3000
+  }
+}</code></pre>
+<p><code>handle_path</code> removes the matched prefix before proxying, so the API sees <code>/orders</code>, not <code>/api/orders</code>. Use plain <code>handle</code> if your API expects the prefix. WebSocket upgrades pass through <code>reverse_proxy</code> without extra settings.</p>
+
+<h2 id="using-caddy-with-flisk">Using Caddy with Flisk</h2>
+<p>Flisk does not configure TLS itself (its printed URLs are <code>http://</code>), so Caddy sits in front of what Flisk starts. Which port you proxy to depends on how the project runs:</p>
+<ul>
+<li><strong>Local processes (every service has a <code>command</code>).</strong> Flisk prints <code>http://localhost:&lt;port&gt;</code> for each service. Point <code>reverse_proxy</code> at those ports, as in the Caddyfile above.</li>
+<li><strong>Docker and Tilt.</strong> Flisk starts Traefik and tries to publish it on host ports 80 and 443. If you also want Caddy on 80 and 443 you will hit a conflict, which is the usual "port already in use". Run Caddy on other ports, for example <code>app.shop.localhost:9443</code> as the site address, and proxy to the HTTP ingress port that <code>flisk networks</code> prints. Caddy passes the original <code>Host</code> header upstream by default, which Traefik needs to pick the right route.</li>
+</ul>
+<pre><code>app.shop.localhost:9443 {
+  tls internal
+  reverse_proxy localhost:80
+}</code></pre>
+<p>Replace <code>localhost:80</code> with the ingress port from <code>flisk networks</code> if Flisk fell back to 8080 or another port. If Flisk had to fall back to ports above 1024, nothing stops Caddy from using 443.</p>
+
+<h2 id="run-it-every-day-without-friction">Run it every day without friction</h2>
+<p>Keep the <code>Caddyfile</code> in your repository root, or in a folder of developer tooling, and start it with <code>caddy run --config Caddyfile</code> in a spare terminal. Use <code>caddy start</code> to run it in the background and <code>caddy stop</code> to end it. After you edit the file, <code>caddy reload --config Caddyfile</code> applies the change without dropping connections, and <code>caddy validate --config Caddyfile</code> catches typos before you reload.</p>
+<p>Format the file with <code>caddy fmt --overwrite Caddyfile</code>, because Caddy is strict about indentation and braces. If a site does not answer, run Caddy in the foreground and read its log: it prints one line per request with the upstream, the status and the duration, and a failed connection to your service shows as a <code>dial tcp</code> error that names the port it could not reach. That error nearly always means your service is not running yet, or it listens on a different port than the one in the file.</p>
+<p>Every developer on the team can run the same Caddyfile, because the certificates are created per machine and the file contains only names and ports. Commit the file, and let each person run <code>caddy trust</code> once.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The upstream still sees HTTP.</strong> Your app may build absolute links or redirects with <code>http://</code>. Read the <code>X-Forwarded-Proto</code> header, or configure the framework's trusted proxy setting. See the forwarded headers article.</li>
+<li><strong>Containers calling the HTTPS name.</strong> They do not trust Caddy's root, and <code>localhost</code> inside a container is the container itself. Call the service over the internal network instead.</li>
+<li><strong>Trust only on your machine.</strong> Caddy's root key lives in its data directory. Do not copy it to other computers.</li>
+<li><strong>Another process holds 443.</strong> Caddy will fail to start. Find the owner with <code>lsof -iTCP:443 -sTCP:LISTEN</code>.</li>
+<li><strong>Prefer mkcert plus nginx?</strong> That works too. Caddy is simply less work because it handles certificates itself.</li>
+</ul>
+
+<p>For the certificate side by itself, read <a href="/@odykyi/local-routing-and-https/mkcert-trusted-https-on-localhost/">trusted HTTPS on localhost with mkcert</a>. For the header details your upstream needs, see <a href="/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/">forwarded headers behind a local proxy</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does tls internal do in Caddy?</summary><p>It tells Caddy to issue the certificate from its own local certificate authority instead of asking a public CA such as Let&#39;s Encrypt. Run caddy trust so your system accepts that authority.</p></details><details><summary>Can Caddy and Flisk run at the same time?</summary><p>Yes, if they do not fight over ports. In the Docker path Flisk&#39;s Traefik prefers host ports 80 and 443, so run Caddy on different ports, or proxy to the ports of local-process services.</p></details><details><summary>Do I need to change my app to use Caddy?</summary><p>Usually not. Your app keeps serving plain HTTP. Check that it respects X-Forwarded-Proto if it builds absolute URLs or redirects.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Local URLs, routing and HTTPS</span></div>
+<div class="rgrid"><a href="/@odykyi/local-routing-and-https/mkcert-trusted-https-on-localhost/"><span class="lbl">Guide</span><b>How to get trusted HTTPS on localhost with mkcert</b><span>A self-signed certificate gives you a browser warning. A certificate from your own local authority gives you a padlock.</span></a><a href="/@odykyi/local-routing-and-https/forwarded-headers-behind-local-proxy/"><span class="lbl">Guide</span><b>Why redirects go to http or the wrong port behind a proxy</b><span>Your app sees the proxy, not the browser. Forwarded headers are how it learns the truth, if you tell it to believe them.</span></a><a href="/@odykyi/local-routing-and-https/websockets-through-a-local-proxy/"><span class="lbl">Guide</span><b>How to proxy WebSockets through a local reverse proxy</b><span>HTTP works through your proxy, but the socket closes at once. The cause is almost always a missing Upgrade header.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
