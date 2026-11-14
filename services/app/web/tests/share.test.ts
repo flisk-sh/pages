@@ -18,7 +18,9 @@ describe("the share page", () => {
 
 	it("counts visits like every page, and the policy lets the script and its beacon through", async () => {
 		const html = await (await get("/share")).text();
-		expect(html).toContain("script-src 'self' https://flisk.si https://flisk.sh;");
+		expect(html).toContain(
+			"script-src 'self' https://flisk.si https://flisk.sh;",
+		);
 		expect(html).toContain("connect-src https://analytics.flisk.si;");
 		expect(html).toContain(
 			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script>',
