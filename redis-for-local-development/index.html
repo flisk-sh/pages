@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Redis for local development</title>
+<meta name="description" content="Run Redis in Docker with a pinned image and a volume, then connect from your code. The Flisk cache resource adds REDIS_URL to every service that depends on it.">
+<meta name="keywords" content="redis local development, redis docker, run redis locally, REDIS_URL local, redis-cli ping">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/local-database-guide/redis-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Redis for local development">
+<meta property="og:description" content="Run Redis in Docker with a pinned image and a volume, then connect from your code. The Flisk cache resource adds REDIS_URL to every service that depends on it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/local-database-guide/redis-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Redis for local development","description":"Run Redis in Docker with a pinned image and a volume, then connect from your code. The Flisk cache resource adds REDIS_URL to every service that depends on it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/local-database-guide/redis-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/local-database-guide/redis-for-local-development/","keywords":"redis local development, redis docker, run redis locally, REDIS_URL local, redis-cli ping","wordCount":751,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Databases in local development","item":"https://pages.flisk.si/@odykyi/local-database-guide/"},{"@type":"ListItem","position":3,"name":"How to run Redis for local development","item":"https://pages.flisk.si/@odykyi/local-database-guide/redis-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What URL does my service use for Redis in Flisk?","acceptedAnswer":{"@type":"Answer","text":"Services that list the cache resource in dependsOn receive REDIS_URL, which is redis://cache:6379 by default. Read it from the environment."}},{"@type":"Question","name":"Can I reach Flisk's Redis from redis-cli on my laptop?","acceptedAnswer":{"@type":"Answer","text":"Not by default. The documented behaviour is that Redis is not published to the host. Run redis-cli inside the container with docker exec."}},{"@type":"Question","name":"Does Redis keep data after flisk down?","acceptedAnswer":{"@type":"Answer","text":"Yes, the cache-data volume survives flisk down. Only flisk down --purge deletes it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/local-database-guide/">Databases in local development</a></div>
+<section class="hero"><div><div class="lbl">Databases in local development</div><h1>How to run Redis for local development</h1><p class="dek">Redis is a single small container. The part worth getting right is the address your code uses, which differs inside and outside Docker.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-general-approach">The general approach</a></li><li><a href="#inside-docker-the-host-is-not-localhost">Inside Docker, the host is not localhost</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#using-redis-from-code">Using Redis from code</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-it">When not to use it</a></li></ol></nav></aside>
+<article><p>Run Redis as a container, pin the image version, and give your code a <code>REDIS_URL</code> instead of hard-coding <code>localhost</code>. For one service on your machine, <code>docker run -p 127.0.0.1:6379:6379 redis:7.4-alpine</code> is enough. For several services, run Redis next to them on the same Docker network and use its service name as the host.</p>
+
+<h2 id="the-general-approach">The general approach</h2>
+<p>The simplest start:</p>
+<pre><code>docker run -d --name dev-redis \
+  -p 127.0.0.1:6379:6379 \
+  -v dev_redis_data:/data \
+  redis:7.4-alpine</code></pre>
+<p>Check it with <code>docker exec dev-redis redis-cli ping</code>, which should print <code>PONG</code>. Your URL is <code>redis://127.0.0.1:6379</code>.</p>
+<p>The volume only matters if you want data to outlive the container. Redis writes snapshots to <code>/data</code>, so a mounted volume keeps them. If you use Redis purely as a cache, you can skip the volume and treat an empty Redis as normal. If you use it for a job queue, losing it means losing queued jobs, so keep the volume.</p>
+<p>Binding to <code>127.0.0.1</code> keeps the port off your network. A default Redis container has no password, so an open port would let anyone who can reach it read and write your keys.</p>
+
+<h2 id="inside-docker-the-host-is-not-localhost">Inside Docker, the host is not localhost</h2>
+<p>This is the usual source of "connection refused". When your API runs in a container, <code>localhost</code> means that container, not Redis and not your laptop. Containers on the same Compose network reach each other by service name, so the URL becomes <code>redis://cache:6379</code> when the Redis service is called <code>cache</code>. Read the address from an environment variable and set it differently for each place the code runs.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Create Redis as a resource in a stack:</p>
+<pre><code>flisk resource cache --type database --framework redis --stack shop --yes</code></pre>
+<p>The generated <code>service.json</code> describes a bring-your-own container:</p>
+<pre><code>{
+  "appName": "cache",
+  "appType": "bring-your-own",
+  "framework": "redis",
+  "port": 6379,
+  "image": "redis:7.4-alpine",
+  "exposeViaProxy": false,
+  "healthCheck": { "command": ["redis-cli", "ping"] },
+  "provides": { "REDIS_URL": "redis://cache:6379" }
+}</code></pre>
+<p>It also mounts a <code>cache-data</code> volume at <code>/data</code>. The important line is <code>provides</code>. Any service that lists <code>cache</code> in its <code>dependsOn</code> receives <code>REDIS_URL</code> in its environment, and Flisk starts Redis first and waits for the <code>redis-cli ping</code> health check:</p>
+<pre><code>"appName": "orders-api",
+"dependsOn": ["cache"]</code></pre>
+<p>Your code then reads <code>process.env.REDIS_URL</code> and nothing else. To use a different version, pass <code>--image redis:8-alpine</code> when you create the resource. Run <code>flisk up shop</code> to start the stack.</p>
+<blockquote><p>Redis is not published to your host and has no password. Flisk does not route it through Traefik, and the docs only publish the web interfaces of other database frameworks on 127.0.0.1. So <code>redis-cli</code> on your laptop cannot reach it by default. Use <code>docker exec</code> into the container instead, and never put a secret in <code>provides</code>, because that value lands in plain text in the generated files.</p></blockquote>
+<p>To look inside, run Redis commands in the container. Its name is generated from the project, so list it first with <code>docker ps --filter name=cache</code>, then run <code>docker exec -it NAME redis-cli</code>.</p>
+
+<h2 id="using-redis-from-code">Using Redis from code</h2>
+<p>Any client library takes the URL as one string, so the connection code is the same locally and elsewhere. With the Node <code>redis</code> package it is <code>createClient({ url: process.env.REDIS_URL })</code>, and with Python it is <code>redis.Redis.from_url(os.environ["REDIS_URL"])</code>. Fail at startup if the variable is missing, and set a short connect timeout so a stopped Redis gives you an error in seconds and not a hung request.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A stale cache after a code change.</strong> Old keys outlive your deploy. Flush with <code>redis-cli FLUSHALL</code> when you suspect it, on a local instance only.</li>
+<li><strong>Running one Redis for two projects.</strong> Keys from both mix. Use one instance per project, or separate numbered databases with <code>redis://host:6379/1</code>, and remember that numbered databases are not available in cluster mode.</li>
+<li><strong>Queues and workers.</strong> If a worker and an API share Redis, both need the same <code>REDIS_URL</code>. See <a href="/@odykyi/workers-and-queues/worker-and-api-sharing-a-database/">worker and API sharing a database</a> for the same idea applied to Postgres.</li>
+<li><strong>Persistence surprises.</strong> <code>flisk down</code> keeps volumes and <code>flisk down --purge</code> removes them, so a purge empties your queue as well. The volume rules are in <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keep volumes between runs</a>.</li>
+</ul>
+
+<h2 id="when-not-to-use-it">When not to use it</h2>
+<p>If you only need a key-value store for one process, an in-memory map in your code is simpler. If your production Redis is a managed service with TLS and a password, test that path separately, because a plain local Redis will not show those failures.</p>
+
+<p>Next, see how services share data in <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars locally</a>, which uses the same dependsOn mechanism for Postgres.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What URL does my service use for Redis in Flisk?</summary><p>Services that list the cache resource in dependsOn receive REDIS_URL, which is redis://cache:6379 by default. Read it from the environment.</p></details><details><summary>Can I reach Flisk&#39;s Redis from redis-cli on my laptop?</summary><p>Not by default. The documented behaviour is that Redis is not published to the host. Run redis-cli inside the container with docker exec.</p></details><details><summary>Does Redis keep data after flisk down?</summary><p>Yes, the cache-data volume survives flisk down. Only flisk down --purge deletes it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Databases in local development</span></div>
+<div class="rgrid"><a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/"><span class="lbl">Guide</span><b>DATABASE_URL and env vars in local development</b><span>Keep the values in one place, read them in code, and never copy a URL between environments. Here is how that looks with and without Flisk.</span></a><a href="/@odykyi/local-database-guide/run-postgres-locally-for-development/"><span class="lbl">Guide</span><b>How to run Postgres locally for development</b><span>You need a real Postgres that starts fast, keeps its data and does not fight with other projects. Here is how to get one, with and without Flisk.</span></a><a href="/@odykyi/local-database-guide/one-database-per-service/"><span class="lbl">Guide</span><b>One database per service in local development</b><span>Sharing one database between services is quick and quietly couples them. Separate databases cost one extra command and keep the boundaries honest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
