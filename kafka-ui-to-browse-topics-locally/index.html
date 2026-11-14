@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kafka UI for local development: browse topics and messages</title>
+<meta name="description" content="Add a web UI to a local Kafka or Redpanda broker to browse topics, messages and consumer lag, with a Docker command and a Flisk webUi service.json.">
+<meta name="keywords" content="kafka ui local, kafbat kafka-ui docker, browse kafka topics, kafka web ui docker, redpanda console alternative">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kafka UI for local development: browse topics and messages">
+<meta property="og:description" content="Add a web UI to a local Kafka or Redpanda broker to browse topics, messages and consumer lag, with a Docker command and a Flisk webUi service.json.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Kafka UI for local development: browse topics and messages","description":"Add a web UI to a local Kafka or Redpanda broker to browse topics, messages and consumer lag, with a Docker command and a Flisk webUi service.json.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/","keywords":"kafka ui local, kafbat kafka-ui docker, browse kafka topics, kafka web ui docker, redpanda console alternative","wordCount":711,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"Kafka UI for local development: browse topics and messages","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which Kafka UI should I use locally?","acceptedAnswer":{"@type":"Answer","text":"Any of Kafbat UI, Redpanda Console or AKHQ works with a Kafka-compatible broker. Pick one with a single container and a short config. Kafbat UI needs only a cluster name and a bootstrap address."}},{"@type":"Question","name":"Why is webUi true needed in the Flisk manifest?","acceptedAnswer":{"@type":"Answer","text":"A routed bring-your-own container is served under /api/NAME with that prefix removed. A web app that serves pages and assets from / breaks there, so webUi true gives it its own host name instead."}},{"@type":"Question","name":"Can the UI delete or change data?","acceptedAnswer":{"@type":"Answer","text":"It can create topics and delete messages unless you configure it as read-only. Turn read-only on when several developers share one broker."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>Kafka UI for local development: browse topics and messages</h1><p class="dek">A browser view of your topics saves a lot of terminal commands. Kafbat UI is one container and two environment variables.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-ui-at-all">Why a UI at all</a></li><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#keep-it-read-only-if-you-share-the-stack">Keep it read-only if you share the stack</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run a Kafka web UI next to the broker. <a href="https://github.com/kafbat/kafka-ui">Kafbat UI</a> (the maintained fork of the Provectus Kafka UI) lists topics, partitions, consumer groups and messages, and can publish a test message, all from a browser. You point it at the broker's internal address with two environment variables.</p>
+
+<h2 id="why-a-ui-at-all">Why a UI at all</h2>
+<p>Command-line tools show everything, but they are slow when the question is "what is in that topic and where is my consumer group?" A UI answers that in two clicks:</p>
+<ul>
+<li>See which topics exist, their partition counts and configs.</li>
+<li>Browse messages by partition and offset, with key, value and headers decoded.</li>
+<li>Watch consumer group lag next to the topic.</li>
+<li>Publish a hand-written message to trigger a consumer.</li>
+</ul>
+<p>Choices are plentiful. Redpanda Console works with any Kafka-compatible broker. AKHQ is another open-source option. Kafbat UI is a single container with a short configuration, which is why it is used here. The same pattern applies to the others: image, broker address, a web port.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<p>If your broker already publishes a port to your machine, one command is enough on Linux, macOS and Windows. The UI container needs to reach the broker's published address, not <code>127.0.0.1</code>, which would point back at the UI itself:</p>
+<pre><code>docker run --rm -p 127.0.0.1:8080:8080 \
+  -e KAFKA_CLUSTERS_0_NAME=local \
+  -e KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=host.docker.internal:29092 \
+  kafbat/kafka-ui:v1.5.0</code></pre>
+<p>The broker must advertise an address the UI can reach. <code>host.docker.internal</code> only works if the broker advertises it, which is a good reason to put the UI on the same Docker network as the broker and use its service name. That is what the next section does. See <a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/">Kafka advertised listeners</a> for why.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>With the broker from <a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">the KRaft article</a> already in the <code>streaming</code> stack, add the UI as a bring-your-own web UI:</p>
+<pre><code>flisk resource ui --type bring-your-own --image kafbat/kafka-ui:v1.5.0 \
+  --stack streaming --yes</code></pre>
+<p>Then set <code>services/streaming/ui/service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "ui",
+  "appType": "bring-your-own",
+  "stack": "streaming",
+  "port": 8080,
+  "image": "kafbat/kafka-ui:v1.5.0",
+  "webUi": true,
+  "healthCheckPath": "/actuator/health",
+  "env": {
+    "KAFKA_CLUSTERS_0_NAME": "local",
+    "KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS": "broker:9092"
+  },
+  "dependsOn": [{ "name": "broker", "condition": "service_healthy" }]
+}</code></pre>
+<p>The pieces that matter:</p>
+<ul>
+<li><code>"webUi": true</code> tells Flisk the container serves pages from <code>/</code>. It then gets its own host name, <code>ui.&lt;project&gt;.localhost</code>, with no path prefix stripped. Without it, Flisk would route the container as an API at <code>/api/ui</code>, and the UI's assets would 404. <code>flisk up</code> prints the real address, and <code>*.localhost</code> names resolve to your machine in browsers without an <code>/etc/hosts</code> entry.</li>
+<li><code>broker:9092</code> is the internal listener. The UI runs on the same Docker network as the broker, so the service name resolves.</li>
+<li>The health path <code>/actuator/health</code> is the Spring Boot health endpoint that the image exposes.</li>
+</ul>
+<pre><code>flisk config verify
+flisk up streaming</code></pre>
+<p><code>flisk config verify</code> accepted this manifest in CLI 1.4.57. I did not start the UI container while writing this page, so the environment variable names come from the Kafbat documentation. If the page loads but shows no cluster, check <code>flisk logs --service ui</code> for a connection error and compare the address with the broker's internal listener.</p>
+
+<h2 id="keep-it-read-only-if-you-share-the-stack">Keep it read-only if you share the stack</h2>
+<p>A UI that can create topics and delete messages is a handy tool and a way to break a shared test setup. Kafbat reads a <code>KAFKA_CLUSTERS_0_READONLY</code> setting for that case. Add it to <code>env</code> with the value <code>"true"</code> when other people use the same broker. Flisk publishes the UI on a <code>*.localhost</code> host, so it is reachable from your own machine only unless you opt in to something wider.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Empty message view.</strong> The UI browses a topic from an offset. Choose "from beginning" if you do not see anything, and check you are looking at the right partition.</li>
+<li><strong>Serde.</strong> Messages are shown as strings by default. JSON is readable. Avro or Protobuf need a schema registry configured, which this setup does not include.</li>
+<li><strong>Memory.</strong> The UI is a JVM application, so it adds to the broker's footprint. Start it only when you need it, or use <code>profiles</code> to keep it out of the default run. See <a href="/@odykyi/microservices-local-dev/start-only-the-services-you-need/">start only the services you need</a>.</li>
+</ul>
+
+<p>A UI is the quickest way to look. For scripts and tests you want the terminal tools instead: <a href="/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/">read Kafka messages from the command line</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which Kafka UI should I use locally?</summary><p>Any of Kafbat UI, Redpanda Console or AKHQ works with a Kafka-compatible broker. Pick one with a single container and a short config. Kafbat UI needs only a cluster name and a bootstrap address.</p></details><details><summary>Why is webUi true needed in the Flisk manifest?</summary><p>A routed bring-your-own container is served under /api/NAME with that prefix removed. A web app that serves pages and assets from / breaks there, so webUi true gives it its own host name instead.</p></details><details><summary>Can the UI delete or change data?</summary><p>It can create topics and delete messages unless you configure it as read-only. Turn read-only on when several developers share one broker.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/"><span class="lbl">Guide</span><b>How to read Kafka messages from the command line</b><span>You do not need application code to see what is in a topic. Three small tools print it, keys and offsets included.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/"><span class="lbl">Guide</span><b>Kafka advertised listeners: fix &quot;broker may not be available&quot;</b><span>The broker tells clients where to connect, and that address is wrong for where the client runs. Two listeners solve it.</span></a><a href="/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/"><span class="lbl">Guide</span><b>How to replay Kafka messages by resetting consumer offsets</b><span>The messages are still in the topic. Move the group&#39;s bookmark back and the consumer reads them again.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Kafka locally without ZooKeeper (KRaft mode)</title>
+<meta name="description" content="Run Apache Kafka 4 on your laptop in KRaft mode with the official Docker image: one container, two listeners, a named volume, and a Flisk service.json.">
+<meta name="keywords" content="run kafka locally, kafka without zookeeper, kafka kraft docker, apache/kafka docker compose, kafka local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Kafka locally without ZooKeeper (KRaft mode)">
+<meta property="og:description" content="Run Apache Kafka 4 on your laptop in KRaft mode with the official Docker image: one container, two listeners, a named volume, and a Flisk service.json.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Kafka locally without ZooKeeper (KRaft mode)","description":"Run Apache Kafka 4 on your laptop in KRaft mode with the official Docker image: one container, two listeners, a named volume, and a Flisk service.json.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/","keywords":"run kafka locally, kafka without zookeeper, kafka kraft docker, apache/kafka docker compose, kafka local development","wordCount":872,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"How to run Kafka locally without ZooKeeper (KRaft mode)","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Kafka still need ZooKeeper?","acceptedAnswer":{"@type":"Answer","text":"No. Kafka 4.0 removed ZooKeeper support. Every cluster runs in KRaft mode, where the brokers and controllers keep metadata in an internal Raft log."}},{"@type":"Question","name":"Can one container be both broker and controller?","acceptedAnswer":{"@type":"Answer","text":"Yes, for local development. Set process roles to broker,controller and give the controller its own listener. A production cluster usually separates the two roles."}},{"@type":"Question","name":"Why do I need replication factor 1?","acceptedAnswer":{"@type":"Answer","text":"A one-node cluster cannot place three replicas. The internal offsets and transaction topics default to three, so consumers fail until you lower them to 1."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>How to run Kafka locally without ZooKeeper (KRaft mode)</h1><p class="dek">ZooKeeper is gone from Kafka 4.0. Here is a single-node broker that your containers and your own tools can both reach.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-changed-with-zookeeper">What changed with ZooKeeper</a></li><li><a href="#the-fastest-way-one-docker-run">The fastest way: one docker run</a></li><li><a href="#a-broker-that-containers-and-your-laptop-can-both-reach">A broker that containers and your laptop can both reach</a></li><li><a href="#check-that-it-works">Check that it works</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run the official <code>apache/kafka</code> image. Since Kafka 4.0 there is no ZooKeeper: a broker runs in KRaft mode and keeps its cluster metadata in an internal Raft log. For local development that means one container, one process role pair (broker and controller) and no second service to start first.</p>
+
+<h2 id="what-changed-with-zookeeper">What changed with ZooKeeper</h2>
+<p>Older tutorials start a <code>zookeeper</code> container, then a <code>kafka</code> container that points at it with <code>KAFKA_ZOOKEEPER_CONNECT</code>. That setup is obsolete. Kafka 4.0 removed ZooKeeper support, and KRaft is the only mode. If a Compose file you found still lists ZooKeeper, it is pinned to an old Kafka version, and its settings will not carry over to a current image.</p>
+<p>In KRaft mode each node has a <code>process.roles</code> value. A production cluster usually runs dedicated controller nodes and separate brokers. On a laptop one node can hold both roles: <code>broker,controller</code>. That is what the config below does.</p>
+
+<h2 id="the-fastest-way-one-docker-run">The fastest way: one docker run</h2>
+<p>If you only want a broker for a quick experiment from your own machine, the image ships a default config that listens on port 9092 and advertises <code>localhost:9092</code>:</p>
+<pre><code>docker run --rm --name kafka -p 127.0.0.1:9092:9092 apache/kafka:4.2.2</code></pre>
+<p>Any client on your machine can now use <code>localhost:9092</code> as its bootstrap server. This stops working the moment another container needs to reach the broker, because the broker still tells every client to connect to <code>localhost</code>, which inside a different container is that container itself. The next section fixes that. The cause is explained in full in <a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/">Kafka advertised listeners</a>.</p>
+
+<h2 id="a-broker-that-containers-and-your-laptop-can-both-reach">A broker that containers and your laptop can both reach</h2>
+<p>Define two listeners: one named for the address other containers use (<code>broker:9092</code>) and one for your machine (<code>127.0.0.1:29092</code>), plus the controller listener that KRaft needs. Here is the same broker as a Flisk resource. Create it with the CLI, then edit the file:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk resource broker --type bring-your-own --image apache/kafka:4.2.2 \
+  --stack streaming --no-proxy --yes</code></pre>
+<p>Kafka is not one of Flisk's built-in queue frameworks (those are NATS and RabbitMQ), so this is a bring-your-own container: you supply the image and the settings, Flisk supplies start order, health checks, a named volume and logs. The command writes a basic <code>service.json</code> under <code>services/streaming/broker/</code>. Replace its contents with:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "broker",
+  "appType": "bring-your-own",
+  "stack": "streaming",
+  "port": 9092,
+  "exposeViaProxy": false,
+  "image": "apache/kafka:4.2.2",
+  "env": {
+    "KAFKA_NODE_ID": "1",
+    "KAFKA_PROCESS_ROLES": "broker,controller",
+    "KAFKA_LISTENERS": "INTERNAL://:9092,EXTERNAL://:29092,CONTROLLER://:9093",
+    "KAFKA_ADVERTISED_LISTENERS": "INTERNAL://broker:9092,EXTERNAL://127.0.0.1:29092",
+    "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT",
+    "KAFKA_INTER_BROKER_LISTENER_NAME": "INTERNAL",
+    "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+    "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@localhost:9093",
+    "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
+    "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1",
+    "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1",
+    "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS": "0"
+  },
+  "healthCheck": {
+    "command": ["/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"],
+    "startPeriod": 30
+  },
+  "extraPorts": [{ "port": 29092 }],
+  "volumes": [{ "source": "broker-data", "target": "/var/lib/kafka/data" }],
+  "provides": { "KAFKA_BROKERS": "broker:9092" }
+}</code></pre>
+<p>What the fields do:</p>
+<ul>
+<li><code>env</code> holds the Kafka settings. The official image turns each <code>KAFKA_*</code> variable into a broker property, so <code>KAFKA_NODE_ID</code> becomes <code>node.id</code>.</li>
+<li><code>healthCheck.command</code> runs inside the container and exits 0 once the broker answers. Services that list <code>broker</code> in <code>dependsOn</code> wait for it.</li>
+<li><code>extraPorts</code> publishes 29092 on <code>127.0.0.1</code> only, so your editor and CLI tools can connect and your network cannot.</li>
+<li><code>volumes</code> keeps the log directory in a named volume that survives <code>flisk down</code>.</li>
+<li><code>provides</code> gives every service that depends on the broker a <code>KAFKA_BROKERS</code> variable set to <code>broker:9092</code>. It is a connection setting, never a secret.</li>
+</ul>
+<p>The <code>--port</code> flag of <code>flisk resource</code> only accepts 4000 to 5999 for this resource type, so set <code>"port": 9092</code> by editing the file. In CLI 1.4.57, <code>flisk config verify</code> accepts it. Then:</p>
+<pre><code>flisk config verify
+flisk up streaming
+flisk status</code></pre>
+
+<h2 id="check-that-it-works">Check that it works</h2>
+<p><code>flisk run</code> executes a command inside a running service, so you can use the Kafka scripts that ship in the image without installing anything:</p>
+<pre><code>flisk run broker -- /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --create --topic smoke --partitions 1 --replication-factor 1
+flisk run broker -- /opt/kafka/bin/kafka-topics.sh \
+  --bootstrap-server localhost:9092 --list
+flisk logs --service broker --tail 50</code></pre>
+<p>I validated the manifest with <code>flisk config verify</code> but did not start this broker while writing this page. The Kafka environment variables are the ones documented for the official image. If the broker exits at startup, <code>flisk logs --service broker</code> shows why, and the usual cause is a mistyped listener name.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Heap size.</strong> Kafka's start script gives the JVM a 1 GB heap by default. On a small machine add <code>"KAFKA_HEAP_OPTS": "-Xmx512m -Xms512m"</code> to <code>env</code>.</li>
+<li><strong>Replication factors.</strong> A single node cannot hold three replicas. The three <code>KAFKA_*_REPLICATION_FACTOR</code> and <code>MIN_ISR</code> settings above are set to 1 for that reason. Without them, consumer groups fail because the internal offsets topic cannot be created.</li>
+<li><strong>Stale volume.</strong> If you change the node id or the quorum voters after the first start, the old metadata in the volume no longer matches. Stop the stack and remove the volume (see <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keep volumes between runs, or reset them</a>).</li>
+<li><strong>Not a production layout.</strong> One node with both roles has no fault tolerance. Do not copy it to a server.</li>
+</ul>
+
+<p>With a broker running, the next thing you need is topics. <a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">Create Kafka topics automatically on startup</a> shows how to do it with a one-shot job. If you are not sure Kafka is the right broker for a laptop, read <a href="/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/">Redpanda or Kafka for local development</a> first.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Kafka still need ZooKeeper?</summary><p>No. Kafka 4.0 removed ZooKeeper support. Every cluster runs in KRaft mode, where the brokers and controllers keep metadata in an internal Raft log.</p></details><details><summary>Can one container be both broker and controller?</summary><p>Yes, for local development. Set process roles to broker,controller and give the controller its own listener. A production cluster usually separates the two roles.</p></details><details><summary>Why do I need replication factor 1?</summary><p>A one-node cluster cannot place three replicas. The internal offsets and transaction topics default to three, so consumers fail until you lower them to 1.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/"><span class="lbl">Guide</span><b>Kafka advertised listeners: fix &quot;broker may not be available&quot;</b><span>The broker tells clients where to connect, and that address is wrong for where the client runs. Two listeners solve it.</span></a><a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/"><span class="lbl">Guide</span><b>How to create Kafka topics automatically on startup</b><span>Auto-created topics have one partition and no settings. A short init job creates the real ones before any service connects.</span></a><a href="/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/"><span class="lbl">Guide</span><b>Redpanda or Kafka for local development: which one to run</b><span>Both speak the Kafka protocol. The practical question is which one matches production and fits in your laptop&#39;s memory.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

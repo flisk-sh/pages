@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kafka integration tests against a local broker</title>
+<meta name="description" content="Write stable Kafka integration tests on one shared local broker: a unique topic and group per test, wait for the group join, poll with a deadline, and clean up.">
+<meta name="keywords" content="kafka integration tests, kafka testcontainers alternative, kafkajs test example, flaky kafka consumer test">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kafka integration tests against a local broker">
+<meta property="og:description" content="Write stable Kafka integration tests on one shared local broker: a unique topic and group per test, wait for the group join, poll with a deadline, and clean up.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Kafka integration tests against a local broker","description":"Write stable Kafka integration tests on one shared local broker: a unique topic and group per test, wait for the group join, poll with a deadline, and clean up.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/","keywords":"kafka integration tests, kafka testcontainers alternative, kafkajs test example, flaky kafka consumer test","wordCount":864,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"Kafka integration tests against a local broker","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use Testcontainers or a shared local broker for Kafka tests?","acceptedAnswer":{"@type":"Answer","text":"Use Testcontainers when the test must control the broker, for example to stop it. For tests of your own producers and consumers, one shared broker with a unique topic and group per test is faster."}},{"@type":"Question","name":"Why is my Kafka consumer test flaky?","acceptedAnswer":{"@type":"Answer","text":"Usually the message is produced before the consumer has joined its group, and the group starts from the latest offset. Wait for the group join event and use fromBeginning true."}},{"@type":"Question","name":"How do I keep tests from seeing each other's messages?","acceptedAnswer":{"@type":"Answer","text":"Give every test its own topic and its own consumer group id, for example with a random suffix, and delete the topic at the end."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>Kafka integration tests against a local broker</h1><p class="dek">A shared local broker is faster than a container per test. Unique names and a join wait keep the tests from flaking.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#two-ways-to-get-a-broker-in-tests">Two ways to get a broker in tests</a></li><li><a href="#start-the-broker-with-the-stack">Start the broker with the stack</a></li><li><a href="#a-test-helper-with-unique-names">A test helper with unique names</a></li><li><a href="#wait-for-the-consumer-to-join-before-producing">Wait for the consumer to join before producing</a></li><li><a href="#test-the-handler-without-kafka-at-all">Test the handler without Kafka at all</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use one local broker that is already running and give every test its own topic and its own consumer group. Tests then run in parallel, never see each other's messages, and skip the slow part of starting a Kafka container for each test class. Wait for the consumer to join its group before you produce, and poll for the result with a deadline instead of sleeping.</p>
+
+<h2 id="two-ways-to-get-a-broker-in-tests">Two ways to get a broker in tests</h2>
+<table>
+<thead><tr><th></th><th>Container per test run</th><th>One shared local broker</th></tr></thead>
+<tbody>
+<tr><td>Isolation</td><td>Perfect, nothing is shared</td><td>By unique topic and group names</td></tr>
+<tr><td>Start cost</td><td>Seconds to tens of seconds each run</td><td>Paid once, when the stack starts</td></tr>
+<tr><td>Setup in the test</td><td>A library such as Testcontainers</td><td>An address from an environment variable</td></tr>
+<tr><td>Same broker as development</td><td>No</td><td>Yes</td></tr>
+</tbody>
+</table>
+<p><a href="https://testcontainers.com">Testcontainers</a> is a good fit when a test must control the broker itself, for example by killing it. For tests of your own producers and consumers a shared broker is faster and matches what you run by hand. Both work, and you can mix them.</p>
+
+<h2 id="start-the-broker-with-the-stack">Start the broker with the stack</h2>
+<p>Use the broker and the <a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">topics job</a> from earlier in this series. Tests then read the address from the environment:</p>
+<pre><code>flisk up streaming
+export KAFKA_BROKERS=localhost:29092
+npm test</code></pre>
+<p>The tests run on your machine, so they use the external listener. In CI the same two lines work after the stack is up. See <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">running a multi-service stack in GitHub Actions</a> and <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against a real local stack</a> for the surrounding pipeline.</p>
+
+<h2 id="a-test-helper-with-unique-names">A test helper with unique names</h2>
+<p>Create the topic and group inside the test with a random suffix. Here is a small helper for kafkajs:</p>
+<pre><code>// kafka-test.js
+import { Kafka } from "kafkajs";
+import { randomUUID } from "node:crypto";
+
+export async function setup(partitions = 1) {
+  const kafka = new Kafka({
+    clientId: "test",
+    brokers: (process.env.KAFKA_BROKERS || "localhost:29092").split(","),
+  });
+  const suffix = randomUUID().slice(0, 8);
+  const topic = `test-orders-${suffix}`;
+  const groupId = `test-group-${suffix}`;
+
+  const admin = kafka.admin();
+  await admin.connect();
+  await admin.createTopics({ topics: [{ topic, numPartitions: partitions }] });
+
+  return {
+    kafka, topic, groupId,
+    async cleanup() {
+      await admin.deleteTopics({ topics: [topic] });
+      await admin.disconnect();
+    },
+  };
+}</code></pre>
+<p>The default replication factor works because the broker has one node. Creating the topic explicitly avoids the auto-create delay and gives you the partition count you want to test.</p>
+
+<h2 id="wait-for-the-consumer-to-join-before-producing">Wait for the consumer to join before producing</h2>
+<p>The most common flaky Kafka test produces a message right after calling <code>run</code> and then waits for it. If the consumer has not yet been assigned its partitions, and the group starts from the latest offset, the message is sent before the consumer starts reading and is never seen. Wait for the join event first:</p>
+<pre><code>// order.test.js
+import { test } from "node:test";
+import assert from "node:assert";
+import { setup } from "./kafka-test.js";
+
+test("consumer handles an order", async () =&gt; {
+  const t = await setup();
+  const seen = [];
+  const consumer = t.kafka.consumer({ groupId: t.groupId });
+  const joined = new Promise((r) =&gt; consumer.on(consumer.events.GROUP_JOIN, r));
+
+  await consumer.connect();
+  await consumer.subscribe({ topic: t.topic, fromBeginning: true });
+  await consumer.run({ eachMessage: async ({ message }) =&gt; seen.push(message.value.toString()) });
+  await joined;
+
+  const producer = t.kafka.producer();
+  await producer.connect();
+  await producer.send({ topic: t.topic, messages: [{ key: "o-1", value: '{"id":"o-1"}' }] });
+
+  await waitFor(() =&gt; seen.length === 1, 10000);
+  assert.deepEqual(JSON.parse(seen[0]), { id: "o-1" });
+
+  await producer.disconnect();
+  await consumer.disconnect();
+  await t.cleanup();
+});
+
+async function waitFor(check, ms) {
+  const end = Date.now() + ms;
+  while (Date.now() &lt; end) {
+    if (check()) return;
+    await new Promise((r) =&gt; setTimeout(r, 100));
+  }
+  throw new Error("timed out waiting for the condition");
+}</code></pre>
+<p>Using <code>fromBeginning: true</code> is a second guard, so even a message that arrives before the assignment is read. Both together make the test stable. Replace <code>node:test</code> with Jest or Vitest as you like, the shape stays the same.</p>
+
+<h2 id="test-the-handler-without-kafka-at-all">Test the handler without Kafka at all</h2>
+<p>Most of your logic needs no broker. If you split the handler out as in <a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/">the local consumer article</a>, a plain unit test calls it with a fake <code>save</code>. Keep the broker tests for the wiring: serialization, keys, headers and what happens on a failing message. A handful of those cover a lot.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Fixed sleeps.</strong> <code>sleep(2000)</code> is too short on a busy laptop and too long everywhere else. Poll with a deadline.</li>
+<li><strong>Shared group ids.</strong> Two tests with the same group split the partitions between them and each misses messages. Unique group per test.</li>
+<li><strong>Leftover topics.</strong> A suite that crashes before cleanup leaves topics behind. The <code>test-</code> prefix lets you list and delete them with <code>kafka-topics.sh --list</code> and <code>--delete</code>, and a fresh volume clears everything.</li>
+<li><strong>Retention and size.</strong> Local test topics are tiny, but a loop that produces millions of messages fills the broker's volume. Delete topics at the end of each test.</li>
+<li><strong>Key order across partitions.</strong> A test that asserts order across several partitions will fail sometimes. Use one partition for such a test, or assert per key, as in <a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/">keys, partitions and message order</a>.</li>
+</ul>
+<p>I did not run this test file against a broker while writing it, so treat the event name and the topic options as the kafkajs API as documented, and run it once on your machine before relying on it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use Testcontainers or a shared local broker for Kafka tests?</summary><p>Use Testcontainers when the test must control the broker, for example to stop it. For tests of your own producers and consumers, one shared broker with a unique topic and group per test is faster.</p></details><details><summary>Why is my Kafka consumer test flaky?</summary><p>Usually the message is produced before the consumer has joined its group, and the group starts from the latest offset. Wait for the group join event and use fromBeginning true.</p></details><details><summary>How do I keep tests from seeing each other&#39;s messages?</summary><p>Give every test its own topic and its own consumer group id, for example with a random suffix, and delete the topic at the end.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/"><span class="lbl">Guide</span><b>How to test a Kafka consumer on your machine</b><span>Keep the handler separate, point the consumer at a broker on your machine, and feed it messages from the terminal.</span></a><a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/"><span class="lbl">Guide</span><b>How to create Kafka topics automatically on startup</b><span>Auto-created topics have one partition and no settings. A short init job creates the real ones before any service connects.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/"><span class="lbl">Guide</span><b>Kafka keys, partitions and message order, tested locally</b><span>Order is per partition and the key picks the partition. Three short experiments on a local topic make that concrete.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

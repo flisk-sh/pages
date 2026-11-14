@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to read Kafka messages from the command line</title>
+<meta name="description" content="Read and send Kafka messages from a terminal with the console consumer, kcat or rpk, showing keys, partitions and offsets, and run it through Flisk run.">
+<meta name="keywords" content="read kafka messages command line, kafka-console-consumer from beginning, kcat consumer examples, rpk topic consume">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to read Kafka messages from the command line">
+<meta property="og:description" content="Read and send Kafka messages from a terminal with the console consumer, kcat or rpk, showing keys, partitions and offsets, and run it through Flisk run.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to read Kafka messages from the command line","description":"Read and send Kafka messages from a terminal with the console consumer, kcat or rpk, showing keys, partitions and offsets, and run it through Flisk run.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/","keywords":"read kafka messages command line, kafka-console-consumer from beginning, kcat consumer examples, rpk topic consume","wordCount":734,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"How to read Kafka messages from the command line","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I read a topic from the beginning?","acceptedAnswer":{"@type":"Answer","text":"Pass --from-beginning to kafka-console-consumer.sh, -o beginning to kcat, or --offset start to rpk topic consume."}},{"@type":"Question","name":"Why does kcat -L show an address I cannot reach?","acceptedAnswer":{"@type":"Answer","text":"That is the broker's advertised listener. The broker tells clients where to connect, and an address that only works inside Docker fails from your machine. Add a second listener for the host."}},{"@type":"Question","name":"Does reading with the console consumer affect my application?","acceptedAnswer":{"@type":"Answer","text":"Not unless you pass its group id. Without --group the tool uses a throwaway group and leaves your committed offsets alone."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>How to read Kafka messages from the command line</h1><p class="dek">You do not need application code to see what is in a topic. Three small tools print it, keys and offsets included.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#option-1-the-console-consumer-in-the-broker">Option 1: the console consumer in the broker</a></li><li><a href="#option-2-kcat-from-your-machine">Option 2: kcat from your machine</a></li><li><a href="#option-3-rpk-on-redpanda">Option 3: rpk on Redpanda</a></li><li><a href="#which-one-to-use">Which one to use</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Read messages with the console consumer that ships inside the Kafka image, or with <code>kcat</code> from your machine. Both print what is in a topic, and both can start from the oldest message, so you can check what a producer really sent without writing any code.</p>
+
+<h2 id="option-1-the-console-consumer-in-the-broker">Option 1: the console consumer in the broker</h2>
+<p>Nothing to install. The tools live in the broker container, so run them there. Inside it the broker is at <code>localhost:9092</code> (the internal listener from <a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">the KRaft article</a>):</p>
+<pre><code>flisk run broker -- /opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 --topic orders --from-beginning \
+  --property print.key=true --property print.partition=true \
+  --property print.offset=true --timeout-ms 5000</code></pre>
+<p>Without Flisk, put <code>docker exec -it</code> and the container name in front of the same command. What the flags do:</p>
+<ul>
+<li><code>--from-beginning</code> starts at the oldest retained message. Without it the consumer waits for new messages only.</li>
+<li><code>print.key</code>, <code>print.partition</code> and <code>print.offset</code> add those fields to each line, which is what you need to debug ordering.</li>
+<li><code>--timeout-ms 5000</code> exits after five quiet seconds, so the command is safe in a script. Without it, it runs until you press Ctrl-C.</li>
+<li><code>--max-messages 10</code> stops after ten messages.</li>
+<li><code>--partition 2 --offset 40</code> reads one partition from one offset.</li>
+</ul>
+<p>A console consumer with no <code>--group</code> gets a throwaway group, so it does not move the bookmark of your real consumer. Adding <code>--group NAME</code> would, so do not pass the application's group by accident.</p>
+
+<h2 id="option-2-kcat-from-your-machine">Option 2: kcat from your machine</h2>
+<p><a href="https://github.com/edenhill/kcat">kcat</a> (formerly kafkacat) is a small client you install once, for example with <code>brew install kcat</code>. It connects the way your own code does, so it uses the external listener:</p>
+<pre><code># list topics, partitions and the broker's advertised address
+kcat -b localhost:29092 -L
+
+# read everything and exit at the end of the topic
+kcat -b localhost:29092 -t orders -C -o beginning -e \
+  -f '%t[%p]@%o key=%k value=%s\n'
+
+# send two keyed messages
+printf 'o-1:{"id":"o-1"}\no-2:{"id":"o-2"}\n' | kcat -b localhost:29092 -t orders -P -K:</code></pre>
+<p><code>-L</code> is the most useful first check. If the broker list it prints shows an address your machine cannot reach, you have the problem described in <a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/">Kafka advertised listeners</a>, and kcat shows it in one line instead of a stack trace from your application. <code>-C</code> consumes, <code>-P</code> produces, <code>-o beginning</code> picks the start, <code>-e</code> exits at the end, <code>-K:</code> sets the key delimiter, and <code>-f</code> is a format string with <code>%k</code> key, <code>%s</code> value, <code>%p</code> partition and <code>%o</code> offset.</p>
+
+<h2 id="option-3-rpk-on-redpanda">Option 3: rpk on Redpanda</h2>
+<p>With a Redpanda broker from <a href="/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/">the Kafka or Redpanda comparison</a>, the <code>rpk</code> tool is in the image:</p>
+<pre><code>flisk run broker -- rpk topic consume orders --offset start --num 10 --format '%p %o %k %v\n'
+echo '{"id":"o-3"}' | flisk run broker -- rpk topic produce orders --key o-3</code></pre>
+<p>The service is named <code>broker</code> here as in the other pages, so use whatever name your <code>service.json</code> has. I did not run these on a live broker, and the <code>rpk</code> format verbs are worth a quick look at <code>rpk topic consume --help</code> on your version.</p>
+
+<h2 id="which-one-to-use">Which one to use</h2>
+<p>For a one-off look, the console consumer is enough. For anything you will repeat in a script or a bug report, kcat with an explicit format string gives output that you can paste into an issue and compare line by line.</p>
+<table>
+<thead><tr><th>Need</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>Nothing installed, quick look</td><td>Console consumer via <code>flisk run</code></td></tr>
+<tr><td>Check the address clients get</td><td><code>kcat -L</code></td></tr>
+<tr><td>Scripts, keys, custom format</td><td><code>kcat -f</code></td></tr>
+<tr><td>Redpanda cluster</td><td><code>rpk topic consume</code></td></tr>
+<tr><td>Look around by clicking</td><td><a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">A web UI</a></td></tr>
+</tbody>
+</table>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Two addresses for two places.</strong> Inside the broker container use <code>localhost:9092</code>. From your machine use <code>localhost:29092</code>. Using the first one from your machine gives the connection error this series keeps coming back to.</li>
+<li><strong>Binary values.</strong> The console tools print values as text. Avro, Protobuf or compressed payloads look like noise. Use a UI with a schema registry for those.</li>
+<li><strong>Empty output on a topic that has messages.</strong> You forgot <code>--from-beginning</code> or <code>-o beginning</code>, or retention already deleted them.</li>
+<li><strong>The exit wait.</strong> Without a timeout or <code>-e</code> the command never returns, which hangs a script.</li>
+<li><strong>Flisk quoting.</strong> Everything after <code>--</code> goes to the container, so a quote that the shell would eat on your machine may be needed again inside <code>sh -c</code>.</li>
+</ul>
+
+<p>Once you can read a topic you can reason about <a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/">keys, partitions and message order</a>, and about moving a consumer back with <a href="/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/">an offset reset</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I read a topic from the beginning?</summary><p>Pass --from-beginning to kafka-console-consumer.sh, -o beginning to kcat, or --offset start to rpk topic consume.</p></details><details><summary>Why does kcat -L show an address I cannot reach?</summary><p>That is the broker&#39;s advertised listener. The broker tells clients where to connect, and an address that only works inside Docker fails from your machine. Add a second listener for the host.</p></details><details><summary>Does reading with the console consumer affect my application?</summary><p>Not unless you pass its group id. Without --group the tool uses a throwaway group and leaves your committed offsets alone.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/"><span class="lbl">Guide</span><b>Kafka advertised listeners: fix &quot;broker may not be available&quot;</b><span>The broker tells clients where to connect, and that address is wrong for where the client runs. Two listeners solve it.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/"><span class="lbl">Guide</span><b>Kafka UI for local development: browse topics and messages</b><span>A browser view of your topics saves a lot of terminal commands. Kafbat UI is one container and two environment variables.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/"><span class="lbl">Guide</span><b>Kafka keys, partitions and message order, tested locally</b><span>Order is per partition and the key picks the partition. Three short experiments on a local topic make that concrete.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

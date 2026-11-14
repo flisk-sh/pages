@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to replay Kafka messages by resetting consumer offsets</title>
+<meta name="description" content="Replay messages by resetting a Kafka consumer group to the earliest offset, a timestamp or a shift: describe the group, dry-run, then execute with Flisk run.">
+<meta name="keywords" content="kafka reset consumer offsets, kafka-consumer-groups reset-offsets, replay kafka messages, kafka to-earliest dry-run, kafka consumer lag">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to replay Kafka messages by resetting consumer offsets">
+<meta property="og:description" content="Replay messages by resetting a Kafka consumer group to the earliest offset, a timestamp or a shift: describe the group, dry-run, then execute with Flisk run.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to replay Kafka messages by resetting consumer offsets","description":"Replay messages by resetting a Kafka consumer group to the earliest offset, a timestamp or a shift: describe the group, dry-run, then execute with Flisk run.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/","keywords":"kafka reset consumer offsets, kafka-consumer-groups reset-offsets, replay kafka messages, kafka to-earliest dry-run, kafka consumer lag","wordCount":746,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"How to replay Kafka messages by resetting consumer offsets","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does the reset say the group is not inactive?","acceptedAnswer":{"@type":"Answer","text":"The group still has a live member. Stop every consumer in the group, wait a few seconds for it to leave, then run the reset again."}},{"@type":"Question","name":"Does resetting offsets delete or duplicate messages?","acceptedAnswer":{"@type":"Answer","text":"No. It only moves the group's bookmark. The handler runs again for the messages you replay, so make it safe to repeat."}},{"@type":"Question","name":"Can I replay messages that retention already deleted?","acceptedAnswer":{"@type":"Answer","text":"No. A reset to the earliest offset starts at the oldest message that is still there, which is 7 days back by default."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>How to replay Kafka messages by resetting consumer offsets</h1><p class="dek">The messages are still in the topic. Move the group&#39;s bookmark back and the consumer reads them again.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-an-offset-reset-does">What an offset reset does</a></li><li><a href="#look-at-the-group-first">Look at the group first</a></li><li><a href="#stop-the-consumer">Stop the consumer</a></li><li><a href="#reset-dry-run-first">Reset, dry run first</a></li><li><a href="#start-the-consumer-again">Start the consumer again</a></li><li><a href="#other-ways-to-replay">Other ways to replay</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To replay messages, stop the consumer, then run <code>kafka-consumer-groups.sh --reset-offsets</code> against its group with <code>--to-earliest</code>, a timestamp or a shift, first with <code>--dry-run</code> to see what would change and then with <code>--execute</code>. Start the consumer again and it reads from the new position. The messages are still in the topic. Only the group's bookmark moves.</p>
+
+<h2 id="what-an-offset-reset-does">What an offset reset does</h2>
+<p>Kafka keeps messages for a time (the topic's retention) whether or not anyone read them. Each consumer group stores one committed offset per partition, the position it will read next. Resetting that number does not delete or copy anything, it changes where the group starts. That makes it the right tool for:</p>
+<ul>
+<li>Re-running a handler after you fixed a bug.</li>
+<li>Reproducing a customer case from a few minutes ago.</li>
+<li>Starting a fresh test run without creating a new group.</li>
+</ul>
+
+<h2 id="look-at-the-group-first">Look at the group first</h2>
+<p>The Kafka tools are inside the broker image. Without Flisk, run them with <code>docker exec</code>. With Flisk, use <code>flisk run</code>:</p>
+<pre><code>flisk run broker -- /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 --describe --group orders-consumer</code></pre>
+<p>The output has one row per partition. <code>CURRENT-OFFSET</code> is the group's bookmark, <code>LOG-END-OFFSET</code> is the newest message, and <code>LAG</code> is the difference. List all groups with <code>--list</code>.</p>
+
+<h2 id="stop-the-consumer">Stop the consumer</h2>
+<p>A reset is refused while the group has active members. Kafka answers with a message that the group is not inactive, and nothing changes. Stop the consumer first. If you run it as a Flisk resource, stop that resource or the whole stack, or stop the local process in its terminal. After the last member leaves, Kafka marks the group empty. A consumer that has just left may take a moment to be dropped, so wait a few seconds if the first try is refused.</p>
+
+<h2 id="reset-dry-run-first">Reset, dry run first</h2>
+<pre><code>KCG="flisk run broker -- /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092"
+
+# back to the oldest retained message
+$KCG --group orders-consumer --topic orders --reset-offsets --to-earliest --dry-run
+
+# back to a point in time (UTC)
+$KCG --group orders-consumer --topic orders --reset-offsets \
+     --to-datetime 2026-11-14T09:00:00.000 --dry-run
+
+# back by 100 messages on every partition
+$KCG --group orders-consumer --topic orders --reset-offsets --shift-by -100 --dry-run</code></pre>
+<p>Without <code>--execute</code> the command only prints the new offsets as a table, and <code>--dry-run</code> makes that explicit. When the numbers look right, repeat the same command with <code>--execute</code> in place of <code>--dry-run</code>. Other targets are <code>--to-latest</code> (skip everything waiting), <code>--to-offset N</code> and <code>--by-duration PT30M</code>. Leaving out <code>--topic</code> and using <code>--all-topics</code> resets every topic the group has read. To reset one partition, write <code>--topic orders:0</code>.</p>
+<p>These are the flags of the Kafka 4.x tool. I did not run them on a live broker for this page, so run <code>--dry-run</code> before trusting any of them.</p>
+
+<h2 id="start-the-consumer-again">Start the consumer again</h2>
+<p>When it rejoins, the group fetches from the reset position. Watch it in <code>flisk logs --service consumer</code>, or in <a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">the Kafka UI</a> where lag jumps up right after the reset and falls as the consumer catches up. Reading the messages again does not duplicate them in the topic, but it does run your handler a second time. A handler that writes to a database should therefore be idempotent. See <a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/">testing a consumer locally</a> for the handler layout that makes that easy to check.</p>
+
+<h2 id="other-ways-to-replay">Other ways to replay</h2>
+<ul>
+<li><strong>A new group id.</strong> With <code>fromBeginning: true</code> (or <code>auto.offset.reset=earliest</code>), a group id the broker has never seen starts at the oldest message. It is the simplest reset, and it leaves the old group and its offsets behind, so the group list grows.</li>
+<li><strong>Read without a group.</strong> To just look at old messages, use the console consumer with <code>--from-beginning</code> and no group, as in <a href="/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/">reading Kafka messages from the command line</a>. Nothing is committed.</li>
+<li><strong>Wipe the volume.</strong> Removing the broker's data volume deletes every topic, message and offset. It is the heaviest option and takes the <a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">topics job</a> with it, so the topics come back empty when the stack starts again.</li>
+</ul>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Retention is the limit.</strong> If a message was deleted by retention, <code>--to-earliest</code> starts at the oldest one that is left. The default is 7 days, so a reset cannot bring back last month.</li>
+<li><strong>Time zones.</strong> <code>--to-datetime</code> is read as UTC. A local time typed as if it were UTC replays the wrong window.</li>
+<li><strong>Auto-commit races.</strong> A consumer that restarts quickly can commit new offsets over your reset. Stop it, reset, then start it.</li>
+<li><strong>Several consumers in a group.</strong> The reset applies to the whole group. Stop every instance first.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does the reset say the group is not inactive?</summary><p>The group still has a live member. Stop every consumer in the group, wait a few seconds for it to leave, then run the reset again.</p></details><details><summary>Does resetting offsets delete or duplicate messages?</summary><p>No. It only moves the group&#39;s bookmark. The handler runs again for the messages you replay, so make it safe to repeat.</p></details><details><summary>Can I replay messages that retention already deleted?</summary><p>No. A reset to the earliest offset starts at the oldest message that is still there, which is 7 days back by default.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/"><span class="lbl">Guide</span><b>How to test a Kafka consumer on your machine</b><span>Keep the handler separate, point the consumer at a broker on your machine, and feed it messages from the terminal.</span></a><a href="/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/"><span class="lbl">Guide</span><b>How to read Kafka messages from the command line</b><span>You do not need application code to see what is in a topic. Three small tools print it, keys and offsets included.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/"><span class="lbl">Guide</span><b>Kafka keys, partitions and message order, tested locally</b><span>Order is per partition and the key picks the partition. Three short experiments on a local topic make that concrete.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
