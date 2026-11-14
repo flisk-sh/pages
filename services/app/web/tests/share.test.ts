@@ -16,6 +16,15 @@ describe("the share page", () => {
 		expect(html).not.toContain("script-src 'none'");
 	});
 
+	it("counts visits like every page, and the policy lets the script and its beacon through", async () => {
+		const html = await (await get("/share")).text();
+		expect(html).toContain("script-src 'self' https://flisk.si https://flisk.sh;");
+		expect(html).toContain("connect-src https://analytics.flisk.si;");
+		expect(html).toContain(
+			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script>',
+		);
+	});
+
 	it("serves the sealing code and the page script from this site", async () => {
 		for (const name of ["seal.js", SHARE_JS_PATH.slice(1)]) {
 			const res = await get(`/${name}`);
