@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Environment variable not loaded in a local service: how to debug</title>
+<meta name="description" content="When a service sees an empty or old value, find where the value is set, which source wins and whether the process needs a restart or a rebuild.">
+<meta name="keywords" content="environment variable not loaded, env var undefined docker, env file not read, vite env variable undefined, docker compose env precedence">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Environment variable not loaded in a local service: how to debug">
+<meta property="og:description" content="When a service sees an empty or old value, find where the value is set, which source wins and whether the process needs a restart or a rebuild.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Environment variable not loaded in a local service: how to debug","description":"When a service sees an empty or old value, find where the value is set, which source wins and whether the process needs a restart or a rebuild.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/","keywords":"environment variable not loaded, env var undefined docker, env file not read, vite env variable undefined, docker compose env precedence","wordCount":778,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Environment variable not loaded in a local service: how to debug","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my VITE_ or NEXT_PUBLIC_ variable stay old after I change it?","acceptedAnswer":{"@type":"Answer","text":"These variables are inlined into the frontend code when it is built or started. The page keeps the old value until the frontend restarts or rebuilds."}},{"@type":"Question","name":"Does flisk up overwrite values in my .env?","acceptedAnswer":{"@type":"Answer","text":"No. It adds missing keys and never changes existing values."}},{"@type":"Question","name":"What does --env-file do?","acceptedAnswer":{"@type":"Answer","text":"It replaces the project .env for that run. The file must be inside the project and contain TILT_ENV, DB_PASSWORD and JWT_SECRET. Run flisk down first if a stack is already up."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Environment variable not loaded in a local service: how to debug</h1><p class="dek">Four questions solve almost every case: where is it set, which source wins, did the process restart, and is it read at build time or run time.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#four-questions-in-order">Four questions, in order</a></li><li><a href="#file-format-traps">File format traps</a></li><li><a href="#where-flisk-reads-variables-from">Where Flisk reads variables from</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A variable that is "not loaded" is almost always set in one place and read in another. Print the value inside the running process, not in your shell, then check which source wins and whether the process was restarted after you changed it.</p>
+<h2 id="four-questions-in-order">Four questions, in order</h2>
+<ol>
+<li><strong>What does the process see?</strong> Look inside it. In a container: <code>docker exec &lt;container&gt; printenv DATABASE_URL</code>. A variable set in your shell is not in the container unless something passes it in.</li>
+<li><strong>Which source wins?</strong> Most tools have several: the shell, an <code>.env</code> file, a service-level env file and values written in the config. When two define the same name, one silently wins. Docker Compose documents its own order, and it is easy to get wrong, so print before you reason.</li>
+<li><strong>Did the process restart?</strong> Environment is read when a process starts. Saving a file does not re-read it. A hot reload may restart the code without changing its environment.</li>
+<li><strong>Is it read at build time?</strong> Frontend tools such as Vite and Next.js copy variables with a public prefix (<code>VITE_</code>, <code>NEXT_PUBLIC_</code>) into the built code. Changing them later has no effect until the next build or dev server start.</li>
+</ol>
+<h2 id="file-format-traps">File format traps</h2>
+<ul>
+<li>Spaces around <code>=</code> or a quote that is not closed can produce an empty value.</li>
+<li>An inline comment after a value may be kept as part of the value, depending on the parser.</li>
+<li>A <code>$</code> in a value can be read as a variable reference. In a Compose file it must be written as <code>$$</code>.</li>
+<li>An <code>.env</code> file in the wrong folder is simply not read. Many tools look in the current directory, not the file's neighbour.</li>
+<li>A variable that is set but empty is different from one that is missing. Some code treats them the same, some does not.</li>
+</ul>
+<h2 id="where-flisk-reads-variables-from">Where Flisk reads variables from</h2>
+<p>A Flisk project has three places that matter:</p>
+<table>
+<thead><tr><th>Place</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td>Project <code>.env</code></td><td>Git-ignored. Holds <code>TILT_ENV</code>, <code>DB_PASSWORD</code>, <code>DATABASE_URL</code> and <code>JWT_SECRET</code>. <code>flisk up</code> adds missing keys and never changes existing values.</td></tr>
+<tr><td><code>params</code> in <code>service.json</code></td><td>Written to the generated <code>.env.backend.autogenerated</code> of that service. A <code>$</code> is written as <code>$$</code> for you.</td></tr>
+<tr><td><code>secrets</code> in <code>service.json</code></td><td>Names the service needs. <code>required</code> must have a value, <code>optional</code> may be empty, and <code>generate</code> creates a random value once.</td></tr>
+</tbody>
+</table>
+<p>Do not edit the generated <code>.env.*.autogenerated</code> files. Change <code>service.json</code> and regenerate, as in <a href="/@odykyi/dev-env-troubleshooting/generated-config-out-of-date/">generated config is out of date</a>.</p>
+<p>See what a service really gets with <code>flisk run</code>, which runs one command with that service's environment:</p>
+<pre><code>flisk run orders-api -- printenv DATABASE_URL</code></pre>
+<p>Precedence for container services: a value in the compose <code>environment:</code> entry beats the service env file, and for the keys it defines, the file passed with <code>--env-file</code> beats the shell. For local-process services, <code>${VAR}</code> in <code>env</code> is resolved in this order: the shell, the project <code>.env</code>, the service's own <code>.env</code>, then the default you wrote.</p>
+<h3>Declare a secret and let Flisk generate it</h3>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "secrets": {
+    "required": ["STRIPE_KEY"],
+    "optional": ["SENTRY_DSN"],
+    "generate": { "SESSION_SECRET": "hex:32" }
+  }
+}</code></pre>
+<p>A required name with no value is reported by <code>flisk doctor</code> and blocks the run. In the generated Compose file a required name becomes <code>${NAME:?...}</code> and an optional one <code>${NAME:-}</code>. The <code>generate</code> format accepts <code>hex:N</code> or <code>base64:N</code>.</p>
+<h3>Switch values for one run</h3>
+<pre><code>flisk down
+flisk up --env-file .env.staging-like</code></pre>
+<p><code>--env-file</code> replaces the project <code>.env</code> for that run. The file must be inside the project and carry <code>TILT_ENV</code>, <code>DB_PASSWORD</code> and <code>JWT_SECRET</code>. A running stack refuses it, which is why <code>flisk down</code> comes first.</p>
+<h3>Messages you will see</h3>
+<ul>
+<li><code>Missing required env variables</code> and <code>Invalid env variables: X is set but empty</code> come from <code>flisk doctor</code>.</li>
+<li><code>JWT_SECRET is not set. Run flisk up ...</code> means the key has not been generated yet.</li>
+<li>Doctor warns when a <code>NEXT_PUBLIC_*</code> or <code>VITE_*</code> value looks like a secret, because public variables end up in the browser bundle.</li>
+<li>Doctor also warns when an env value points outside the local stack. Add the host to <code>allowedHosts</code> if that is intended.</li>
+</ul>
+<p>Frontends get <code>VITE_API_URL</code> and a <code>VITE_&lt;NAME&gt;_API_URL</code> per backend from a generated file. After a change, run <code>flisk restart &lt;frontend&gt;</code>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Never put real credentials in a variable with a public prefix.</li>
+<li>Do not commit <code>.env</code>. Commit an example file with names and no values.</li>
+<li>Running a command by hand outside Flisk uses your shell, so it can behave differently from the stack. Use <code>flisk run</code> to compare.</li>
+</ul>
+<p>For database variables in particular, see <a href="/@odykyi/local-database-guide/database-url-and-env-vars-locally/">DATABASE_URL and env vars locally</a>. If a missing value makes a service die at boot, <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a> covers the loop.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my VITE_ or NEXT_PUBLIC_ variable stay old after I change it?</summary><p>These variables are inlined into the frontend code when it is built or started. The page keeps the old value until the frontend restarts or rebuilds.</p></details><details><summary>Does flisk up overwrite values in my .env?</summary><p>No. It adds missing keys and never changes existing values.</p></details><details><summary>What does --env-file do?</summary><p>It replaces the project .env for that run. The file must be inside the project and contain TILT_ENV, DB_PASSWORD and JWT_SECRET. Run flisk down first if a stack is already up.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/"><span class="lbl">Guide</span><b>How to debug a service that will not start locally</b><span>Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</span></a><a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/"><span class="lbl">Guide</span><b>Why a Docker container keeps restarting, and how to find out</b><span>A restart policy turns a crash into a loop. The loop is a symptom: the exit code and the first log lines before it tell you the cause.</span></a><a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/"><span class="lbl">Guide</span><b>Works on my machine: find why a local stack differs</b><span>The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

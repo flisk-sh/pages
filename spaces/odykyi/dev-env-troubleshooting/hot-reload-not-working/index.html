@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hot reload not working in Docker or locally: causes and fixes</title>
+<meta name="description" content="When saved changes do not show up, the cause is usually a missing file watcher, a Docker file sync gap or a language that needs opt-in. Check each in turn.">
+<meta name="keywords" content="hot reload not working docker, live reload not working, docker bind mount file changes not detected, go hot reload docker, wsl2 hot reload">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Hot reload not working in Docker or locally: causes and fixes">
+<meta property="og:description" content="When saved changes do not show up, the cause is usually a missing file watcher, a Docker file sync gap or a language that needs opt-in. Check each in turn.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Hot reload not working in Docker or locally: causes and fixes","description":"When saved changes do not show up, the cause is usually a missing file watcher, a Docker file sync gap or a language that needs opt-in. Check each in turn.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/hot-reload-not-working/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/hot-reload-not-working/","keywords":"hot reload not working docker, live reload not working, docker bind mount file changes not detected, go hot reload docker, wsl2 hot reload","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Hot reload not working in Docker or locally: causes and fixes","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/hot-reload-not-working/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does every Flisk language reload on save?","acceptedAnswer":{"@type":"Answer","text":"No. Bun and Node backends reload by default, Python uses its own reload command, Go needs dev.liveReload set to true, and bring-your-own resources have no live reload."}},{"@type":"Question","name":"Why does a package.json change rebuild the container?","acceptedAnswer":{"@type":"Answer","text":"Installed dependencies are part of the image, so a dependency change cannot be copied into a running container. It needs a rebuild."}},{"@type":"Question","name":"Why is reload slow or broken under WSL2?","acceptedAnswer":{"@type":"Answer","text":"Files on a Windows drive under /mnt/c do not send file events reliably to Linux. Keep the project in the WSL home folder."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Hot reload not working in Docker or locally: causes and fixes</h1><p class="dek">Hot reload has three links: your editor saves the file, something copies it to the process, and the process restarts. Find the broken link.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-three-links-in-the-chain">The three links in the chain</a></li><li><a href="#common-causes-without-any-specific-tool">Common causes without any specific tool</a></li><li><a href="#what-flisk-does-for-each-language">What Flisk does for each language</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>If changes do not appear after you save, the chain that carries the change is broken somewhere: the file never reaches the running process, or the process does not restart when it does. Find out which half, by checking whether the file inside the container or process changed, and whether the runtime watches for changes at all.</p>
+<h2 id="the-three-links-in-the-chain">The three links in the chain</h2>
+<ol>
+<li><strong>Your editor writes the file.</strong> Some editors write a temporary file and rename it. A few watchers miss that.</li>
+<li><strong>The file gets to the process.</strong> Locally this is automatic. In a container it needs a bind mount or a sync tool.</li>
+<li><strong>The process notices and restarts.</strong> The runtime needs a watch mode, or a tool such as <code>nodemon</code> or <code>air</code> must do it.</li>
+</ol>
+<p>Test link 2 directly. Edit a file, then read it from inside the container with <code>docker exec &lt;container&gt; cat /app/src/index.js</code>. If the old content shows, the sync is the problem. If the new content shows and the app is unchanged, the restart is the problem.</p>
+<h2 id="common-causes-without-any-specific-tool">Common causes without any specific tool</h2>
+<ul>
+<li><strong>No watcher.</strong> <code>node server.js</code> never reloads. Use <code>node --watch server.js</code>, <code>bun --watch</code>, <code>uvicorn main:app --reload</code> or a frontend dev server.</li>
+<li><strong>File events do not cross the mount.</strong> On some setups, bind mounts do not deliver change events. Switch the watcher to polling: <code>CHOKIDAR_USEPOLLING=true</code> for chokidar tools, <code>--poll</code> for some others. Polling uses more CPU.</li>
+<li><strong>The project is on a slow or foreign filesystem.</strong> Under WSL2, a project in <code>/mnt/c</code> is the usual cause. Move it to the Linux home folder.</li>
+<li><strong>The change is outside the watched folders.</strong> A watcher on <code>src</code> will not see <code>config/</code>.</li>
+<li><strong>The change needs a rebuild.</strong> New dependencies, a changed Dockerfile or a changed native module are not hot-reloadable.</li>
+<li><strong>The browser cache.</strong> Do a hard refresh before you conclude the server is stale.</li>
+</ul>
+<h2 id="what-flisk-does-for-each-language">What Flisk does for each language</h2>
+<p>For container services, Flisk uses Tilt <code>live_update</code>. Tilt copies changed files into the running container and the language's own mechanism restarts it. The copied folders come from <code>syncs</code> in <code>service.json</code>, and default to <code>src</code> and <code>prisma</code> for backends and <code>src</code> and <code>public</code> for frontends. What happens after the copy depends on the language:</p>
+<table>
+<thead><tr><th>Service</th><th>Reload behaviour</th></tr></thead>
+<tbody>
+<tr><td>Bun backend, worker, agent, MCP</td><td>Reloads by default when the <code>dev</code> script runs <code>bun --watch</code> or <code>--hot</code>. Set <code>dev.liveReload</code> to <code>false</code> to opt out.</td></tr>
+<tr><td>Node</td><td>Uses <code>node --watch</code>. Editing <code>package.json</code> rebuilds the container.</td></tr>
+<tr><td>Python</td><td>Relies on its own reload command, such as <code>uvicorn --reload</code>.</td></tr>
+<tr><td>Go</td><td>No live update by default. You opt in, see below.</td></tr>
+<tr><td>Bring your own</td><td>No live reload. Rebuild after a change.</td></tr>
+</tbody>
+</table>
+<p>Go is the case most people trip over. Set <code>liveReload</code> to <code>true</code> in the service:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "language": "go",
+  "dev": { "liveReload": true }
+}</code></pre>
+<p>Then Flisk builds a watcher called <code>flisk-go-watch</code> into the container. It compiles on change and swaps the binary. If the compile fails, the last good build keeps running and the log says it is waiting for a change to rebuild. A change to <code>go.mod</code> or <code>go.sum</code> rebuilds the image.</p>
+<p>Look at the service's output right after you save:</p>
+<pre><code>flisk logs --service orders-api --tail 30</code></pre>
+<p>A line saying the build failed means the reload worked and your code did not compile.</p>
+<h3>Windows and WSL2</h3>
+<p>If the project is under <code>/mnt/c</code>, <code>flisk doctor</code> warns that hot reload may be broken, and <code>--strict</code> turns that warning into a failure. Move the project into your WSL home folder, for example <code>~/projects</code>, and open it from there. See <a href="/@odykyi/team-dev-environments/windows-local-dev-setup/">local development on Windows</a>.</p>
+<h3>Without Docker</h3>
+<p>For services that run as local processes, there is no sync step. Flisk starts your <code>command</code> as it is, so reload depends only on that command. Put the watcher in it:</p>
+<pre><code>"command": "node --watch server.js"</code></pre>
+<p>Other examples: <code>bun --watch server.ts</code> and <code>uvicorn main:app --reload</code>. For several services reloading together, see <a href="/@odykyi/microservices-local-dev/hot-reload-across-services/">hot reload across services</a>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Changing an environment variable needs a restart, not a reload. See <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">why an environment variable is not loaded</a>.</li>
+<li>If you set <code>dev.liveReload</code> on a language that does not support it, Flisk ignores it and prints a warning.</li>
+<li>A frontend that reads a generated API address must be restarted with <code>flisk restart &lt;frontend&gt;</code> after that address changes.</li>
+<li>Reload hides state. A worker that restarts on every save may drop jobs. Do not judge queue behaviour while it is reloading.</li>
+</ul>
+<p>If a service reloads but then fails to start, go back to <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">a service that will not start</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does every Flisk language reload on save?</summary><p>No. Bun and Node backends reload by default, Python uses its own reload command, Go needs dev.liveReload set to true, and bring-your-own resources have no live reload.</p></details><details><summary>Why does a package.json change rebuild the container?</summary><p>Installed dependencies are part of the image, so a dependency change cannot be copied into a running container. It needs a rebuild.</p></details><details><summary>Why is reload slow or broken under WSL2?</summary><p>Files on a Windows drive under /mnt/c do not send file events reliably to Linux. Keep the project in the WSL home folder.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/"><span class="lbl">Guide</span><b>How to debug a service that will not start locally</b><span>Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</span></a><a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/"><span class="lbl">Guide</span><b>Environment variable not loaded in a local service: how to debug</b><span>Four questions solve almost every case: where is it set, which source wins, did the process restart, and is it read at build time or run time.</span></a><a href="/@odykyi/dev-env-troubleshooting/works-on-my-machine/"><span class="lbl">Guide</span><b>Works on my machine: find why a local stack differs</b><span>The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

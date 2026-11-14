@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to debug a service that will not start locally</title>
+<meta name="description" content="A local service that exits, hangs or never turns healthy has a short list of causes. Check the port, the command, the env and the health route, in that order.">
+<meta name="keywords" content="service will not start, local service not starting, container never healthy, debug local microservice, port already in use local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/service-will-not-start/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to debug a service that will not start locally">
+<meta property="og:description" content="A local service that exits, hangs or never turns healthy has a short list of causes. Check the port, the command, the env and the health route, in that order.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/service-will-not-start/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to debug a service that will not start locally","description":"A local service that exits, hangs or never turns healthy has a short list of causes. Check the port, the command, the env and the health route, in that order.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/service-will-not-start/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/service-will-not-start/","keywords":"service will not start, local service not starting, container never healthy, debug local microservice, port already in use local","wordCount":927,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"How to debug a service that will not start locally","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/service-will-not-start/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long does Flisk wait for a local-process service to become ready?","acceptedAnswer":{"@type":"Answer","text":"Up to 60 seconds per service. Ready means the health URL answers below 400, or without healthCheckPath that the port accepts connections, or without a port that the process is still running after a second."}},{"@type":"Question","name":"Why does a container run but flisk up still fails?","acceptedAnswer":{"@type":"Answer","text":"Flisk waits on Docker's health status. If the health command does not work inside the image, or the health route does not exist, the container never turns healthy even though the app may be serving."}},{"@type":"Question","name":"Can I skip the checks to see the error myself?","acceptedAnswer":{"@type":"Answer","text":"Run the service's command by hand in its folder. If it fails there, the problem is the service, not the tooling around it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>How to debug a service that will not start locally</h1><p class="dek">Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#decide-which-kind-of-failure-you-have">Decide which kind of failure you have</a></li><li><a href="#the-checks-that-work-with-any-tool">The checks that work with any tool</a></li><li><a href="#what-flisk-adds">What Flisk adds</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>When a service will not start, find out which of three things happened: the process exited, the process is running but never became healthy, or something refused to launch it at all. Read the last lines of its log, then check the port, the command, the environment and the health route, in that order. Most failures end at one of those four.</p>
+<h2 id="decide-which-kind-of-failure-you-have">Decide which kind of failure you have</h2>
+<p>Do not guess. The first minute is about sorting the failure into one bucket, because each bucket has a different fix.</p>
+<ul>
+<li><strong>Refused to launch.</strong> The tool stops before your code runs. Typical messages: a program is not installed, a port is taken, a required variable has no value, a runtime version is wrong.</li>
+<li><strong>Starts, then exits.</strong> Your code runs and crashes. The reason is in the service's own output: a stack trace, a missing module, a database that refused the connection.</li>
+<li><strong>Runs, never healthy.</strong> The process is alive, but the check that decides "ready" fails. The usual causes are a health route that does not exist, a server bound to <code>127.0.0.1</code> inside a container, or a health command missing from the image.</li>
+</ul>
+<h2 id="the-checks-that-work-with-any-tool">The checks that work with any tool</h2>
+<p>These work with Compose, <code>foreman</code>, <code>make</code> targets or plain terminals.</p>
+<ol>
+<li><strong>Run the command by hand.</strong> Go to the service folder and run exactly what the tool runs. If it fails alone, stop looking at the orchestration.</li>
+<li><strong>Check the port.</strong> Find out who holds it:
+<pre><code>lsof -nP -iTCP:4000 -sTCP:LISTEN</code></pre>
+If a process is listed, stop it or move your service. A longer walkthrough is in <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix "port already in use"</a>.</li>
+<li><strong>Check the variables.</strong> Print what the process really receives, not what you think you set. An empty <code>DATABASE_URL</code> is the most common reason for a crash on boot.</li>
+<li><strong>Check the bind address.</strong> Inside a container the server must listen on <code>0.0.0.0</code>. A server on <code>127.0.0.1</code> is invisible to the container's health check and to the proxy in front of it.</li>
+<li><strong>Check the health path.</strong> Call it yourself and look at the status code. A 404 here means the orchestrator will wait forever.</li>
+<li><strong>Check the order.</strong> If the API needs the database, make sure the tool waits for the database to be ready, not only started.</li>
+</ol>
+<h2 id="what-flisk-adds">What Flisk adds</h2>
+<p>Flisk stops early for several of these and prints the reason. Start with the readiness check, which reads the project and the machine:</p>
+<pre><code>flisk doctor
+flisk status --unhealthy
+flisk logs --unhealthy</code></pre>
+<p><code>flisk status --unhealthy</code> and <code>flisk logs --unhealthy</code> show only services that are failing or still starting, so you do not scroll through the healthy ones.</p>
+<p>Flisk can run a service in two ways, and the failures differ.</p>
+<h3>Services that declare a command (no Docker)</h3>
+<p>A service with a <code>command</code> in its <code>service.json</code> runs as a local process. Before it starts anything, <code>flisk up</code> refuses to run when a command's program is not installed, a port is already in use (it names the process that holds it), two services share a port, or a <code>dependsOn</code> name is not a service with a command. A service with a <code>toolchain</code> such as <code>node@24</code> is also refused when the program on your <code>PATH</code> is another version.</p>
+<p>After launch, a service counts as ready when its health URL answers, and Flisk waits up to 60 seconds for each one. A process that exits is started again after 1 second, then 2, 4 and 8. After five quick exits in a row Flisk stops and says so. Use <code>"restart": "no"</code> for a one-shot job.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Output is prefixed with the service name and also written to <code>.flisk/native/logs/&lt;service&gt;.log</code>.</p>
+<h3>Container services (Docker and Tilt)</h3>
+<p>Here the failure often shows up in <code>flisk doctor</code> before anything starts. Messages worth recognising:</p>
+<ul>
+<li><code>Backends without a health route</code>: the container never turns healthy and Traefik answers 404. Add a <code>/health</code> route, or set <code>healthCheckPath</code> in the service's <code>service.json</code> to the path you use.</li>
+<li><code>secret SECRET_KEY has no value</code>: a name listed under <code>secrets.required</code> has no value in <code>.env</code> or the environment. Add it, or list it under <code>secrets.optional</code>.</li>
+<li><code>resource outside discovery.paths</code>: the service folder is not where Flisk looks, so <code>flisk up</code> will not start it. Services live in <code>services/&lt;stack&gt;/&lt;name&gt;</code> by default.</li>
+<li><code>container is running, but its health check is failing</code>: read the probe's own result with Docker.</li>
+</ul>
+<pre><code>docker inspect --format '{{range .State.Health.Log}}[{{.ExitCode}}] {{.Output}}{{end}}' &lt;container&gt;</code></pre>
+<p>Exit 127 with <code>curl: not found</code> means the image has no <code>curl</code>. Flisk proceeds with a warning in that case, because the app may well be fine, but the check is still broken. Use a tool the image has, or set <code>healthCheck</code> in the service.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>A 404 from Traefik right after startup does not prove the service is broken. Images may still be building. Re-run <code>flisk doctor</code> after a minute.</li>
+<li>Two services on one port may not produce a warning in a container stack. Give each its own port.</li>
+<li>Do not fix a crash by raising timeouts. If the log shows a stack trace, the wait was never the problem.</li>
+<li>If the process exits immediately and the log is empty, the program may be failing before it can write anything, such as a missing interpreter. Run it by hand.</li>
+</ul>
+<p>Once the service runs, learn how to read every service's output in one place in <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">how to read logs from every service</a>, and see <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">why a container keeps restarting</a> if it starts and then falls over.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long does Flisk wait for a local-process service to become ready?</summary><p>Up to 60 seconds per service. Ready means the health URL answers below 400, or without healthCheckPath that the port accepts connections, or without a port that the process is still running after a second.</p></details><details><summary>Why does a container run but flisk up still fails?</summary><p>Flisk waits on Docker&#39;s health status. If the health command does not work inside the image, or the health route does not exist, the container never turns healthy even though the app may be serving.</p></details><details><summary>Can I skip the checks to see the error myself?</summary><p>Run the service&#39;s command by hand in its folder. If it fails there, the problem is the service, not the tooling around it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/"><span class="lbl">Guide</span><b>How to read logs from every service in a local stack</b><span>One terminal per service does not scale past three services. Pick one place that merges output, prefixes each line with a name and lets you filter.</span></a><a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/"><span class="lbl">Guide</span><b>Why a Docker container keeps restarting, and how to find out</b><span>A restart policy turns a crash into a loop. The loop is a symptom: the exit code and the first log lines before it tell you the cause.</span></a><a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/"><span class="lbl">Guide</span><b>Check your machine before starting a local stack: a checklist</b><span>Five minutes of failed builds cost more than a five-second check. Run the preflight first, in a script or with one command.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

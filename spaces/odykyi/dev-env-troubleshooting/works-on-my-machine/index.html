@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Works on my machine: find why a local stack differs</title>
+<meta name="description" content="When a stack runs for you but fails for a teammate, compare tool versions, ports, env values and stale volumes. Make the differences visible and pin them.">
+<meta name="keywords" content="works on my machine, local environment differs between developers, version mismatch local dev, reproducible dev environment, teammate cannot run stack">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/works-on-my-machine/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Works on my machine: find why a local stack differs">
+<meta property="og:description" content="When a stack runs for you but fails for a teammate, compare tool versions, ports, env values and stale volumes. Make the differences visible and pin them.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/works-on-my-machine/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Works on my machine: find why a local stack differs","description":"When a stack runs for you but fails for a teammate, compare tool versions, ports, env values and stale volumes. Make the differences visible and pin them.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/works-on-my-machine/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/works-on-my-machine/","keywords":"works on my machine, local environment differs between developers, version mismatch local dev, reproducible dev environment, teammate cannot run stack","wordCount":755,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Works on my machine: find why a local stack differs","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/works-on-my-machine/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can Flisk guarantee identical machines?","acceptedAnswer":{"@type":"Answer","text":"No. It can pin the Flisk version, check runtime versions for local-process services and report tool versions, but operating system differences and VM resources stay yours to manage."}},{"@type":"Question","name":"What should I send a teammate who asks for help?","acceptedAnswer":{"@type":"Answer","text":"The output of flisk doctor --json, the output of flisk networks, and the last lines of the failing service's log."}},{"@type":"Question","name":"Is a different port a bug?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Flisk picks a free port from a range when the preferred one is taken, so the same project can use different ports on two machines. Use flisk networks to see the real URLs."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Works on my machine: find why a local stack differs</h1><p class="dek">The goal is to turn a feeling into a diff. Collect the same facts from both machines, compare them, and pin the ones that matter.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-usual-suspects">The usual suspects</a></li><li><a href="#make-the-difference-visible">Make the difference visible</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#what-flisk-does-not-solve">What Flisk does not solve</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A stack that works for you and fails for a teammate differs in something you have not looked at yet. Do not argue from memory. Collect the same facts from both machines (tool versions, free ports, environment values, Docker state and leftover data), put them side by side, and the difference is usually on the first screen.</p>
+<h2 id="the-usual-suspects">The usual suspects</h2>
+<ul>
+<li><strong>Runtime versions.</strong> Node, Python, Go or Bun at different versions. A language feature or a lockfile format that one machine does not know.</li>
+<li><strong>Docker and Compose versions.</strong> Some features need a recent Engine or Compose plugin. Older ones may ignore a setting rather than fail.</li>
+<li><strong>Ports.</strong> Something on the other machine already holds a port you assumed was free.</li>
+<li><strong>Environment.</strong> A value in one person's shell or <code>.env</code> that the other does not have.</li>
+<li><strong>Leftover state.</strong> A volume from an older version of the schema, or an image cache that hides a broken build.</li>
+<li><strong>Operating system.</strong> Case-sensitive file names, line endings, file sharing and file watcher behaviour differ across macOS, Linux and Windows.</li>
+<li><strong>Resources.</strong> A Docker VM with little memory kills processes that a bigger VM runs fine.</li>
+</ul>
+<h2 id="make-the-difference-visible">Make the difference visible</h2>
+<p>Run the same small set of commands on both machines and compare the text. This works with any setup:</p>
+<pre><code>node --version; docker version --format '{{.Server.Version}}'
+docker compose version
+git rev-parse HEAD
+lsof -nP -iTCP -sTCP:LISTEN | head -30</code></pre>
+<p>Add <code>git status</code> to catch uncommitted edits, and check that the lockfile is committed and used (<code>npm ci</code> instead of <code>npm install</code>). A fresh clone in a new folder, run once, is the cleanest test: if it fails there, the repository is missing something that your machine supplies by accident.</p>
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk gives you three things to compare and two things to pin.</p>
+<p><strong>Compare.</strong> <code>flisk doctor --json</code> prints the machine and project checks as JSON, so you can save the output from each machine and diff it. It reports the Docker daemon, the Engine and Compose versions, free disk, ports, missing variables and more. <code>flisk networks --json</code> lists the real URLs. The ports can legitimately differ: Flisk picks a free port from a range when the preferred one is busy, so two machines can show different ports for the same project.</p>
+<pre><code>flisk doctor --json &gt; doctor-mine.json
+flisk networks --json &gt; urls-mine.json</code></pre>
+<p>Doctor expects Docker Engine 25 or newer and Compose 2.20 or newer for the generated health checks, Tilt 0.25.0 or newer and Bun 1.2.0 or newer. It prints the versions it found, so an old install shows up as a line to read, not a mystery.</p>
+<p><strong>Pin.</strong> Two settings stop version drift before it starts:</p>
+<ul>
+<li><code>minFliskVersion</code> in <code>.flisk/project.json</code> makes <code>flisk up</code> refuse to run on an older CLI and print <code>Run: flisk upgrade</code>. <code>--ignore-version</code> skips the check.</li>
+<li><code>toolchain</code> in a local-process service's <code>service.json</code>, for example <code>"toolchain": "node@24"</code>. If the program on <code>PATH</code> is another version, <code>flisk up</code> stops with <code>TOOLCHAIN_MISMATCH</code> before starting anything. Supported forms include <code>bun@1.3</code>, <code>python@3.12</code>, <code>go@1.23</code>, <code>deno@2</code> and <code>ruby@3.3</code>. Without it, files such as <code>.nvmrc</code> or <code>.python-version</code> only cause a warning in doctor.</li>
+</ul>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "api",
+  "appType": "backend",
+  "command": "node --watch server.js",
+  "port": 4000,
+  "toolchain": "node@24"
+}</code></pre>
+<p><strong>Gate it in CI.</strong> Run <code>flisk doctor --no-ping</code> and <code>flisk config verify</code> on every pull request, so a change that only works with your local files fails before it reaches a teammate. See <a href="/@odykyi/team-dev-environments/check-config-drift-in-ci/">check config drift in CI</a>.</p>
+<h3>Stale data</h3>
+<p>If the code is the same and the database behaves differently, suspect old data. <code>flisk down --purge</code> deletes the project's volumes, networks and images, and the next <code>flisk up</code> starts from nothing. It also deletes local data you may want, so use <code>flisk down --dry-run</code> first.</p>
+<h2 id="what-flisk-does-not-solve">What Flisk does not solve</h2>
+<ul>
+<li>Operating system differences. File sharing, line endings and file watcher behaviour are still yours.</li>
+<li>Docker VM size. Memory and disk limits are set in Docker Desktop or your Colima settings.</li>
+<li>Credentials. A teammate still needs their own values for the secrets in <code>secrets.required</code>.</li>
+</ul>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Do not compare screenshots of a terminal. Compare text files.</li>
+<li>Do not fix a difference on one machine only. Put the fix in the repository, as a pin, a check or a line in the setup docs.</li>
+<li>Check generated files too. If one of you edited a generated file, the other sees different behaviour. See <a href="/@odykyi/dev-env-troubleshooting/generated-config-out-of-date/">generated config is out of date</a>.</li>
+</ul>
+<p>To stop collecting these facts by hand every time, put them behind one command, as described in <a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/">check your machine before starting the stack</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can Flisk guarantee identical machines?</summary><p>No. It can pin the Flisk version, check runtime versions for local-process services and report tool versions, but operating system differences and VM resources stay yours to manage.</p></details><details><summary>What should I send a teammate who asks for help?</summary><p>The output of flisk doctor --json, the output of flisk networks, and the last lines of the failing service&#39;s log.</p></details><details><summary>Is a different port a bug?</summary><p>Usually not. Flisk picks a free port from a range when the preferred one is taken, so the same project can use different ports on two machines. Use flisk networks to see the real URLs.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/check-your-machine-before-starting/"><span class="lbl">Guide</span><b>Check your machine before starting a local stack: a checklist</b><span>Five minutes of failed builds cost more than a five-second check. Run the preflight first, in a script or with one command.</span></a><a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/"><span class="lbl">Guide</span><b>Environment variable not loaded in a local service: how to debug</b><span>Four questions solve almost every case: where is it set, which source wins, did the process restart, and is it read at build time or run time.</span></a><a href="/@odykyi/dev-env-troubleshooting/generated-config-out-of-date/"><span class="lbl">Guide</span><b>Generated config out of date: fix config drift step by step</b><span>Drift means a generated file no longer matches the file it comes from. The fix is to change the source and regenerate, not to patch the output.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a><a href="/@odykyi/nodejs-dev-setup/"><span class="lbl">Topic 11</span><b>Node.js local development setup</b><span>Set up Node.js services for local work: versions, package managers, watch mode, debugging, env files and running several apps at once.</span></a><a href="/@odykyi/python-dev-setup/"><span class="lbl">Topic 12</span><b>Python local development setup</b><span>Python services on a laptop: virtualenvs, uv and pip, reload servers, Django, Flask and FastAPI, and running them next to other services.</span></a><a href="/@odykyi/go-and-rust-dev-setup/"><span class="lbl">Topic 13</span><b>Go and Rust local development</b><span>Fast edit and run loops for Go and Rust services, cross builds for containers, and running them beside Node or Python services.</span></a><a href="/@odykyi/frontend-dev-servers/"><span class="lbl">Topic 14</span><b>Frontend dev servers and APIs</b><span>Vite, Next.js and other dev servers talking to local APIs: proxies, CORS, cookies, env vars and hot reload that keeps working.</span></a><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
