@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space</title>
+<meta name="description" content="Deleting files in Ubuntu does not shrink ext4.vhdx. Find the disk, prune Docker, then compact it with diskpart or turn on sparse mode. Back up first.">
+<meta name="keywords" content="shrink wsl2 vhdx, ext4.vhdx too large, wsl2 disk space c drive, diskpart compact vdisk wsl, wsl set-sparse">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space">
+<meta property="og:description" content="Deleting files in Ubuntu does not shrink ext4.vhdx. Find the disk, prune Docker, then compact it with diskpart or turn on sparse mode. Back up first.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space","description":"Deleting files in Ubuntu does not shrink ext4.vhdx. Find the disk, prune Docker, then compact it with diskpart or turn on sparse mode. Back up first.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/","keywords":"shrink wsl2 vhdx, ext4.vhdx too large, wsl2 disk space c drive, diskpart compact vdisk wsl, wsl set-sparse","wordCount":625,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Windows and WSL local development","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/"},{"@type":"ListItem","position":3,"name":"How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space","item":"https://pages.flisk.si/@odykyi/windows-and-wsl-dev/shrink-the-wsl2-virtual-disk/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is ext4.vhdx still huge after I delete files?","acceptedAnswer":{"@type":"Answer","text":"The virtual disk file grows on write and does not shrink on delete. It must be compacted, or the distro put in sparse mode."}},{"@type":"Question","name":"Is compacting safe?","acceptedAnswer":{"@type":"Answer","text":"It is routine, but it touches your only copy of the filesystem. Export a backup with wsl --export and make sure WSL and Docker are shut down first."}},{"@type":"Question","name":"Does flisk doctor shrink the WSL disk?","acceptedAnswer":{"@type":"Answer","text":"No. It checks disk space and the Docker build cache from inside Linux. Compacting the vhdx is done from Windows."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/windows-and-wsl-dev/">Windows and WSL local development</a></div>
+<section class="hero"><div><div class="lbl">Windows and WSL local development</div><h1>How to shrink the WSL2 virtual disk (ext4.vhdx) and free C: space</h1><p class="dek">The WSL2 disk file grows when you write data and does not shrink when you delete it. Here is how to get the space back.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-deleting-files-does-not-help">Why deleting files does not help</a></li><li><a href="#step-1-free-space-inside-linux-first">Step 1: free space inside Linux first</a></li><li><a href="#step-2-back-up">Step 2: back up</a></li><li><a href="#step-3-find-the-disk-file">Step 3: find the disk file</a></li><li><a href="#step-4-compact-it">Step 4: compact it</a></li><li><a href="#option-sparse-mode">Option: sparse mode</a></li><li><a href="#where-flisk-fits">Where Flisk fits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>WSL2 stores each distribution in a virtual disk file called <code>ext4.vhdx</code> that grows as you write and does not shrink when you delete files. To get space back on C:, free it inside Linux, run <code>wsl --shutdown</code>, then compact the file with <code>diskpart</code>, or turn on sparse mode for the distro so it shrinks by itself.</p>
+<h2 id="why-deleting-files-does-not-help">Why deleting files does not help</h2>
+<p>From Windows, the disk is one big file. Linux marks blocks free inside it, but the file keeps its size until something compacts it. Docker images, build caches, <code>node_modules</code> and database volumes are the usual source of growth. Docker Desktop has its own virtual disk as well, so there can be two big files to deal with.</p>
+<h2 id="step-1-free-space-inside-linux-first">Step 1: free space inside Linux first</h2>
+<p>Compacting only reclaims space that is already free in the guest. Remove what you do not need:</p>
+<pre><code>df -h /
+docker system df
+docker system prune
+sudo apt clean</code></pre>
+<p>Read the prompt before you confirm a prune. <code>docker system prune</code> removes stopped containers, unused networks and dangling images; add <code>--volumes</code> only if you are sure you do not need unused volumes, because that deletes database data. The guides on <a href="/@odykyi/dev-env-troubleshooting/docker-disk-full/">Docker disk full</a> and <a href="/@odykyi/microservices-local-dev/stop-and-clean-up-a-local-stack/">stopping and cleaning up a local stack</a> go deeper.</p>
+<h2 id="step-2-back-up">Step 2: back up</h2>
+<p>Compacting and sparse mode both modify your only copy of the Linux filesystem. Export a backup to a drive with room:</p>
+<pre><code>wsl --export Ubuntu D:\backup\ubuntu.tar</code></pre>
+<p>Use the distro name shown by <code>wsl -l -v</code>. Push your repositories to a remote as well.</p>
+<h2 id="step-3-find-the-disk-file">Step 3: find the disk file</h2>
+<p>In PowerShell, list where each distro keeps its files:</p>
+<pre><code>Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss | ForEach-Object { Get-ItemProperty $_.PSPath } | Select-Object DistributionName, BasePath</code></pre>
+<p>The <code>ext4.vhdx</code> file is in the <code>BasePath</code> folder (for a Store install it is under <code>%LOCALAPPDATA%\Packages\...\LocalState</code>). Docker Desktop's disk is a separate file under <code>%LOCALAPPDATA%\Docker\wsl</code>.</p>
+<h2 id="step-4-compact-it">Step 4: compact it</h2>
+<p>Shut WSL down completely, then run diskpart in an administrator terminal:</p>
+<pre><code>wsl --shutdown
+diskpart</code></pre>
+<p>At the <code>DISKPART&gt;</code> prompt:</p>
+<pre><code>select vdisk file="C:\path\to\ext4.vhdx"
+attach vdisk readonly
+compact vdisk
+detach vdisk
+exit</code></pre>
+<p>It may take several minutes. Compare the file size before and after. If you have the Hyper-V PowerShell module (Windows Pro and up), <code>Optimize-VHD -Path "C:\path\to\ext4.vhdx" -Mode Full</code> does the same.</p>
+<h2 id="option-sparse-mode">Option: sparse mode</h2>
+<p>Recent WSL versions can keep a distro's disk sparse so freed space returns to Windows automatically:</p>
+<pre><code>wsl --manage Ubuntu --set-sparse true</code></pre>
+<p>This needs a current WSL (<code>wsl --update</code>), and some releases flagged the feature as having risks with data loss, so take the backup first and read the current WSL release notes. If the command is not recognised, you are on an older WSL and diskpart is the way.</p>
+<h2 id="where-flisk-fits">Where Flisk fits</h2>
+<p><code>flisk doctor</code> includes a disk space check and a Docker build cache check, so it can tell you before a long <code>flisk up</code> that the disk is the problem. Run it inside Ubuntu, where those checks look at the Linux filesystem and your Docker daemon. They do not look at the size of the <code>ext4.vhdx</code> file on the Windows side, which is why the compaction above is still your job. <code>flisk doctor --fix --dry-run</code> lists repairs for unused Docker networks and leftover doctor probes without changing anything. It is not a disk cleaner.</p>
+<pre><code>flisk doctor</code></pre>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Compacting while Docker or WSL runs.</strong> The file must not be in use. Quit Docker Desktop and run <code>wsl --shutdown</code> first.</li>
+<li><strong>Moving the repo to /mnt/c to save space.</strong> It trades disk for speed; see <a href="/@odykyi/windows-and-wsl-dev/wsl2-slow-on-mnt-c/">why WSL2 is slow on /mnt/c</a>.</li>
+<li><strong>A maximum size.</strong> The virtual disk has a limit that is large by default. Shrinking the file does not change that limit.</li>
+</ul>
+<p>Next step: cap what the VM uses at runtime with <a href="/@odykyi/windows-and-wsl-dev/limit-wsl2-memory-with-wslconfig/">.wslconfig limits</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is ext4.vhdx still huge after I delete files?</summary><p>The virtual disk file grows on write and does not shrink on delete. It must be compacted, or the distro put in sparse mode.</p></details><details><summary>Is compacting safe?</summary><p>It is routine, but it touches your only copy of the filesystem. Export a backup with wsl --export and make sure WSL and Docker are shut down first.</p></details><details><summary>Does flisk doctor shrink the WSL disk?</summary><p>No. It checks disk space and the Docker build cache from inside Linux. Compacting the vhdx is done from Windows.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Windows and WSL local development</span></div>
+<div class="rgrid"><a href="/@odykyi/windows-and-wsl-dev/limit-wsl2-memory-with-wslconfig/"><span class="lbl">Guide</span><b>WSL2 using too much memory: limit it with .wslconfig</b><span>WSL2 takes up to half your RAM by default and gives little back. A five-line file puts a ceiling on it.</span></a><a href="/@odykyi/windows-and-wsl-dev/wsl2-slow-on-mnt-c/"><span class="lbl">Guide</span><b>Why WSL2 is slow on /mnt/c and where to keep your project</b><span>WSL2 is fast inside its own Linux filesystem and slow across the bridge to your Windows drive. Where the repo lives decides which one you get.</span></a><a href="/@odykyi/windows-and-wsl-dev/docker-engine-in-wsl2-without-docker-desktop/"><span class="lbl">Guide</span><b>How to run Docker Engine in WSL2 without Docker Desktop</b><span>You can run containers on Windows with Docker Engine inside WSL2 and no Docker Desktop. It suits teams that cannot, or will not, license the desktop app.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
