@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why Docker bind mounts are slow on Mac and how to speed them up</title>
+<meta name="description" content="Docker bind mounts on macOS cross a VM boundary, so many small file reads are slow. Use VirtioFS, keep heavy folders in volumes and sync only source code.">
+<meta name="keywords" content="docker bind mount slow mac, docker volumes slow macos, virtiofs docker desktop, docker mac file sharing performance">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why Docker bind mounts are slow on Mac and how to speed them up">
+<meta property="og:description" content="Docker bind mounts on macOS cross a VM boundary, so many small file reads are slow. Use VirtioFS, keep heavy folders in volumes and sync only source code.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why Docker bind mounts are slow on Mac and how to speed them up","description":"Docker bind mounts on macOS cross a VM boundary, so many small file reads are slow. Use VirtioFS, keep heavy folders in volumes and sync only source code.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/","keywords":"docker bind mount slow mac, docker volumes slow macos, virtiofs docker desktop, docker mac file sharing performance","wordCount":822,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Docker on Mac: speed and resources","item":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/"},{"@type":"ListItem","position":3,"name":"Why Docker bind mounts are slow on Mac and how to speed them up","item":"https://pages.flisk.si/@odykyi/docker-on-mac-performance/docker-bind-mounts-slow-on-mac/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is VirtioFS faster than gRPC FUSE?","acceptedAnswer":{"@type":"Answer","text":"In current Docker Desktop versions VirtioFS is the default and generally the fastest of the options. Time your own project before and after, because results depend on the file layout."}},{"@type":"Question","name":"Do :cached and :delegated still help?","acceptedAnswer":{"@type":"Answer","text":"Not with current file sharing implementations. Docker accepts the flags for compatibility, but you can remove them without losing speed."}},{"@type":"Question","name":"Why is npm install slow in a mounted folder?","acceptedAnswer":{"@type":"Answer","text":"An install writes many thousands of small files, and each one crosses the Mac to VM boundary. Keep node_modules in a named volume or inside the image."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docker-on-mac-performance/">Docker on Mac: speed and resources</a></div>
+<section class="hero"><div><div class="lbl">Docker on Mac: speed and resources</div><h1>Why Docker bind mounts are slow on Mac and how to speed them up</h1><p class="dek">A project that runs in a second on Linux can crawl on a Mac. The cause is the file sharing layer, and you can usually avoid most of its cost.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-is-actually-slow">What is actually slow</a></li><li><a href="#use-the-fastest-file-sharing-mode">Use the fastest file sharing mode</a></li><li><a href="#keep-heavy-folders-off-the-mount">Keep heavy folders off the mount</a></li><li><a href="#the-flisk-way-sync-instead-of-mount">The Flisk way: sync instead of mount</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Bind mounts are slow on a Mac because Docker does not run natively on macOS. Containers live in a Linux VM, and every file you share from your Mac folder has to cross from macOS into that VM. Large numbers of small reads, such as <code>node_modules</code> or a PHP vendor folder, pay that cost again and again. The fix is to use the fastest file sharing mode, and to keep heavy folders out of the shared path.</p>
+
+<h2 id="what-is-actually-slow">What is actually slow</h2>
+<p>Reading one big file through a bind mount is fine. The slow case is thousands of tiny file operations: a dependency install, a test run that scans a tree, a framework that stats every file on each request. Each operation is a round trip between two operating systems. On Linux the same mount is just a directory, so none of this exists there.</p>
+<p>A quick way to see it is to time the same command inside and outside the mount:</p>
+<pre><code>docker run --rm -v "$PWD":/app -w /app alpine sh -c 'time find . -type f | wc -l'
+docker run --rm -v "$PWD":/app -w /app alpine sh -c 'cp -r /app /tmp/copy &amp;&amp; cd /tmp/copy &amp;&amp; time find . -type f | wc -l'</code></pre>
+<p>The second command runs on the container's own filesystem, so the difference between the two timings is the mount overhead for your project. Do not trust a general benchmark from the internet, because it depends on your tree and your Docker version.</p>
+
+<h2 id="use-the-fastest-file-sharing-mode">Use the fastest file sharing mode</h2>
+<p>Docker Desktop has had several file sharing implementations over the years (osxfs, gRPC FUSE and VirtioFS). In recent versions VirtioFS is the default for new installs and is the quickest. Check Settings, then General, then the file sharing implementation, and pick VirtioFS if it is not already selected. The old <code>:cached</code> and <code>:delegated</code> flags on a volume line are accepted but have no real effect with current implementations, so you can drop them from Compose files.</p>
+<p>With Colima the choice is made when the VM is created:</p>
+<pre><code>colima start --vm-type vz --mount-type virtiofs</code></pre>
+<p>This needs a recent macOS. If the instance already exists with another type, stop it and delete it first, because the mount type is fixed at creation. Deleting a Colima instance removes its images and volumes, so dump any database you care about first. More about Colima settings is in <a href="/@odykyi/docker-on-mac-performance/colima-vz-virtiofs-rosetta-settings/">the Colima settings article</a>.</p>
+
+<h2 id="keep-heavy-folders-off-the-mount">Keep heavy folders off the mount</h2>
+<p>Even with VirtioFS, a bind mount is slower than the container's own disk. Three habits help more than any setting:</p>
+<ul>
+<li><strong>Mount only source code.</strong> Mount <code>./src</code>, not the whole project root with dependencies, build output and <code>.git</code>.</li>
+<li><strong>Put dependencies in a named volume.</strong> A named volume lives inside the VM, so it is not crossing the boundary. See <a href="/@odykyi/docker-on-mac-performance/node-modules-slow-in-docker-on-mac/">node_modules slow in Docker on Mac</a>.</li>
+<li><strong>Write build output and caches to a volume or tmpfs.</strong> Compilers and bundlers write many files. Send them to a place that is not shared with the host.</li>
+</ul>
+<pre><code>services:
+  web:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - web_modules:/app/node_modules
+      - web_cache:/app/.cache
+volumes:
+  web_modules:
+  web_cache:</code></pre>
+
+<h2 id="the-flisk-way-sync-instead-of-mount">The Flisk way: sync instead of mount</h2>
+<p>For services that Flisk builds from its own Dockerfile, it does not bind mount your source folder at all. It builds an image and uses Tilt <code>live_update</code> to copy changed files into the running container. The folders that are copied come from the <code>syncs</code> field in <code>service.json</code>. They default to <code>src</code> and <code>prisma</code> for a backend and <code>src</code> and <code>public</code> for a frontend, so dependencies are never part of the sync.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "stack": "shop",
+  "syncs": ["src", "prisma"]
+}</code></pre>
+<p>The restart after a copy is done by the language's own mechanism, as covered in <a href="/@odykyi/dev-env-troubleshooting/hot-reload-not-working/">hot reload not working</a>. If a Docker file mount is the part you cannot get working at all, run <code>flisk doctor</code>. It has a <code>Docker File Sharing</code> check that starts a small container with a bind mount of your project folder. If the mount fails, the message tells you what to share: Docker Desktop's file sharing list, or <code>colima start --mount &lt;folder&gt;</code> for Colima.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Projects outside your home folder.</strong> Docker only shares folders it has been told about. Temporary folders under <code>/private/tmp</code> are a common failure with Colima. Keep projects under your home directory.</li>
+<li><strong>Symlinks that point outside the mount</strong> do not resolve inside the container.</li>
+<li><strong>File watchers.</strong> Some watchers need polling over a mount, which costs CPU. See <a href="/@odykyi/docker-on-mac-performance/docker-high-cpu-on-mac-when-idle/">Docker high CPU on Mac</a>.</li>
+<li><strong>Case sensitivity.</strong> macOS folders are usually case insensitive and the container's filesystem is not. A wrongly cased import works on your Mac and fails in the container.</li>
+</ul>
+
+<p>If the mount is still too slow after these changes, the remaining option is to avoid containers for that service. Running it as a plain process removes the boundary entirely, and <a href="/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/">the last article of this set</a> shows how to decide which services should be native.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is VirtioFS faster than gRPC FUSE?</summary><p>In current Docker Desktop versions VirtioFS is the default and generally the fastest of the options. Time your own project before and after, because results depend on the file layout.</p></details><details><summary>Do :cached and :delegated still help?</summary><p>Not with current file sharing implementations. Docker accepts the flags for compatibility, but you can remove them without losing speed.</p></details><details><summary>Why is npm install slow in a mounted folder?</summary><p>An install writes many thousands of small files, and each one crosses the Mac to VM boundary. Keep node_modules in a named volume or inside the image.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docker on Mac: speed and resources</span></div>
+<div class="rgrid"><a href="/@odykyi/docker-on-mac-performance/node-modules-slow-in-docker-on-mac/"><span class="lbl">Guide</span><b>Why node_modules is slow in Docker on Mac and the fix</b><span>A dependency folder can hold tens of thousands of files. Sharing it between macOS and a Linux VM is the most common reason for a slow Node container on a Mac.</span></a><a href="/@odykyi/docker-on-mac-performance/colima-vz-virtiofs-rosetta-settings/"><span class="lbl">Guide</span><b>Colima settings for speed: vz, VirtioFS and Rosetta</b><span>The defaults work, but three start flags change how fast Colima feels on an M-series Mac. They are fixed when the VM is created.</span></a><a href="/@odykyi/docker-on-mac-performance/run-natively-or-in-docker-on-mac/"><span class="lbl">Guide</span><b>Which services to run natively on a Mac and which in Docker</b><span>On a Mac, containers cost memory, file sharing time and emulation. You do not need to pay for them on every service.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
