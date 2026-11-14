@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Why a Docker container keeps restarting, and how to find out</title>
+<meta name="description" content="A container in a restart loop hides its own crash. Read the exit code, the last logs and the OOM flag to see why, then fix the cause instead of the policy.">
+<meta name="keywords" content="docker container keeps restarting, container restart loop, docker exit code 137, restarting status docker, crash loop local development">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Why a Docker container keeps restarting, and how to find out">
+<meta property="og:description" content="A container in a restart loop hides its own crash. Read the exit code, the last logs and the OOM flag to see why, then fix the cause instead of the policy.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Why a Docker container keeps restarting, and how to find out","description":"A container in a restart loop hides its own crash. Read the exit code, the last logs and the OOM flag to see why, then fix the cause instead of the policy.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/container-keeps-restarting/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/container-keeps-restarting/","keywords":"docker container keeps restarting, container restart loop, docker exit code 137, restarting status docker, crash loop local development","wordCount":760,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"When the local stack breaks","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/"},{"@type":"ListItem","position":3,"name":"Why a Docker container keeps restarting, and how to find out","item":"https://pages.flisk.si/@odykyi/dev-env-troubleshooting/container-keeps-restarting/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does Docker restart a container that is unhealthy?","acceptedAnswer":{"@type":"Answer","text":"No. A failing health check only changes the reported status to unhealthy. A restart policy reacts to the process exiting, not to the health status."}},{"@type":"Question","name":"What does exit code 137 mean?","acceptedAnswer":{"@type":"Answer","text":"The process was killed with SIGKILL. In a container that is often the out-of-memory killer, which you can confirm with docker inspect and the OOMKilled field."}},{"@type":"Question","name":"How do I stop a one-shot job such as a migration from restarting?","acceptedAnswer":{"@type":"Answer","text":"Set the restart policy to no or on-failure. In a Flisk service.json that is the restart field, and migrations belong in their own migrator resource."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dev-env-troubleshooting/">When the local stack breaks</a></div>
+<section class="hero"><div><div class="lbl">When the local stack breaks</div><h1>Why a Docker container keeps restarting, and how to find out</h1><p class="dek">A restart policy turns a crash into a loop. The loop is a symptom: the exit code and the first log lines before it tell you the cause.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#see-the-loop-for-what-it-is">See the loop for what it is</a></li><li><a href="#the-usual-causes-in-a-dev-stack">The usual causes in a dev stack</a></li><li><a href="#what-flisk-does-and-shows">What Flisk does and shows</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A container that keeps restarting is crashing and being started again by its restart policy. To find out why, read the exit code and the logs of the last run, not the status column. <code>docker inspect</code> gives you the exit code, whether the kernel killed it for memory, and how many restarts happened.</p>
+<h2 id="see-the-loop-for-what-it-is">See the loop for what it is</h2>
+<p><code>docker ps</code> shows a status such as <code>Restarting (1) 12 seconds ago</code>. The number in brackets is the last exit code. Start from these two commands:</p>
+<pre><code>docker ps -a --filter "status=restarting"
+docker inspect -f 'exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}}' &lt;container&gt;
+docker logs --tail 100 &lt;container&gt;</code></pre>
+<p>Then read the exit code:</p>
+<table>
+<thead><tr><th>Exit code</th><th>Usual meaning</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>The application raised an error. The reason is in the log.</td></tr>
+<tr><td>126</td><td>The command exists but cannot be executed (permissions, wrong architecture).</td></tr>
+<tr><td>127</td><td>The command was not found in the image.</td></tr>
+<tr><td>137</td><td>Killed with SIGKILL. Check <code>oom=true</code> above: the container hit its memory limit.</td></tr>
+<tr><td>139</td><td>Segmentation fault.</td></tr>
+<tr><td>143</td><td>Stopped with SIGTERM. Often a normal stop, not a crash.</td></tr>
+</tbody>
+</table>
+<h2 id="the-usual-causes-in-a-dev-stack">The usual causes in a dev stack</h2>
+<ul>
+<li><strong>Missing configuration.</strong> A required variable is empty and the app exits during start. See <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">why an environment variable is not loaded</a>.</li>
+<li><strong>The database is not ready.</strong> The app tries to connect once, fails and exits. Wait for readiness, or retry inside the app.</li>
+<li><strong>A migration runs inside the start command.</strong> Every restart runs it again, and if it fails the container exits, which restarts it. Run migrations once, as a separate job.</li>
+<li><strong>Out of memory.</strong> A watcher, a compiler or a JVM takes more than the container or the Docker VM allows. This is exit 137 with <code>oom=true</code>.</li>
+<li><strong>The wrong command.</strong> An entrypoint that finishes immediately, such as a shell script that starts a server in the background and then exits, ends the container.</li>
+<li><strong>A one-shot job with a restart policy.</strong> A job that is supposed to finish is restarted every time it does.</li>
+</ul>
+<h2 id="what-flisk-does-and-shows">What Flisk does and shows</h2>
+<p>For container services, a bring-your-own resource uses the Compose restart policy <code>unless-stopped</code> unless you set <code>restart</code> in its <code>service.json</code> to <code>no</code>, <code>on-failure</code> or <code>always</code>. So a crash does loop by default. Use <code>no</code> or <code>on-failure</code> for a one-shot job.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "seed-data",
+  "appType": "bring-your-own",
+  "dockerfile": "Dockerfile",
+  "healthCheck": false,
+  "restart": "no"
+}</code></pre>
+<p>Start with what Flisk knows:</p>
+<pre><code>flisk status --unhealthy
+flisk logs --service orders-api --since 5m
+flisk doctor</code></pre>
+<p><code>flisk doctor</code> has two checks aimed at this problem. One reports <code>N migration command(s) run from a backend or worker's own start-up</code>. The fix it gives is to move the migration into a <code>migrator</code> resource that the service depends on. The other warns about a container pinned near its memory limit while burning CPU, which it describes as likely stuck in a boot-time retry or fetch loop. Its cause is not always known: the message is a hint, so confirm with <code>docker logs</code> before acting on it.</p>
+<p>Once you have changed the cause, restart just that service:</p>
+<pre><code>flisk restart orders-api</code></pre>
+<h3>Services without Docker</h3>
+<p>A local-process service that exits is started again after 1 second, then 2, 4 and 8. After five quick exits in a row Flisk stops restarting it and says so. That is a safety stop, not a fix: read the log, change the cause, then run <code>flisk up</code> again. Set <code>"restart": "no"</code> to turn the automatic restart off for a one-shot command.</p>
+<p>Read the loop in order: first the exit code, then the last 100 log lines, then the configuration the container was given. Most loops are explained by the first two. If both look normal, compare the variables inside the container with what you expected, because an empty value fails quietly in many frameworks.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li>Do not set the policy to <code>no</code> to hide a crash. You lose the loop and keep the bug.</li>
+<li>If <code>docker logs</code> is empty, the process probably died before writing anything. Run the image's command by hand with <code>docker run --rm -it --entrypoint sh &lt;image&gt;</code> and start it yourself.</li>
+<li>A container that is <em>unhealthy</em> but not restarting has a different problem. Its probe command may not exist in the image: see the health check section in <a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/">a service that will not start</a>.</li>
+<li>If memory is the cause, raise the Docker VM memory (Docker Desktop settings, or your Colima VM settings) before you tune the app. The choice of Docker runtime is compared in <a href="/@odykyi/docker-compose-guide/docker-desktop-vs-colima-vs-podman/">Docker Desktop, Colima and Podman</a>.</li>
+</ul>
+<p>For the log-reading part of this routine in more detail, see <a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/">how to read logs from every service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does Docker restart a container that is unhealthy?</summary><p>No. A failing health check only changes the reported status to unhealthy. A restart policy reacts to the process exiting, not to the health status.</p></details><details><summary>What does exit code 137 mean?</summary><p>The process was killed with SIGKILL. In a container that is often the out-of-memory killer, which you can confirm with docker inspect and the OOMKilled field.</p></details><details><summary>How do I stop a one-shot job such as a migration from restarting?</summary><p>Set the restart policy to no or on-failure. In a Flisk service.json that is the restart field, and migrations belong in their own migrator resource.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">When the local stack breaks</span></div>
+<div class="rgrid"><a href="/@odykyi/dev-env-troubleshooting/service-will-not-start/"><span class="lbl">Guide</span><b>How to debug a service that will not start locally</b><span>Most start-up failures come from five things: a taken port, a missing program, a missing variable, a wrong health path or a dependency that is not ready.</span></a><a href="/@odykyi/dev-env-troubleshooting/read-logs-from-every-service/"><span class="lbl">Guide</span><b>How to read logs from every service in a local stack</b><span>One terminal per service does not scale past three services. Pick one place that merges output, prefixes each line with a name and lets you filter.</span></a><a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/"><span class="lbl">Guide</span><b>Environment variable not loaded in a local service: how to debug</b><span>Four questions solve almost every case: where is it set, which source wins, did the process restart, and is it read at build time or run time.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
