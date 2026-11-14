@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test password reset and signup emails in end-to-end tests</title>
+<meta name="description" content="Read emails in Playwright or any test runner by querying Mailpit&#39;s REST API: poll for the message, extract the link, and keep tests isolated and fast.">
+<meta name="keywords" content="test email playwright, e2e test password reset email, mailpit api, playwright read email, test signup confirmation email">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test password reset and signup emails in end-to-end tests">
+<meta property="og:description" content="Read emails in Playwright or any test runner by querying Mailpit&#39;s REST API: poll for the message, extract the link, and keep tests isolated and fast.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test password reset and signup emails in end-to-end tests","description":"Read emails in Playwright or any test runner by querying Mailpit's REST API: poll for the message, extract the link, and keep tests isolated and fast.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/","keywords":"test email playwright, e2e test password reset email, mailpit api, playwright read email, test signup confirmation email","wordCount":754,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to test password reset and signup emails in end-to-end tests","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I get the confirmation link out of an email in a test?","acceptedAnswer":{"@type":"Answer","text":"Fetch the message from the catcher's API, take its text or HTML body, and match the link with a regular expression. Then open that URL in the browser."}},{"@type":"Question","name":"Should tests clear the inbox before each run?","acceptedAnswer":{"@type":"Answer","text":"Prefer unique recipient addresses per test, because clearing breaks parallel tests. Clear once in a global setup step if you want a clean start."}},{"@type":"Question","name":"Why not just mock the email library?","acceptedAnswer":{"@type":"Answer","text":"A mock shows the code asked to send mail. It cannot show that the SMTP settings, the template and the link in the message work."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to test password reset and signup emails in end-to-end tests</h1><p class="dek">A test that clicks Forgot password has to read the email to finish. A local inbox with an HTTP API turns that into a few lines of code.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-real-inbox-beats-a-mock">Why a real inbox beats a mock</a></li><li><a href="#mailpit-s-api-in-four-calls">Mailpit&#39;s API in four calls</a></li><li><a href="#a-playwright-example">A Playwright example</a></li><li><a href="#keeping-tests-independent">Keeping tests independent</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To test an email flow end to end, send the app's mail to a local catcher such as Mailpit, then have the test poll the catcher's HTTP API for a message to the address it used, read the link out of the body and open it. Use a fresh, unique address in every test so tests do not see each other's mail, and wait with a retry loop instead of a fixed sleep.</p>
+
+<h2 id="why-a-real-inbox-beats-a-mock">Why a real inbox beats a mock</h2>
+<p>You can mock your mail library in a unit test and assert that <code>sendMail</code> was called. That proves your code asked for an email. It does not prove the SMTP settings work, the template renders, the link has the right host, or the token in the link actually logs a user in. An end-to-end test with a real catcher covers all of that. The flow is the same in every stack:</p>
+<ol>
+<li>The test submits the form with a unique address.</li>
+<li>The app sends a message to the catcher.</li>
+<li>The test asks the catcher for messages to that address, retrying until one shows up.</li>
+<li>The test pulls the link out of the message and continues in the browser.</li>
+</ol>
+
+<h2 id="mailpit-s-api-in-four-calls">Mailpit's API in four calls</h2>
+<p>These are the endpoints you need, all under <code>/api/v1</code> on the web port (8025 by default):</p>
+<ul>
+<li><code>GET /search?query=to:ada@example.test</code> lists messages that match. Queries can combine terms such as <code>to:</code>, <code>subject:</code> and <code>from:</code>.</li>
+<li><code>GET /message/{ID}</code> returns one message with its <code>Text</code> and <code>HTML</code> bodies.</li>
+<li><code>GET /messages</code> lists the newest messages.</li>
+<li><code>DELETE /messages</code> empties the inbox.</li>
+</ul>
+
+<h2 id="a-playwright-example">A Playwright example</h2>
+<pre><code>import { test, expect, type APIRequestContext } from "@playwright/test";
+
+const MAIL = process.env.MAIL_API ?? "http://127.0.0.1:8025";
+
+async function waitForMail(request: APIRequestContext, to: string) {
+  let id: string | undefined;
+  await expect
+    .poll(
+      async () =&gt; {
+        const res = await request.get(`${MAIL}/api/v1/search`, {
+          params: { query: `to:${to}` },
+        });
+        const body = await res.json();
+        id = body.messages?.[0]?.ID;
+        return id;
+      },
+      { timeout: 15_000, message: `no mail for ${to}` },
+    )
+    .toBeTruthy();
+  const res = await request.get(`${MAIL}/api/v1/message/${id}`);
+  return res.json();
+}
+
+test("password reset link works", async ({ page, request }) =&gt; {
+  const email = `user-${Date.now()}@example.test`;
+  // ...create the user, then:
+  await page.goto("/forgot-password");
+  await page.getByLabel("Email").fill(email);
+  await page.getByRole("button", { name: "Send link" }).click();
+
+  const msg = await waitForMail(request, email);
+  const link = msg.Text.match(/https?:\/\/\S+\/reset\?token=\S+/)?.[0];
+  expect(link).toBeTruthy();
+
+  await page.goto(String(link));
+  await page.getByLabel("New password").fill("a-new-password-1");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Password updated")).toBeVisible();
+});</code></pre>
+<p>Run one test and print <code>msg</code> once, because the exact field names matter and your Mailpit version is the authority. Everything else is ordinary Playwright. The pattern works the same in Cypress, pytest or any runner that can make an HTTP request.</p>
+
+<h2 id="keeping-tests-independent">Keeping tests independent</h2>
+<ul>
+<li><strong>Unique addresses.</strong> Search by recipient, so parallel tests never read each other's messages. This is better than clearing the inbox before each test, which breaks as soon as two tests run at once.</li>
+<li><strong>Poll, do not sleep.</strong> A fixed <code>sleep(2000)</code> is either too slow or too short. A poll with a timeout is as fast as the system allows and fails with a clear message.</li>
+<li><strong>Check the link host.</strong> Assert that the link starts with the URL your tests expect. A reset link that points at a production host is a real bug that only an end-to-end test sees.</li>
+<li><strong>Clean up once.</strong> Call <code>DELETE /messages</code> in a global setup step, not per test.</li>
+</ul>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>The setup is the Mailpit resource from <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">the Mailpit article</a> next to your app. The test runs on your host, so it uses the published inbox port, <code>127.0.0.1:8025</code>, as in the code above; the app inside the stack uses <code>mail:1025</code> to send. Start the stack with <code>flisk up main</code> (add <code>--wait</code> if you want the command to return only when services are ready), then run Playwright. The general shape of running browser tests against a running stack is in <a href="/@odykyi/testing-and-shipping/playwright-against-a-local-stack/">Playwright against a local stack</a>, and the same idea for non-browser tests is in <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Mail sent by a background worker arrives late.</strong> The poll absorbs this. If it still times out, check the worker's logs first; see <a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/">the worker article</a>.</li>
+<li><strong>Tokens in plain text mail but not HTML.</strong> Parse the part you assert on, and test both parts exist.</li>
+<li><strong>Using this against staging.</strong> A catcher only works where you control the SMTP host. In staging, use your provider's sandbox or a dedicated test domain.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Make sure those test addresses and local settings can never leak into a real send: <a href="/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/">stop your dev environment from emailing real users</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I get the confirmation link out of an email in a test?</summary><p>Fetch the message from the catcher&#39;s API, take its text or HTML body, and match the link with a regular expression. Then open that URL in the browser.</p></details><details><summary>Should tests clear the inbox before each run?</summary><p>Prefer unique recipient addresses per test, because clearing breaks parallel tests. Clear once in a global setup step if you want a clean start.</p></details><details><summary>Why not just mock the email library?</summary><p>A mock shows the code asked to send mail. It cannot show that the SMTP settings, the template and the link in the message work.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/"><span class="lbl">Guide</span><b>How to catch outgoing email locally with Mailpit</b><span>Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</span></a><a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/"><span class="lbl">Guide</span><b>How to send email from a background worker with retries</b><span>Sending mail inside a web request makes pages slow and loses messages when SMTP hiccups. A small outbox and a worker fix both problems.</span></a><a href="/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/"><span class="lbl">Guide</span><b>How to stop your dev environment from emailing real users</b><span>It takes one restored production dump and one real API key to email ten thousand customers from a laptop. A few cheap layers make that impossible.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

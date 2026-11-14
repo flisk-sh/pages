@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to send email from Node.js to a local SMTP server</title>
+<meta name="description" content="Configure Nodemailer to send to a local catcher such as Mailpit in development, switch to a real provider in production with environment variables only.">
+<meta name="keywords" content="nodemailer localhost, nodemailer local smtp, nodemailer mailpit, node send email development, nodemailer ignoreTLS">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/nodemailer-local-smtp/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to send email from Node.js to a local SMTP server">
+<meta property="og:description" content="Configure Nodemailer to send to a local catcher such as Mailpit in development, switch to a real provider in production with environment variables only.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/nodemailer-local-smtp/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to send email from Node.js to a local SMTP server","description":"Configure Nodemailer to send to a local catcher such as Mailpit in development, switch to a real provider in production with environment variables only.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/nodemailer-local-smtp/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/nodemailer-local-smtp/","keywords":"nodemailer localhost, nodemailer local smtp, nodemailer mailpit, node send email development, nodemailer ignoreTLS","wordCount":752,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to send email from Node.js to a local SMTP server","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/nodemailer-local-smtp/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does Nodemailer hang when connecting to my local server?","acceptedAnswer":{"@type":"Answer","text":"Usually the TLS setting does not match the port. Use secure: true only for port 465. For a plain local catcher on 1025, keep secure false."}},{"@type":"Question","name":"Do I need authentication for Mailpit?","acceptedAnswer":{"@type":"Answer","text":"No. A default Mailpit accepts mail without a username or password. Only set auth if your client library refuses to connect without it, and then enable MP_SMTP_AUTH_ACCEPT_ANY on Mailpit."}},{"@type":"Question","name":"Can I test Nodemailer without a server?","acceptedAnswer":{"@type":"Answer","text":"Yes, jsonTransport and streamTransport build the message without sending it. They suit unit tests, but they never open an SMTP connection."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to send email from Node.js to a local SMTP server</h1><p class="dek">One transport function, driven by environment variables, is enough to send to a local inbox on your laptop and to a real provider in production.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-transport">The transport</a></li><li><a href="#sending-a-message">Sending a message</a></li><li><a href="#run-it-against-mailpit">Run it against Mailpit</a></li><li><a href="#check-the-connection-early">Check the connection early</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To send email from Node.js to a local inbox, create a Nodemailer transport with the catcher's host and port (for Mailpit, <code>localhost</code> and <code>1025</code>), turn off TLS and authentication, and read all of it from environment variables. The same code then works in production when you set the provider's values instead.</p>
+
+<h2 id="the-transport">The transport</h2>
+<p>Keep the transport in one file so the rest of the app never knows where mail goes:</p>
+<pre><code>import nodemailer from "nodemailer";
+
+const port = Number(process.env.SMTP_PORT ?? 1025);
+
+export const transport = nodemailer.createTransport({
+  host: process.env.SMTP_HOST ?? "localhost",
+  port,
+  secure: port === 465,                 // implicit TLS only on 465
+  ignoreTLS: process.env.SMTP_TLS === "off",
+  auth: process.env.SMTP_USER
+    ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+    : undefined,
+});</code></pre>
+<p>Why these options:</p>
+<ul>
+<li><code>secure: true</code> means TLS from the first byte, which only port 465 uses. Port 587 starts plain and upgrades with STARTTLS, so <code>secure</code> stays false there. Mixing these up is the most common cause of a hang or an "wrong version number" error.</li>
+<li><code>ignoreTLS: true</code> tells Nodemailer not to try STARTTLS even if the server offers it. A default Mailpit does not offer it, so you can leave this off locally, but setting <code>SMTP_TLS=off</code> in your dev environment makes the intent explicit.</li>
+<li>If <code>SMTP_USER</code> is unset, no <code>auth</code> block is sent. A local catcher needs no credentials.</li>
+</ul>
+
+<h2 id="sending-a-message">Sending a message</h2>
+<pre><code>await transport.sendMail({
+  from: "App &lt;no-reply@example.test&gt;",
+  to: "ada@example.test",
+  subject: "Reset your password",
+  text: "Open this link to reset it: http://localhost:3000/reset?token=abc",
+  html: "&lt;p&gt;Open &lt;a href=\"http://localhost:3000/reset?token=abc\"&gt;this link&lt;/a&gt; to reset it.&lt;/p&gt;",
+});</code></pre>
+<p>Always send a plain text part next to the HTML. Mailpit shows both, and a missing text part is a real deliverability problem. Use a reserved test domain such as <code>example.test</code> or <code>example.com</code> for addresses you invent, so a misconfiguration can never mail a stranger.</p>
+
+<p>Attachments work the same way: pass an <code>attachments</code> array with a <code>filename</code> and either a <code>path</code> or a <code>content</code> buffer. Open the message in the inbox and download the file to confirm that the name and type came through intact. This catches the common mistake of attaching a stream that was already read.</p>
+
+<h2 id="run-it-against-mailpit">Run it against Mailpit</h2>
+<p>Start a catcher (see <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">how to run Mailpit</a>), set the variables and run your script:</p>
+<pre><code>SMTP_HOST=localhost SMTP_PORT=1025 node send.mjs</code></pre>
+<p>Open <code>http://localhost:8025</code> and the message is there. If you only want to check what Nodemailer would send, without any server, the built-in <code>jsonTransport: true</code> option returns the message as JSON, which suits unit tests. It does not exercise a socket, so keep at least one test that talks to a real catcher.</p>
+
+<h2 id="check-the-connection-early">Check the connection early</h2>
+<p>Nodemailer can test a transport before you send anything. Call it once at startup in development, so a wrong host or port is reported when the server boots and not when a user clicks "forgot password":</p>
+<pre><code>try {
+  await transport.verify();
+  console.log("SMTP ready");
+} catch (err) {
+  console.error("SMTP not reachable:", err.code, err.message);
+}</code></pre>
+<p>Errors carry useful fields. <code>err.code</code> is <code>ECONNECTION</code> or <code>ESOCKET</code> for network problems, and <code>err.responseCode</code> holds the SMTP reply code when the server answered. A 4xx code means "try again later", a 5xx means the server refused the message. That distinction decides whether a retry makes sense.</p>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>If the Mailpit resource from the earlier article is in your stack and your API lists it in <code>dependsOn</code>, the API container receives <code>SMTP_HOST</code> and <code>SMTP_PORT</code> from the mail resource's <code>provides</code> block (the host is the resource name, <code>mail</code>). The transport above needs no change: it reads those variables. Create the API as usual:</p>
+<pre><code>flisk resource api --type backend --framework express --stack main --yes</code></pre>
+<p>Then add <code>"dependsOn": ["mail"]</code> to <code>services/main/api/service.json</code>. To send a one-off message from inside the running API container with its environment, use <code>flisk run api -- &lt;your command&gt;</code>; see <a href="/@odykyi/workers-and-queues/run-a-one-off-command-in-a-service/">running a one-off command in a service</a>. If the API runs as a local process rather than a container, use <code>localhost</code> and the published port instead.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Connection refused from a container.</strong> <code>localhost</code> is the container, not your laptop. Use the resource name.</li>
+<li><strong>Sending inside the request.</strong> An SMTP call can be slow or fail. For anything beyond a demo, queue the email and send it from a worker, as in <a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/">sending email from a worker with retries</a>.</li>
+<li><strong>Production values in <code>.env</code>.</strong> Do not copy a real provider key into your dev environment. See <a href="/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/">how to stop dev from emailing real users</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Look at how the HTML renders in the inbox in <a href="/@odykyi/email-and-notifications-local/preview-html-email-templates/">previewing HTML email templates</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does Nodemailer hang when connecting to my local server?</summary><p>Usually the TLS setting does not match the port. Use secure: true only for port 465. For a plain local catcher on 1025, keep secure false.</p></details><details><summary>Do I need authentication for Mailpit?</summary><p>No. A default Mailpit accepts mail without a username or password. Only set auth if your client library refuses to connect without it, and then enable MP_SMTP_AUTH_ACCEPT_ANY on Mailpit.</p></details><details><summary>Can I test Nodemailer without a server?</summary><p>Yes, jsonTransport and streamTransport build the message without sending it. They suit unit tests, but they never open an SMTP connection.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/"><span class="lbl">Guide</span><b>How to catch outgoing email locally with Mailpit</b><span>Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</span></a><a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/"><span class="lbl">Guide</span><b>How to send email from a background worker with retries</b><span>Sending mail inside a web request makes pages slow and loses messages when SMTP hiccups. A small outbox and a worker fix both problems.</span></a><a href="/@odykyi/email-and-notifications-local/preview-html-email-templates/"><span class="lbl">Guide</span><b>How to preview HTML email templates before you send them</b><span>Browsers are forgiving and email clients are not. A local loop of render, send, look catches most layout bugs before a real inbox does.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

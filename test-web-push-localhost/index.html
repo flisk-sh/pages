@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test web push notifications on localhost</title>
+<meta name="description" content="Test web push in development: VAPID keys, a service worker on localhost, subscribing from the browser, sending from Node, and simulating a push in DevTools.">
+<meta name="keywords" content="web push localhost, test push notifications locally, vapid keys, service worker push test, web-push node">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/test-web-push-localhost/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test web push notifications on localhost">
+<meta property="og:description" content="Test web push in development: VAPID keys, a service worker on localhost, subscribing from the browser, sending from Node, and simulating a push in DevTools.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/test-web-push-localhost/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test web push notifications on localhost","description":"Test web push in development: VAPID keys, a service worker on localhost, subscribing from the browser, sending from Node, and simulating a push in DevTools.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/test-web-push-localhost/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/test-web-push-localhost/","keywords":"web push localhost, test push notifications locally, vapid keys, service worker push test, web-push node","wordCount":718,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to test web push notifications on localhost","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/test-web-push-localhost/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does web push work on localhost without HTTPS?","acceptedAnswer":{"@type":"Answer","text":"Yes. Browsers treat localhost as a secure context, so service workers and push work over plain http there."}},{"@type":"Question","name":"Can I test a push notification without a server?","acceptedAnswer":{"@type":"Answer","text":"Partly. Chrome DevTools has a Push button under Application, Service Workers that fires a push event into your worker. It does not test subscribing or delivery."}},{"@type":"Question","name":"Why does a real web push need the internet?","acceptedAnswer":{"@type":"Answer","text":"The notification goes through the browser vendor's push service, which your server contacts over the network, so there is no fully offline path."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to test web push notifications on localhost</h1><p class="dek">Web push works on localhost without HTTPS, but it has more moving parts than email: keys, a service worker, a permission prompt and a browser vendor&#39;s push service.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-pieces">The pieces</a></li><li><a href="#step-1-generate-keys">Step 1: generate keys</a></li><li><a href="#step-2-service-worker-and-subscription">Step 2: service worker and subscription</a></li><li><a href="#step-3-send-from-node">Step 3: send from Node</a></li><li><a href="#test-the-worker-without-any-server">Test the worker without any server</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>You can test web push on <code>http://localhost</code> without HTTPS, because browsers treat localhost as a secure context. Generate a VAPID key pair, register a service worker that handles the <code>push</code> event, subscribe from a page after a user click, and send to the saved subscription from a small Node script. For the service worker alone, Chrome DevTools can fire a fake push event with no server.</p>
+
+<h2 id="the-pieces">The pieces</h2>
+<p>Web push has four parts, and bugs hide in the seams between them:</p>
+<ol>
+<li><strong>VAPID keys.</strong> A public and private key pair that identifies your server to the push service.</li>
+<li><strong>A service worker.</strong> A script that wakes up on a <code>push</code> event and shows the notification.</li>
+<li><strong>A subscription.</strong> Created in the page. It contains an endpoint URL at the browser vendor's push service, plus encryption keys. Your server stores it.</li>
+<li><strong>A sender.</strong> Your server, which posts an encrypted payload to the subscription's endpoint.</li>
+</ol>
+
+<h2 id="step-1-generate-keys">Step 1: generate keys</h2>
+<pre><code>npm install web-push
+npx web-push generate-vapid-keys</code></pre>
+<p>Keep the private key in an environment variable. The public key goes to the page. Never commit the private key; for local use, a dev-only pair in your git-ignored <code>.env</code> is fine, and production gets a different pair.</p>
+
+<h2 id="step-2-service-worker-and-subscription">Step 2: service worker and subscription</h2>
+<p>The service worker, served from your site's root as <code>/sw.js</code>:</p>
+<pre><code>self.addEventListener("push", (event) =&gt; {
+  const data = event.data ? event.data.json() : { title: "Hello", body: "" };
+  event.waitUntil(self.registration.showNotification(data.title, { body: data.body }));
+});</code></pre>
+<p>In the page, ask permission from a click handler (browsers ignore requests that are not caused by a user gesture) and subscribe:</p>
+<pre><code>const reg = await navigator.serviceWorker.register("/sw.js");
+const permission = await Notification.requestPermission();
+if (permission === "granted") {
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: PUBLIC_VAPID_KEY,
+  });
+  await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(sub),
+  });
+}</code></pre>
+
+<h2 id="step-3-send-from-node">Step 3: send from Node</h2>
+<pre><code>import webpush from "web-push";
+
+webpush.setVapidDetails(
+  "mailto:dev@example.test",
+  process.env.VAPID_PUBLIC_KEY,
+  process.env.VAPID_PRIVATE_KEY,
+);
+
+await webpush.sendNotification(
+  savedSubscription,
+  JSON.stringify({ title: "Order shipped", body: "Order 1042 is on its way" }),
+);</code></pre>
+<p>This call goes to the push service of the browser vendor, for example Google's for Chrome and Mozilla's for Firefox. That means an internet connection is required for a real end-to-end send, so web push is the one notification channel that cannot run fully offline. Treat a 404 or 410 response as "this subscription is gone" and delete it from your store.</p>
+
+<h2 id="test-the-worker-without-any-server">Test the worker without any server</h2>
+<p>In Chrome, open DevTools, go to the Application panel, choose Service Workers and use the Push button, which dispatches a push event with text you type. That tests your <code>push</code> handler and the notification display with no keys and no network. Use JSON text if your handler calls <code>event.data.json()</code>. It does not test subscription or delivery, so do the full send once as well.</p>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk runs the pieces that surround this: a frontend, an API that stores subscriptions and a worker that sends notifications, and it prints their URLs with <code>flisk networks</code>. It does not emulate a push service, and there is no local substitute for one. One thing to verify when you test through a routed <code>*.localhost</code> address instead of a plain <code>localhost:port</code>: open the browser console and check that <code>window.isSecureContext</code> is true. If it is false on your URL, service workers and push will not register there, and you should use the plain <code>localhost</code> address that Flisk's frontend also exposes. See <a href="/@odykyi/microservices-local-dev/local-urls-instead-of-ports/">local URLs instead of port numbers</a> for how the hostnames work. Send from a worker, as described in <a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/">the email worker article</a>; the outbox and retry design applies to push as well.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Permission blocked.</strong> After a user clicks "Block" the prompt never returns. Reset the site's permission in browser settings, or use a fresh profile.</li>
+<li><strong>Service worker caching.</strong> An old worker can keep running. In DevTools, tick "Update on reload" while developing.</li>
+<li><strong>Safari and iOS.</strong> Push on iPhone works only for web apps added to the home screen, and the details change between versions. Read Apple's current guidance before promising support.</li>
+<li><strong>Stale subscriptions.</strong> Users clear data and subscriptions die. Handle 404 and 410 by removing them.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If a user also has email and SMS, keep one place that decides which channel to use; test the email side with <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">Mailpit</a> and the text side with <a href="/@odykyi/email-and-notifications-local/test-sms-locally/">a fake SMS service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does web push work on localhost without HTTPS?</summary><p>Yes. Browsers treat localhost as a secure context, so service workers and push work over plain http there.</p></details><details><summary>Can I test a push notification without a server?</summary><p>Partly. Chrome DevTools has a Push button under Application, Service Workers that fires a push event into your worker. It does not test subscribing or delivery.</p></details><details><summary>Why does a real web push need the internet?</summary><p>The notification goes through the browser vendor&#39;s push service, which your server contacts over the network, so there is no fully offline path.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/test-sms-locally/"><span class="lbl">Guide</span><b>How to test SMS notifications locally without sending texts</b><span>Every real text costs money and can reach a real phone. Put the provider behind a small interface and give development a fake that you can read.</span></a><a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/"><span class="lbl">Guide</span><b>How to send email from a background worker with retries</b><span>Sending mail inside a web request makes pages slow and loses messages when SMTP hiccups. A small outbox and a worker fix both problems.</span></a><a href="/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/"><span class="lbl">Guide</span><b>How to stop your dev environment from emailing real users</b><span>It takes one restored production dump and one real API key to email ten thousand customers from a laptop. A few cheap layers make that impossible.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

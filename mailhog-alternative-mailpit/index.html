@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MailHog is unmaintained: what to use instead in local dev</title>
+<meta name="description" content="MailHog has had no release in years. Compare Mailpit, MailCatcher and smtp4dev as local email catchers, and see how to switch an existing setup in minutes.">
+<meta name="keywords" content="mailhog alternative, mailhog vs mailpit, mailhog deprecated, local email testing tool, mailcatcher vs mailpit">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MailHog is unmaintained: what to use instead in local dev">
+<meta property="og:description" content="MailHog has had no release in years. Compare Mailpit, MailCatcher and smtp4dev as local email catchers, and see how to switch an existing setup in minutes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"MailHog is unmaintained: what to use instead in local dev","description":"MailHog has had no release in years. Compare Mailpit, MailCatcher and smtp4dev as local email catchers, and see how to switch an existing setup in minutes.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/","keywords":"mailhog alternative, mailhog vs mailpit, mailhog deprecated, local email testing tool, mailcatcher vs mailpit","wordCount":723,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"MailHog is unmaintained: what to use instead in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/mailhog-alternative-mailpit/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is MailHog dead?","acceptedAnswer":{"@type":"Answer","text":"It still runs, but the project has had no release for years, so new problems will not be fixed. Mailpit is the actively developed replacement with the same ports."}},{"@type":"Question","name":"Can Mailpit replace MailHog without changing my app?","acceptedAnswer":{"@type":"Answer","text":"Usually yes for the app itself, since both accept plain SMTP on port 1025. Only tests or scripts that call MailHog's HTTP API need changes."}},{"@type":"Question","name":"Is MailCatcher still a good choice?","acceptedAnswer":{"@type":"Answer","text":"It works and is simple if you already use Ruby, but it has fewer features than Mailpit and uses a different web port, 1080."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>MailHog is unmaintained: what to use instead in local dev</h1><p class="dek">If your Compose file or tutorial still says mailhog/mailhog, it works, but nobody is fixing it. Here is what to move to and what changes.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-people-are-moving-away-from-mailhog">Why people are moving away from MailHog</a></li><li><a href="#the-options-compared">The options, compared</a></li><li><a href="#switch-from-mailhog-to-mailpit">Switch from MailHog to Mailpit</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#a-short-migration-checklist">A short migration checklist</a></li><li><a href="#when-to-keep-what-you-have">When to keep what you have</a></li></ol></nav></aside>
+<article><p>Use Mailpit as the replacement for MailHog. It uses the same two ports (1025 for SMTP, 8025 for the web UI), so most setups change by one line: the image name. MailHog's repository has had no release for years, while Mailpit is actively developed and adds search, a REST API for tests and optional persistent storage.</p>
+
+<h2 id="why-people-are-moving-away-from-mailhog">Why people are moving away from MailHog</h2>
+<p>MailHog was the default answer to "how do I see my app's email locally" for a long time, and it still runs. The problems are small but they add up: no new releases, no fixes for newer SMTP clients and extensions, and an image that is built for older platforms. On Apple silicon you may see an architecture warning or run it under emulation. None of this breaks a simple demo, but a tool you depend on every day should have someone looking after it.</p>
+
+<h2 id="the-options-compared">The options, compared</h2>
+<table>
+<thead><tr><th>Tool</th><th>Ports</th><th>Good for</th><th>Trade-off</th></tr></thead>
+<tbody>
+<tr><td>Mailpit</td><td>SMTP 1025, UI and API 8025</td><td>Most projects; tests that read the inbox over HTTP; MailHog-style setups</td><td>Another Go binary or image to run</td></tr>
+<tr><td>MailCatcher</td><td>SMTP 1025, UI 1080</td><td>Ruby shops that already have the gem</td><td>Ruby runtime; different UI port; fewer features</td></tr>
+<tr><td>smtp4dev</td><td>its own SMTP and UI ports</td><td>.NET teams, and a desktop app on Windows</td><td>Ports differ from MailHog's, so check the config you copy</td></tr>
+<tr><td>A console or file backend</td><td>none</td><td>Quick checks in frameworks that have one (Django, Rails, Laravel)</td><td>No real SMTP round trip, so connection and TLS bugs stay hidden</td></tr>
+</tbody>
+</table>
+<p>The framework "log it to the console" backends are fine for a first check and bad as your only test, because the code path that opens an SMTP connection never runs. Pair them with a real catcher.</p>
+
+<h2 id="switch-from-mailhog-to-mailpit">Switch from MailHog to Mailpit</h2>
+<p>In Compose, the change is usually just the image:</p>
+<pre><code>services:
+  mail:
+    image: axllent/mailpit   # was: mailhog/mailhog
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"</code></pre>
+<p>Your application settings stay the same: host, port 1025, no auth, no TLS. Two differences to check:</p>
+<ul>
+<li><strong>Persistence.</strong> MailHog keeps mail in memory by default. Mailpit does too until you set <code>MP_DATABASE=/data/mailpit.db</code> and mount a volume.</li>
+<li><strong>Test code that calls the API.</strong> If your tests fetch <code>/api/v2/messages</code> from MailHog, rewrite them for Mailpit's API, which lives under <code>/api/v1/</code> (for example <code>GET /api/v1/messages</code>, <code>GET /api/v1/message/{id}</code>, <code>GET /api/v1/search?query=...</code> and <code>DELETE /api/v1/messages</code> to empty the inbox). The JSON field names differ, so run one test and print the response before you adjust the parsing.</li>
+</ul>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk does not have its own mail catcher and does not care which one you pick. It runs whichever image you name as a bring-your-own resource. For Mailpit that is one resource with the image, a TCP health check on 1025, and the inbox port published on <code>127.0.0.1</code>. The full <code>service.json</code> is in <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">the Mailpit setup article</a>. If you have an existing <code>docker-compose.yml</code> with a <code>mailhog</code> service, <code>flisk import --dry-run</code> shows what it would turn into, and you can then change the image line in the generated <code>service.json</code>. There is a longer walk-through in <a href="/@odykyi/docker-compose-guide/import-docker-compose-file/">importing a Compose file</a>.</p>
+
+<h2 id="a-short-migration-checklist">A short migration checklist</h2>
+<ol>
+<li>Search the repository for <code>mailhog</code>, <code>8025</code> and <code>1025</code>. Compose files, Makefiles, CI workflows and README files all tend to mention it.</li>
+<li>Replace the image and keep the ports. Pin a version tag instead of <code>latest</code>, so a surprise update does not change your inbox in the middle of a sprint.</li>
+<li>Add a volume if you want messages to survive a restart, and set a message cap so the file stays small.</li>
+<li>Send one message from your app and one from a script with a different SMTP library. If both arrive, the swap is done.</li>
+<li>Update the README line that tells new developers where to find the inbox. Stale setup instructions cost more than the tool does.</li>
+</ol>
+
+<h2 id="when-to-keep-what-you-have">When to keep what you have</h2>
+<p>If MailHog works for you and nothing in your stack touches it beyond port 1025, you are not forced to move today. Move when you hit a bug, when you need to search a busy inbox, or when you start writing tests that read mail. Doing it before a new hire sets the project up on a new machine saves you a confusing evening.</p>
+<p>Next, <a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">use the inbox API in an end-to-end test</a> so you stop checking mail by eye.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is MailHog dead?</summary><p>It still runs, but the project has had no release for years, so new problems will not be fixed. Mailpit is the actively developed replacement with the same ports.</p></details><details><summary>Can Mailpit replace MailHog without changing my app?</summary><p>Usually yes for the app itself, since both accept plain SMTP on port 1025. Only tests or scripts that call MailHog&#39;s HTTP API need changes.</p></details><details><summary>Is MailCatcher still a good choice?</summary><p>It works and is simple if you already use Ruby, but it has fewer features than Mailpit and uses a different web port, 1080.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/"><span class="lbl">Guide</span><b>How to catch outgoing email locally with Mailpit</b><span>Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</span></a><a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/"><span class="lbl">Guide</span><b>How to test password reset and signup emails in end-to-end tests</b><span>A test that clicks Forgot password has to read the email to finish. A local inbox with an HTTP API turns that into a few lines of code.</span></a><a href="/@odykyi/email-and-notifications-local/nodemailer-local-smtp/"><span class="lbl">Guide</span><b>How to send email from Node.js to a local SMTP server</b><span>One transport function, driven by environment variables, is enough to send to a local inbox on your laptop and to a real provider in production.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

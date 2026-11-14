@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to stop your dev environment from emailing real users</title>
+<meta name="description" content="Put guards in place so local and test environments cannot send email to customers: a catcher by default, recipient allowlists, scrubbed data and no live keys.">
+<meta name="keywords" content="prevent sending real emails development, dev environment email safety, email allowlist staging, scrub production data, accidentally emailed customers">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to stop your dev environment from emailing real users">
+<meta property="og:description" content="Put guards in place so local and test environments cannot send email to customers: a catcher by default, recipient allowlists, scrubbed data and no live keys.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to stop your dev environment from emailing real users","description":"Put guards in place so local and test environments cannot send email to customers: a catcher by default, recipient allowlists, scrubbed data and no live keys.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/","keywords":"prevent sending real emails development, dev environment email safety, email allowlist staging, scrub production data, accidentally emailed customers","wordCount":790,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Email and notifications in local dev","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/"},{"@type":"ListItem","position":3,"name":"How to stop your dev environment from emailing real users","item":"https://pages.flisk.si/@odykyi/email-and-notifications-local/stop-dev-from-emailing-real-users/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the safest default for email in development?","acceptedAnswer":{"@type":"Answer","text":"Send everything to a local catcher such as Mailpit and keep no live provider key in the dev environment, so a mistake has nothing to send with."}},{"@type":"Question","name":"Can I use a production database copy locally?","acceptedAnswer":{"@type":"Answer","text":"Only after scrubbing it: replace every email address with a fake one, clear phone numbers and tokens, and empty queues of pending sends, in the same step as the restore."}},{"@type":"Question","name":"Does Flisk prevent sending real email?","acceptedAnswer":{"@type":"Answer","text":"No. It can run a local mail catcher and pass its SMTP settings to dependent services, which makes the safe default easy, but it does not block sends or scan for keys."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/email-and-notifications-local/">Email and notifications in local dev</a></div>
+<section class="hero"><div><div class="lbl">Email and notifications in local dev</div><h1>How to stop your dev environment from emailing real users</h1><p class="dek">It takes one restored production dump and one real API key to email ten thousand customers from a laptop. A few cheap layers make that impossible.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-it-usually-goes-wrong">How it usually goes wrong</a></li><li><a href="#layer-1-default-to-a-catcher">Layer 1: default to a catcher</a></li><li><a href="#layer-2-no-live-keys-in-dev">Layer 2: no live keys in dev</a></li><li><a href="#layer-3-an-allowlist-at-the-sending-boundary">Layer 3: an allowlist at the sending boundary</a></li><li><a href="#layer-4-scrub-the-data">Layer 4: scrub the data</a></li><li><a href="#with-flisk">With Flisk</a></li><li><a href="#a-quick-audit-for-an-existing-project">A quick audit for an existing project</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To stop a dev environment from emailing real users, use several independent layers: point SMTP at a local catcher by default, keep real provider keys out of dev entirely, check recipients against an allowlist in code, and never load real customer addresses into a dev database. One layer can fail. All four failing in the same week is unlikely.</p>
+
+<h2 id="how-it-usually-goes-wrong">How it usually goes wrong</h2>
+<p>These incidents share a pattern. Someone restores a production database dump to debug a problem. The dump has real addresses. A developer runs a script or a cron job that sends "your order shipped" or "we miss you", and the mail library has a live API key in its config because the <code>.env</code> was copied from a teammate. Nothing was malicious, and every step was normal.</p>
+
+<h2 id="layer-1-default-to-a-catcher">Layer 1: default to a catcher</h2>
+<p>Make "send to the local catcher" the default configuration, so a developer has to do extra work to send real mail, not extra work to avoid it. Your code reads <code>SMTP_HOST</code> and <code>SMTP_PORT</code>, and the example env file ships with <code>localhost</code> and <code>1025</code>. Setup steps are in <a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/">the Mailpit article</a>.</p>
+
+<h2 id="layer-2-no-live-keys-in-dev">Layer 2: no live keys in dev</h2>
+<p>If the dev environment has no live key, a mistake has nothing to send with. Practical rules:</p>
+<ul>
+<li>Keep real credentials out of files that are committed and out of any file you copy between machines. Commit an example file with names only; see <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values, in committed config</a>.</li>
+<li>Give each environment its own key with its own limits, and prefer your provider's sandbox or test mode where one exists.</li>
+<li>Store production keys in your host's secret store, not in a developer's shell history.</li>
+</ul>
+
+<h2 id="layer-3-an-allowlist-at-the-sending-boundary">Layer 3: an allowlist at the sending boundary</h2>
+<p>Add one function that every email send goes through, and make it refuse addresses outside an allowed set when the environment is not production:</p>
+<pre><code>const ALLOWED = (process.env.MAIL_ALLOWED_DOMAINS ?? "example.test,example.com")
+  .split(",")
+  .map((d) =&gt; d.trim().toLowerCase());
+
+export function assertSafeRecipient(address: string) {
+  if (process.env.APP_ENV === "production") return;
+  const domain = address.split("@").pop()?.toLowerCase() ?? "";
+  if (ALLOWED.includes(domain) === false) {
+    throw new Error(`Refusing to send to ${address} outside production`);
+  }
+}</code></pre>
+<p>Call it inside your <code>sendEmail</code> wrapper, not in every caller. If a bug slips through, the send throws and logs, and no mail leaves. Another option is to rewrite every recipient to a single team address in non-production, with the original address kept in a header, but a refusal is simpler to reason about.</p>
+
+<h2 id="layer-4-scrub-the-data">Layer 4: scrub the data</h2>
+<p>A dev database should not hold real people's addresses. When you need production-shaped data, run a script after the restore that replaces every email with a fake one, for example <code>user-123@example.test</code>, and clears phone numbers and any stored tokens. Better, seed development data from scratch; the <a href="/@odykyi/local-database-guide/seed-a-local-database/">seeding guide</a> shows one way. Do this in the same step as the restore, so no one can start the app between the two.</p>
+
+<h2 id="with-flisk">With Flisk</h2>
+<p>Flisk helps with layer 1 and a little with layer 2, nothing more. A Mailpit resource in the stack, listed in the app's <code>dependsOn</code>, gives the app <code>SMTP_HOST</code> and <code>SMTP_PORT</code> from the mail resource's <code>provides</code>, so a fresh <code>flisk up</code> sends to the catcher without anyone editing a file. Service manifests declare secret names in <code>secrets.required</code> and read values from the project <code>.env</code>, which stays out of git, so the manifest you commit holds names only. Flisk does not scan for live keys or block sends, so layers 3 and 4 are code and process, not tooling. Anything in the <code>provides</code> block is plain configuration, never a place for a key.</p>
+
+<h2 id="a-quick-audit-for-an-existing-project">A quick audit for an existing project</h2>
+<p>Ask four questions of your current setup, and fix the first one that gets a "no" or a shrug:</p>
+<ol>
+<li>If I run the app after a fresh clone with no edits, where does its mail go?</li>
+<li>Which files on a developer's laptop contain a live provider key, and who gave it to them?</li>
+<li>If a script loops over every user and sends mail, what stops it in a non-production environment?</li>
+<li>When was the last time a dev database held real addresses, and how would I know?</li>
+</ol>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Other channels.</strong> SMS, push and Slack messages need the same layers. See <a href="/@odykyi/email-and-notifications-local/test-sms-locally/">testing SMS locally</a>.</li>
+<li><strong>Background jobs already in a queue.</strong> A restored queue table may hold pending sends. Empty it as part of the restore.</li>
+<li><strong>"It is only staging."</strong> Staging with real customer data and a live key is production for the person who gets the email.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Add a test that proves the guard works: try to send to a non-allowlisted address and assert it throws. Then read <a href="/@odykyi/email-and-notifications-local/assert-emails-in-e2e-tests/">how to assert emails in end-to-end tests</a> for the positive case.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the safest default for email in development?</summary><p>Send everything to a local catcher such as Mailpit and keep no live provider key in the dev environment, so a mistake has nothing to send with.</p></details><details><summary>Can I use a production database copy locally?</summary><p>Only after scrubbing it: replace every email address with a fake one, clear phone numbers and tokens, and empty queues of pending sends, in the same step as the restore.</p></details><details><summary>Does Flisk prevent sending real email?</summary><p>No. It can run a local mail catcher and pass its SMTP settings to dependent services, which makes the safe default easy, but it does not block sends or scan for keys.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Email and notifications in local dev</span></div>
+<div class="rgrid"><a href="/@odykyi/email-and-notifications-local/run-mailpit-locally/"><span class="lbl">Guide</span><b>How to catch outgoing email locally with Mailpit</b><span>Mailpit accepts any message your app sends over SMTP and shows it in a web inbox. Nothing leaves your machine, and you do not need an account anywhere.</span></a><a href="/@odykyi/email-and-notifications-local/test-sms-locally/"><span class="lbl">Guide</span><b>How to test SMS notifications locally without sending texts</b><span>Every real text costs money and can reach a real phone. Put the provider behind a small interface and give development a fake that you can read.</span></a><a href="/@odykyi/email-and-notifications-local/email-worker-with-retries/"><span class="lbl">Guide</span><b>How to send email from a background worker with retries</b><span>Sending mail inside a web request makes pages slow and loses messages when SMTP hiccups. A small outbox and a worker fix both problems.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
