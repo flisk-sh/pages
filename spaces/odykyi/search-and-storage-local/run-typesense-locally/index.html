@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Typesense locally with Docker and create a collection</title>
+<meta name="description" content="Run a Typesense server on your laptop with Docker or Flisk, set the API key, create a collection with curl, import documents and search with query_by.">
+<meta name="keywords" content="run typesense locally, typesense docker, typesense docker compose, typesense create collection curl, typesense api key local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/run-typesense-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Typesense locally with Docker and create a collection">
+<meta property="og:description" content="Run a Typesense server on your laptop with Docker or Flisk, set the API key, create a collection with curl, import documents and search with query_by.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/run-typesense-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Typesense locally with Docker and create a collection","description":"Run a Typesense server on your laptop with Docker or Flisk, set the API key, create a collection with curl, import documents and search with query_by.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-typesense-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-typesense-locally/","keywords":"run typesense locally, typesense docker, typesense docker compose, typesense create collection curl, typesense api key local","wordCount":636,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"How to run Typesense locally with Docker and create a collection","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-typesense-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does Typesense refuse to start?","acceptedAnswer":{"@type":"Answer","text":"It needs both a data directory and an API key. Pass --data-dir and --api-key as arguments to the container, and mount a volume at the data directory so the data survives restarts."}},{"@type":"Question","name":"What is query_by?","acceptedAnswer":{"@type":"Answer","text":"It lists the fields a search matches against. Every search request must include it, for example query_by=title."}},{"@type":"Question","name":"Do I need --enable-cors?","acceptedAnswer":{"@type":"Answer","text":"Only if a browser page calls Typesense directly. If your backend does the searching, you can leave it off."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>How to run Typesense locally with Docker and create a collection</h1><p class="dek">Typesense insists on an API key and a data directory. Set both and you have a fast search server to develop against.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#create-a-collection-add-documents-search">Create a collection, add documents, search</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-it">When not to use it</a></li></ol></nav></aside>
+<article><p>To run Typesense locally, start the <code>typesense/typesense</code> image with <code>--data-dir</code>, a made-up <code>--api-key</code>, and port 8108 published on 127.0.0.1. Every request must then carry the key in an <code>X-TYPESENSE-API-KEY</code> header. Create a collection with a schema, import documents, and search with <code>query_by</code>.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<pre><code>docker run -d --name dev-typesense \
+  -p 127.0.0.1:8108:8108 \
+  -v dev_typesense_data:/data \
+  typesense/typesense:27.1 \
+  --data-dir=/data --api-key=local-dev-key --enable-cors</code></pre>
+<p>Typesense will not start without an API key and a data directory. The key is yours to invent. For local work any string will do, but keep it out of any real environment. <code>--enable-cors</code> lets a browser page call the server directly, which you only want if a frontend talks to Typesense without a backend in between. Check with <code>curl http://127.0.0.1:8108/health</code>, which returns <code>{"ok":true}</code>.</p>
+
+<h2 id="create-a-collection-add-documents-search">Create a collection, add documents, search</h2>
+<p>Unlike some engines, Typesense wants a schema before documents arrive:</p>
+<pre><code>export TS_KEY=local-dev-key
+
+curl -X POST 'http://127.0.0.1:8108/collections' \
+  -H "X-TYPESENSE-API-KEY: $TS_KEY" -H 'Content-Type: application/json' \
+  -d '{
+    "name": "books",
+    "fields": [
+      {"name": "title", "type": "string"},
+      {"name": "author", "type": "string", "facet": true},
+      {"name": "year", "type": "int32"}
+    ],
+    "default_sorting_field": "year"
+  }'
+
+curl -X POST 'http://127.0.0.1:8108/collections/books/documents/import?action=upsert' \
+  -H "X-TYPESENSE-API-KEY: $TS_KEY" -H 'Content-Type: text/plain' \
+  --data-binary '{"id":"1","title":"Dune","author":"Frank Herbert","year":1965}
+{"id":"2","title":"Dubliners","author":"James Joyce","year":1914}'
+
+curl "http://127.0.0.1:8108/collections/books/documents/search?q=dnue&query_by=title" \
+  -H "X-TYPESENSE-API-KEY: $TS_KEY"</code></pre>
+<p>The import endpoint takes JSON Lines, one document per line, and <code>action=upsert</code> makes it safe to run twice. Search requires <code>query_by</code>, the field or fields to match against. The misspelled <code>dnue</code> still finds "Dune" because typo tolerance is on by default.</p>
+<p>The import response reports success per line. A 200 status does not mean every document was accepted, so read the body in scripts.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Typesense is not a built-in Flisk framework, so use a bring-your-own resource. Scaffold it, then edit the file:</p>
+<pre><code>flisk resource ts --type bring-your-own --image typesense/typesense:27.1 --no-proxy --stack shop --yes</code></pre>
+<p>The CLI writes a port in the 4000 to 5999 range; change it to 8108 in <code>services/shop/ts/service.json</code>, and add the rest:</p>
+<pre><code>{
+  "appName": "ts",
+  "appType": "bring-your-own",
+  "stack": "shop",
+  "port": 8108,
+  "image": "typesense/typesense:27.1",
+  "exposeViaProxy": false,
+  "healthCheck": { "port": 8108 },
+  "extraPorts": [{ "port": 8108 }],
+  "volumes": [{ "source": "ts-data", "target": "/data" }],
+  "container": { "command": ["--data-dir=/data", "--api-key=local-dev-key", "--enable-cors"] },
+  "provides": { "TYPESENSE_URL": "http://ts:8108", "TYPESENSE_API_KEY": "local-dev-key" }
+}</code></pre>
+<p><code>container.command</code> replaces the image's default arguments, which is how the data directory and key reach the server. The two values in <code>provides</code> reach every service that lists <code>ts</code> in <code>dependsOn</code>. Flisk's own docs say never to put a secret in <code>provides</code>, because the values land in generated files. A throwaway local key is fine there. A real key is not. <code>flisk config verify</code> checks the file, and <code>flisk up shop</code> starts it.</p>
+<p>From a container in the stack, the client connects to <code>ts</code> on port 8108 with protocol <code>http</code>. From your laptop, the host is <code>127.0.0.1</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Schema changes.</strong> You cannot change a field's type in place. Create a new collection, reindex into it and switch an alias. Typesense has collection aliases for this.</li>
+<li><strong><code>id</code> is a string.</strong> Documents take an <code>id</code> of type string. Pass numbers as strings or leave it out and let Typesense generate one.</li>
+<li><strong>Search key versus admin key.</strong> In real deployments you give the browser a search-only key. Locally one key is enough, but code that forgets the difference will break later. Create a scoped key as part of your setup so the dev path matches production.</li>
+<li><strong>Pin the version.</strong> A data directory written by a newer release may not open with an older one.</li>
+</ul>
+
+<h2 id="when-not-to-use-it">When not to use it</h2>
+<p>If you want an engine that infers its schema from the first document, <a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/">Meilisearch</a> is lighter to start with. If your text search needs are modest, <a href="/@odykyi/search-and-storage-local/postgres-full-text-search-before-a-search-engine/">Postgres full-text search</a> avoids a second service.</p>
+
+<p>Next, feed it from your database with <a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/">a reindex job</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does Typesense refuse to start?</summary><p>It needs both a data directory and an API key. Pass --data-dir and --api-key as arguments to the container, and mount a volume at the data directory so the data survives restarts.</p></details><details><summary>What is query_by?</summary><p>It lists the fields a search matches against. Every search request must include it, for example query_by=title.</p></details><details><summary>Do I need --enable-cors?</summary><p>Only if a browser page calls Typesense directly. If your backend does the searching, you can leave it off.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/"><span class="lbl">Guide</span><b>How to run Meilisearch locally with Docker for development</b><span>One container, one volume, and two curl calls give you typo-tolerant search to build against.</span></a><a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/"><span class="lbl">Guide</span><b>How to keep a search index in sync with your database locally</b><span>A search index is a copy. Treat it as rebuildable, write to it idempotently and give yourself one command that makes it right again.</span></a><a href="/@odykyi/search-and-storage-local/run-opensearch-locally/"><span class="lbl">Guide</span><b>How to run OpenSearch locally for development (single node)</b><span>OpenSearch is heavy by default. A single node with a fixed heap and security switched off is enough to develop against.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

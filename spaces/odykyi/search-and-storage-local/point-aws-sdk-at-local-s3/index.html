@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to point the AWS SDK at a local S3 endpoint (Node, Python)</title>
+<meta name="description" content="Use the AWS SDK for JavaScript or boto3 against MinIO or another local S3: endpoint, region, path-style addressing, credentials and the checksum trap.">
+<meta name="keywords" content="aws sdk custom endpoint, aws sdk v3 minio, boto3 endpoint_url minio, forcePathStyle s3 local, aws_endpoint_url_s3">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to point the AWS SDK at a local S3 endpoint (Node, Python)">
+<meta property="og:description" content="Use the AWS SDK for JavaScript or boto3 against MinIO or another local S3: endpoint, region, path-style addressing, credentials and the checksum trap.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to point the AWS SDK at a local S3 endpoint (Node, Python)","description":"Use the AWS SDK for JavaScript or boto3 against MinIO or another local S3: endpoint, region, path-style addressing, credentials and the checksum trap.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/","keywords":"aws sdk custom endpoint, aws sdk v3 minio, boto3 endpoint_url minio, forcePathStyle s3 local, aws_endpoint_url_s3","wordCount":695,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"How to point the AWS SDK at a local S3 endpoint (Node, Python)","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/point-aws-sdk-at-local-s3/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which region should I use for a local S3 server?","acceptedAnswer":{"@type":"Answer","text":"Any value works, because the server ignores it, but the SDK needs one to sign requests. us-east-1 is the usual dummy value."}},{"@type":"Question","name":"Why do I get a DNS error for mybucket.localhost?","acceptedAnswer":{"@type":"Answer","text":"The SDK used virtual-hosted style, which puts the bucket in the host name. Turn on path-style addressing: forcePathStyle in the JavaScript SDK, addressing_style path in boto3."}},{"@type":"Question","name":"Does the AWS CLI work with MinIO?","acceptedAnswer":{"@type":"Answer","text":"Yes. Set AWS_ENDPOINT_URL_S3 and the key variables, or pass --endpoint-url on each command. Use a CLI version recent enough to read AWS_ENDPOINT_URL_S3."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>How to point the AWS SDK at a local S3 endpoint (Node, Python)</h1><p class="dek">Four settings decide whether the SDK talks to your local server or fails with a DNS error. Here they are for Node and Python.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-defaults-fail-locally">Why the defaults fail locally</a></li><li><a href="#node-aws-sdk-for-javascript-v3">Node: AWS SDK for JavaScript v3</a></li><li><a href="#python-boto3">Python: boto3</a></li><li><a href="#recent-sdks-read-the-endpoint-variable-themselves">Recent SDKs read the endpoint variable themselves</a></li><li><a href="#where-the-variables-come-from-with-flisk">Where the variables come from with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-this">When not to use this</a></li></ol></nav></aside>
+<article><p>To point the AWS SDK at a local S3 server, set four things: the endpoint URL, a region (any value, but it must be set), path-style addressing, and the access key pair. In the JavaScript SDK v3 that is <code>endpoint</code>, <code>region</code> and <code>forcePathStyle: true</code>. In boto3 it is <code>endpoint_url</code>, <code>region_name</code> and an addressing style of <code>path</code>.</p>
+
+<h2 id="why-the-defaults-fail-locally">Why the defaults fail locally</h2>
+<p>By default the SDK builds the host name from the bucket: <code>mybucket.s3.us-east-1.amazonaws.com</code>. With a custom endpoint like <code>http://localhost:9000</code> and virtual-hosted style, it would try <code>mybucket.localhost:9000</code> or, inside Docker, <code>mybucket.store:9000</code>, and neither name resolves. Path-style puts the bucket in the path instead: <code>http://localhost:9000/mybucket/key</code>. Every S3-compatible server accepts that form.</p>
+<p>The region matters even though your server ignores it. The SDK needs one to sign requests, and without it you get an error about a missing region. <code>us-east-1</code> is the conventional dummy value.</p>
+
+<h2 id="node-aws-sdk-for-javascript-v3">Node: AWS SDK for JavaScript v3</h2>
+<pre><code>import { S3Client, CreateBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+
+export const s3 = new S3Client({
+  region: process.env.AWS_REGION ?? "us-east-1",
+  endpoint: process.env.AWS_ENDPOINT_URL_S3,   // undefined in production: real S3
+  forcePathStyle: Boolean(process.env.AWS_ENDPOINT_URL_S3),
+});
+
+export async function ensureBucket(name) {
+  try {
+    await s3.send(new CreateBucketCommand({ Bucket: name }));
+  } catch (err) {
+    if (err.name !== "BucketAlreadyOwnedByYou") throw err;
+  }
+}
+
+await ensureBucket("uploads");
+await s3.send(new PutObjectCommand({
+  Bucket: "uploads", Key: "hello.txt", Body: "hi", ContentType: "text/plain",
+}));</code></pre>
+<p>Credentials come from the standard environment variables <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>, so the code needs no key handling. The trick is that the same file works in production: when <code>AWS_ENDPOINT_URL_S3</code> is not set, the client talks to real S3 with virtual-hosted style.</p>
+
+<h2 id="python-boto3">Python: boto3</h2>
+<pre><code>import os, boto3
+from botocore.config import Config
+
+endpoint = os.environ.get("AWS_ENDPOINT_URL_S3")
+s3 = boto3.client(
+    "s3",
+    endpoint_url=endpoint,
+    region_name=os.environ.get("AWS_REGION", "us-east-1"),
+    config=Config(s3={"addressing_style": "path"} if endpoint else {}),
+)
+
+try:
+    s3.create_bucket(Bucket="uploads")
+except s3.exceptions.BucketAlreadyOwnedByYou:
+    pass
+
+s3.put_object(Bucket="uploads", Key="hello.txt", Body=b"hi", ContentType="text/plain")</code></pre>
+
+<h2 id="recent-sdks-read-the-endpoint-variable-themselves">Recent SDKs read the endpoint variable themselves</h2>
+<p><code>AWS_ENDPOINT_URL_S3</code> is a standard SDK setting for a service-specific endpoint, and current versions of the AWS SDKs and CLI pick it up with no code. Older versions ignore it. Passing it explicitly as above works everywhere, and it keeps the intent visible in the code. You still need path-style: the variable sets the endpoint, not the addressing style.</p>
+
+<h2 id="where-the-variables-come-from-with-flisk">Where the variables come from with Flisk</h2>
+<p>The Flisk MinIO resource lists <code>AWS_ENDPOINT_URL_S3</code>, <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code> in its <code>provides</code> block (see <a href="/@odykyi/search-and-storage-local/run-minio-locally/">how to run MinIO locally</a>). Any service that lists the store in <code>dependsOn</code> gets them in its generated env file, so the snippets above run unchanged:</p>
+<pre><code>"appName": "api",
+"dependsOn": ["store"]</code></pre>
+<p>You can check what the service sees without starting a shell by running <code>flisk run api -- printenv AWS_ENDPOINT_URL_S3</code> in a running stack. <code>flisk run</code> gives the command the environment that service has. The value inside the stack is <code>http://store:9000</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Checksum errors on non-AWS servers.</strong> Since early 2025 the JavaScript SDK v3 adds default integrity checksums to uploads. Some S3-compatible servers reject them. If you see a checksum or signature error after upgrading the SDK, set <code>requestChecksumCalculation: "WHEN_REQUIRED"</code> on the client.</li>
+<li><strong>Host versus container address.</strong> A script on your laptop needs <code>http://127.0.0.1:9000</code>, which only works if the port is published. Inside the stack it is <code>http://store:9000</code>. Read the endpoint from an env var and set it per place.</li>
+<li><strong>Self-signed TLS.</strong> If you run a local S3 over https with a private certificate, the SDK rejects it. Use plain http on localhost, or add the CA to the SDK's trust store.</li>
+<li><strong>Bucket names.</strong> S3 rules apply: 3 to 63 characters, lowercase letters, digits and hyphens. A name that works on MinIO can still be invalid on S3 if it has an underscore.</li>
+</ul>
+
+<h2 id="when-not-to-use-this">When not to use this</h2>
+<p>If your code goes through an abstraction such as a storage adapter that already has a local disk driver, use the disk driver for unit tests and keep the S3 path for one integration test. You still want one test that uses a real S3 protocol, because path style, signing and headers are where the bugs are. See <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a>.</p>
+
+<p>Once reads and writes work, move to <a href="/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/">presigned upload URLs</a> for browser uploads, or <a href="/@odykyi/search-and-storage-local/test-s3-uploads-in-integration-tests/">test your uploads against the real bucket</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which region should I use for a local S3 server?</summary><p>Any value works, because the server ignores it, but the SDK needs one to sign requests. us-east-1 is the usual dummy value.</p></details><details><summary>Why do I get a DNS error for mybucket.localhost?</summary><p>The SDK used virtual-hosted style, which puts the bucket in the host name. Turn on path-style addressing: forcePathStyle in the JavaScript SDK, addressing_style path in boto3.</p></details><details><summary>Does the AWS CLI work with MinIO?</summary><p>Yes. Set AWS_ENDPOINT_URL_S3 and the key variables, or pass --endpoint-url on each command. Use a CLI version recent enough to read AWS_ENDPOINT_URL_S3.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/run-minio-locally/"><span class="lbl">Guide</span><b>How to run MinIO locally as S3-compatible storage for dev</b><span>Your code talks to S3 in production. Locally you can point the same code at a MinIO container and keep everything on your machine.</span></a><a href="/@odykyi/search-and-storage-local/presigned-upload-urls-local-minio/"><span class="lbl">Guide</span><b>Presigned upload URLs against a local MinIO: the host name trap</b><span>A presigned URL signed for the container name cannot be used by a browser. Sign it for the address the browser will call.</span></a><a href="/@odykyi/search-and-storage-local/test-s3-uploads-in-integration-tests/"><span class="lbl">Guide</span><b>How to test S3 uploads in integration tests with a real bucket</b><span>A mock tells you that you called PutObject. A local bucket tells you what actually arrived.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

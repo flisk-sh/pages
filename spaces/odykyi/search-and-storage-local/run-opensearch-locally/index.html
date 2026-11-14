@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run OpenSearch locally for development (single node)</title>
+<meta name="description" content="Run a single-node OpenSearch on your laptop with Docker or Flisk: memory limits, security off for local use, vm.max_map_count on Linux and startup failures.">
+<meta name="keywords" content="run opensearch locally, opensearch docker single node, opensearch docker compose, elasticsearch local development, vm.max_map_count opensearch">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/run-opensearch-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run OpenSearch locally for development (single node)">
+<meta property="og:description" content="Run a single-node OpenSearch on your laptop with Docker or Flisk: memory limits, security off for local use, vm.max_map_count on Linux and startup failures.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/run-opensearch-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run OpenSearch locally for development (single node)","description":"Run a single-node OpenSearch on your laptop with Docker or Flisk: memory limits, security off for local use, vm.max_map_count on Linux and startup failures.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-opensearch-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-opensearch-locally/","keywords":"run opensearch locally, opensearch docker single node, opensearch docker compose, elasticsearch local development, vm.max_map_count opensearch","wordCount":756,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"How to run OpenSearch locally for development (single node)","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-opensearch-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does OpenSearch exit right after starting?","acceptedAnswer":{"@type":"Answer","text":"Usually a bootstrap check. Set discovery.type to single-node, give the JVM a fixed heap, and on Linux raise vm.max_map_count to 262144. The container log names the failed check."}},{"@type":"Question","name":"Is it safe to disable the security plugin?","acceptedAnswer":{"@type":"Answer","text":"Only for local use with the port bound to 127.0.0.1. Never run a node without security on a shared or public network."}},{"@type":"Question","name":"Why is my local cluster yellow?","acceptedAnswer":{"@type":"Answer","text":"Replica shards cannot be placed on the same node as their primary, so a single node stays yellow. Set number_of_replicas to 0 on your development indices if you want green."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>How to run OpenSearch locally for development (single node)</h1><p class="dek">OpenSearch is heavy by default. A single node with a fixed heap and security switched off is enough to develop against.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#the-linux-setting-that-breaks-startup">The Linux setting that breaks startup</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-it">When not to use it</a></li></ol></nav></aside>
+<article><p>To run OpenSearch locally, start one container in single-node mode, give the JVM a fixed heap (512 MB is enough for development), turn off the security plugin for local use only, and publish port 9200 on 127.0.0.1. The most common startup failures are a heap that is too large for the container, a too-low <code>vm.max_map_count</code> on Linux, and cluster discovery waiting for nodes that never arrive.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<pre><code>docker run -d --name dev-opensearch \
+  -p 127.0.0.1:9200:9200 \
+  -e "discovery.type=single-node" \
+  -e "DISABLE_SECURITY_PLUGIN=true" \
+  -e "DISABLE_INSTALL_DEMO_CONFIG=true" \
+  -e "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m" \
+  --ulimit nofile=65536:65536 --ulimit memlock=-1:-1 \
+  -v dev_os_data:/usr/share/opensearch/data \
+  opensearchproject/opensearch:2.17.1
+
+curl http://127.0.0.1:9200/_cluster/health?pretty</code></pre>
+<p>Each setting solves a specific problem:</p>
+<ul>
+<li><code>discovery.type=single-node</code> skips the cluster bootstrap checks. Without it the node waits to find other nodes and exits with an error about bootstrap checks.</li>
+<li><code>DISABLE_SECURITY_PLUGIN=true</code> turns off TLS and passwords, so plain <code>http</code> works. This is only acceptable because the port is bound to 127.0.0.1. Never copy it to a shared server.</li>
+<li><code>DISABLE_INSTALL_DEMO_CONFIG=true</code> stops the image from installing demo certificates and users.</li>
+<li><code>OPENSEARCH_JAVA_OPTS</code> sets the heap. Set minimum and maximum to the same value. The default picks a size from the machine's memory, which can starve everything else on your laptop.</li>
+<li>The <code>nofile</code> and <code>memlock</code> limits satisfy the node's file descriptor and memory-lock checks.</li>
+</ul>
+<p>A health response with <code>"status":"green"</code> or <code>"yellow"</code> means it works. Yellow is normal on one node, because replica shards have nowhere to go. If you create an index with <code>number_of_replicas: 0</code>, it turns green.</p>
+
+<h2 id="the-linux-setting-that-breaks-startup">The Linux setting that breaks startup</h2>
+<p>On a Linux host (and in some Docker setups on Linux), OpenSearch needs <code>vm.max_map_count</code> of at least 262144. If it is lower you will see a bootstrap check failure that names it. Fix it on the host:</p>
+<pre><code>sudo sysctl -w vm.max_map_count=262144</code></pre>
+<p>That lasts until reboot. To keep it, put <code>vm.max_map_count=262144</code> in a file under <code>/etc/sysctl.d/</code>. Docker Desktop on macOS runs a Linux VM that usually has a sufficient value already.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>OpenSearch is not a built-in Flisk framework, so use a bring-your-own resource:</p>
+<pre><code>flisk resource os --type bring-your-own --image opensearchproject/opensearch:2.17.1 --no-proxy --stack shop --yes</code></pre>
+<p>Edit <code>services/shop/os/service.json</code>. The file below passed <code>flisk config verify</code> on the 1.4.57 release:</p>
+<pre><code>{
+  "appName": "os",
+  "appType": "bring-your-own",
+  "stack": "shop",
+  "port": 9200,
+  "image": "opensearchproject/opensearch:2.17.1",
+  "exposeViaProxy": false,
+  "healthCheck": {
+    "command": ["curl", "-sf", "http://localhost:9200/_cluster/health"],
+    "startPeriod": 60
+  },
+  "extraPorts": [{ "port": 9200 }],
+  "volumes": [{ "source": "os-data", "target": "/usr/share/opensearch/data" }],
+  "env": {
+    "DISABLE_SECURITY_PLUGIN": "true",
+    "DISABLE_INSTALL_DEMO_CONFIG": "true",
+    "OPENSEARCH_JAVA_OPTS": "-Xms512m -Xmx512m"
+  },
+  "container": {
+    "ulimits": { "nofile": { "soft": 65536, "hard": 65536 }, "memlock": -1 },
+    "memory": "2g",
+    "command": ["opensearch", "-Ediscovery.type=single-node"]
+  },
+  "provides": { "OPENSEARCH_URL": "http://os:9200" }
+}</code></pre>
+<p>A few notes on the choices. Env keys in <code>service.json</code> must be letters, digits or underscore, so <code>discovery.type</code> cannot go in <code>env</code>. It is passed as a <code>-E</code> argument in <code>container.command</code> instead. I did not run this container, so check that your image version accepts this command form, and read <code>flisk logs --service os</code> if it does not start. The health check is a command probe rather than a port check, because OpenSearch listens before the cluster is ready, and <code>startPeriod</code> gives it 60 seconds before failures count. Bring-your-own containers have no memory cap in Flisk unless you set <code>container.memory</code>, so the <code>2g</code> value keeps a runaway node from taking the whole machine. Keep it above the heap by a good margin.</p>
+<p>Services that list <code>os</code> in <code>dependsOn</code> receive <code>OPENSEARCH_URL</code>. Start with <code>flisk up shop</code> and check with <code>flisk status --json</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Memory.</strong> A 2 GB container plus a 512 MB heap is a lot next to your other services. If your laptop is short on memory, see <a href="/@odykyi/team-dev-environments/many-services-on-one-laptop/">many services on one laptop</a>.</li>
+<li><strong>Restart loops.</strong> If the container exits and comes back, the log shows the real error. See <a href="/@odykyi/dev-env-troubleshooting/container-keeps-restarting/">a container that keeps restarting</a>.</li>
+<li><strong>Disk watermarks.</strong> When your disk is nearly full, OpenSearch marks indices read-only. Free space, then clear the block with a settings update.</li>
+<li><strong>Elasticsearch images.</strong> The same ideas apply to Elasticsearch, but its security setting names differ, and recent versions need extra steps to run without TLS.</li>
+<li><strong>Version pinning.</strong> Use the same major version locally as in production, because client libraries check it.</li>
+</ul>
+
+<h2 id="when-not-to-use-it">When not to use it</h2>
+<p>If you only need typo-tolerant search over a few collections, a lighter engine such as <a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/">Meilisearch</a> starts in seconds and uses far less memory. Reach for OpenSearch when production runs it and you need its query DSL or aggregations to behave the same way.</p>
+
+<p>Next, wire it to your data with <a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/">a reindex job</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does OpenSearch exit right after starting?</summary><p>Usually a bootstrap check. Set discovery.type to single-node, give the JVM a fixed heap, and on Linux raise vm.max_map_count to 262144. The container log names the failed check.</p></details><details><summary>Is it safe to disable the security plugin?</summary><p>Only for local use with the port bound to 127.0.0.1. Never run a node without security on a shared or public network.</p></details><details><summary>Why is my local cluster yellow?</summary><p>Replica shards cannot be placed on the same node as their primary, so a single node stays yellow. Set number_of_replicas to 0 on your development indices if you want green.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/"><span class="lbl">Guide</span><b>How to run Meilisearch locally with Docker for development</b><span>One container, one volume, and two curl calls give you typo-tolerant search to build against.</span></a><a href="/@odykyi/search-and-storage-local/run-typesense-locally/"><span class="lbl">Guide</span><b>How to run Typesense locally with Docker and create a collection</b><span>Typesense insists on an API key and a data directory. Set both and you have a fast search server to develop against.</span></a><a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/"><span class="lbl">Guide</span><b>How to keep a search index in sync with your database locally</b><span>A search index is a copy. Treat it as rebuildable, write to it idempotently and give yourself one command that makes it right again.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

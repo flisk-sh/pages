@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run Qdrant locally for vector search in development</title>
+<meta name="description" content="Run Qdrant on your laptop with Docker or the Flisk database preset, create a collection, upsert vectors and run a search with curl. Includes the dashboard.">
+<meta name="keywords" content="run qdrant locally, qdrant docker, qdrant docker compose, qdrant create collection, local vector database">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/search-and-storage-local/run-qdrant-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run Qdrant locally for vector search in development">
+<meta property="og:description" content="Run Qdrant on your laptop with Docker or the Flisk database preset, create a collection, upsert vectors and run a search with curl. Includes the dashboard.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/search-and-storage-local/run-qdrant-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run Qdrant locally for vector search in development","description":"Run Qdrant on your laptop with Docker or the Flisk database preset, create a collection, upsert vectors and run a search with curl. Includes the dashboard.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-qdrant-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-qdrant-locally/","keywords":"run qdrant locally, qdrant docker, qdrant docker compose, qdrant create collection, local vector database","wordCount":625,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Search, files and object storage locally","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/"},{"@type":"ListItem","position":3,"name":"How to run Qdrant locally for vector search in development","item":"https://pages.flisk.si/@odykyi/search-and-storage-local/run-qdrant-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What vector size should I use?","acceptedAnswer":{"@type":"Answer","text":"Exactly the output size of your embedding model. The collection rejects vectors of any other length."}},{"@type":"Question","name":"Does Qdrant create embeddings?","acceptedAnswer":{"@type":"Answer","text":"No. You compute embeddings with a model of your choice and send the vectors. Qdrant stores them and searches by similarity."}},{"@type":"Question","name":"How do I reach the Qdrant dashboard?","acceptedAnswer":{"@type":"Answer","text":"Open http://127.0.0.1:6333/dashboard once the container runs and the port is published on your machine."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/search-and-storage-local/">Search, files and object storage locally</a></div>
+<section class="hero"><div><div class="lbl">Search, files and object storage locally</div><h1>How to run Qdrant locally for vector search in development</h1><p class="dek">A vector database for local work is one container and a few REST calls. Here is the setup and the first query.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#create-a-collection-and-search">Create a collection and search</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-it">When not to use it</a></li></ol></nav></aside>
+<article><p>To run Qdrant locally, start the <code>qdrant/qdrant</code> image with port 6333 published on 127.0.0.1 and a volume at <code>/qdrant/storage</code>. Then create a collection that declares the vector size and distance metric, upsert points, and search with a query vector. There is a web dashboard at <code>/dashboard</code>. With Flisk, one command scaffolds the same container as a resource.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<pre><code>docker run -d --name dev-qdrant \
+  -p 127.0.0.1:6333:6333 \
+  -v dev_qdrant_data:/qdrant/storage \
+  qdrant/qdrant:v1.12.5</code></pre>
+<p>Open <code>http://127.0.0.1:6333/dashboard</code> to browse collections. The REST API is on the same port. Port 6334 is gRPC, which you only need if your client library uses it. Qdrant clients default to REST in most languages.</p>
+
+<h2 id="create-a-collection-and-search">Create a collection and search</h2>
+<p>A collection fixes the vector size at creation. It must match your embedding model's output exactly, for example 384 for a small sentence model or 1536 for a large one. This example uses 4 so you can read it:</p>
+<pre><code>curl -X PUT http://127.0.0.1:6333/collections/notes \
+  -H 'Content-Type: application/json' \
+  -d '{"vectors": {"size": 4, "distance": "Cosine"}}'
+
+curl -X PUT 'http://127.0.0.1:6333/collections/notes/points?wait=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"points": [
+    {"id": 1, "vector": [0.9, 0.1, 0.0, 0.0], "payload": {"text": "cats"}},
+    {"id": 2, "vector": [0.1, 0.9, 0.0, 0.0], "payload": {"text": "invoices"}}
+  ]}'
+
+curl -X POST http://127.0.0.1:6333/collections/notes/points/search \
+  -H 'Content-Type: application/json' \
+  -d '{"vector": [0.8, 0.2, 0.0, 0.0], "limit": 3, "with_payload": true}'</code></pre>
+<p>Point ids are unsigned integers or UUIDs. The <code>payload</code> is any JSON you want to store with the vector and filter on later. <code>?wait=true</code> makes the call return after the write is applied, which avoids searching before the point exists. Choose the distance (<code>Cosine</code>, <code>Dot</code>, <code>Euclid</code>) to match how your embedding model was trained. Most text models use cosine.</p>
+<p>In real code you replace the toy vectors with embeddings from your model. Qdrant does not create embeddings, it stores and searches them.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has a Qdrant preset under the <code>database</code> type:</p>
+<pre><code>flisk resource vectors --type database --framework qdrant --stack shop --yes</code></pre>
+<p>That writes a bring-your-own <code>service.json</code> with the image <code>qdrant/qdrant:v1.12.5</code>, port 6333, a health check on that port, a named volume <code>vectors-data</code> mounted at <code>/qdrant/storage</code>, the dashboard published on <code>127.0.0.1:6333</code>, and this in <code>provides</code>:</p>
+<pre><code>"provides": { "QDRANT_URL": "http://vectors:6333" }</code></pre>
+<p>Any service that lists <code>vectors</code> in <code>dependsOn</code> gets <code>QDRANT_URL</code> in its environment:</p>
+<pre><code>import { QdrantClient } from "@qdrant/js-client-rest";
+const qdrant = new QdrantClient({ url: process.env.QDRANT_URL });</code></pre>
+<p>Run <code>flisk up shop</code> to start it. The data volume survives <code>flisk down</code>. <code>flisk down --purge</code> removes the project's volumes, which wipes your vectors along with the rest, so keep a way to rebuild them. See <a href="/@odykyi/docker-compose-guide/keep-volumes-between-runs/">keep volumes between runs</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Vector size mismatch.</strong> Upserting a vector of the wrong length returns an error. If you change embedding models, create a new collection and re-embed.</li>
+<li><strong>Two addresses.</strong> From a service in the stack use <code>http://vectors:6333</code>. From your laptop use <code>http://127.0.0.1:6333</code>.</li>
+<li><strong>No authentication by default.</strong> Fine on 127.0.0.1. Add an API key before exposing it anywhere else.</li>
+<li><strong>Treat vectors as derived data.</strong> The source of truth is your documents. Keep a script that rebuilds the collection from them, because a changed chunking rule or embedding model means a full rebuild.</li>
+<li><strong>Filtering needs payload indexes at scale.</strong> Small local sets work without them. For larger sets, create payload indexes on the fields you filter on.</li>
+</ul>
+
+<h2 id="when-not-to-use-it">When not to use it</h2>
+<p>If you only have a few thousand vectors and already use Postgres, the <code>pgvector</code> extension may be enough and removes a service. If your search is by keyword, not meaning, use a text index instead, as in <a href="/@odykyi/search-and-storage-local/postgres-full-text-search-before-a-search-engine/">Postgres full-text search</a>.</p>
+
+<p>Next, keep vectors current with <a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/">a rebuildable sync job</a>, and see <a href="/@odykyi/local-database-guide/redis-for-local-development/">Redis for local development</a> if you want a cache next to it.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What vector size should I use?</summary><p>Exactly the output size of your embedding model. The collection rejects vectors of any other length.</p></details><details><summary>Does Qdrant create embeddings?</summary><p>No. You compute embeddings with a model of your choice and send the vectors. Qdrant stores them and searches by similarity.</p></details><details><summary>How do I reach the Qdrant dashboard?</summary><p>Open http://127.0.0.1:6333/dashboard once the container runs and the port is published on your machine.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Search, files and object storage locally</span></div>
+<div class="rgrid"><a href="/@odykyi/search-and-storage-local/keep-search-index-in-sync-with-database/"><span class="lbl">Guide</span><b>How to keep a search index in sync with your database locally</b><span>A search index is a copy. Treat it as rebuildable, write to it idempotently and give yourself one command that makes it right again.</span></a><a href="/@odykyi/search-and-storage-local/postgres-full-text-search-before-a-search-engine/"><span class="lbl">Guide</span><b>Postgres full-text search: try it before adding a search engine</b><span>For many apps, search is one SQL query and one index. Find out where that stops before you add a second service.</span></a><a href="/@odykyi/search-and-storage-local/run-meilisearch-locally/"><span class="lbl">Guide</span><b>How to run Meilisearch locally with Docker for development</b><span>One container, one volume, and two curl calls give you typo-tolerant search to build against.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
