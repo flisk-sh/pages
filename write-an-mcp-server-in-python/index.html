@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write an MCP server in Python with FastMCP</title>
+<meta name="description" content="Build an MCP server in Python with the official SDK: install mcp, define tools with type hints, run it over HTTP, and check it locally, with or without Flisk.">
+<meta name="keywords" content="mcp server python, fastmcp tutorial, build mcp server python, python mcp sdk">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/build-an-mcp-server/write-an-mcp-server-in-python/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write an MCP server in Python with FastMCP">
+<meta property="og:description" content="Build an MCP server in Python with the official SDK: install mcp, define tools with type hints, run it over HTTP, and check it locally, with or without Flisk.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/build-an-mcp-server/write-an-mcp-server-in-python/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write an MCP server in Python with FastMCP","description":"Build an MCP server in Python with the official SDK: install mcp, define tools with type hints, run it over HTTP, and check it locally, with or without Flisk.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/build-an-mcp-server/write-an-mcp-server-in-python/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/build-an-mcp-server/write-an-mcp-server-in-python/","keywords":"mcp server python, fastmcp tutorial, build mcp server python, python mcp sdk","wordCount":744,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build your own MCP server","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/"},{"@type":"ListItem","position":3,"name":"How to write an MCP server in Python with FastMCP","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/write-an-mcp-server-in-python/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is FastMCP part of the official MCP Python SDK?","acceptedAnswer":{"@type":"Answer","text":"Yes. The mcp package contains a high-level FastMCP class in mcp.server.fastmcp. A separate community package named fastmcp exists with a similar API, so check which one you import."}},{"@type":"Question","name":"Can I run a Python MCP server without Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. An MCP server is an ordinary process. Run it with python or uv run, or give it a command in service.json so Flisk starts it as a local process."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/build-an-mcp-server/">Build your own MCP server</a></div>
+<section class="hero"><div><div class="lbl">Build your own MCP server</div><h1>How to write an MCP server in Python with FastMCP</h1><p class="dek">FastMCP turns ordinary Python functions into MCP tools. Here is the whole path from an empty folder to a server you can call.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#set-up-the-project">Set up the project</a></li><li><a href="#write-the-server">Write the server</a></li><li><a href="#try-it-before-connecting-an-assistant">Try it before connecting an assistant</a></li><li><a href="#run-it-with-flisk">Run it with Flisk</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Install the official MCP Python SDK, create a <code>FastMCP</code> object, decorate plain Python functions with <code>@mcp.tool()</code>, and call <code>mcp.run()</code>. The type hints become the input schema and the docstring becomes the tool description, so a working server is about fifteen lines. You need Python 3.10 or newer.</p>
+<h2 id="set-up-the-project">Set up the project</h2>
+<p>The examples use <a href="https://docs.astral.sh/uv/">uv</a>, but <code>pip</code> works the same way. The <code>cli</code> extra adds the <code>mcp</code> command you will use for development.</p>
+<pre><code>uv init notes-mcp
+cd notes-mcp
+uv add "mcp[cli]"</code></pre>
+<p>The package <code>mcp</code> contains the official SDK, and <code>FastMCP</code> is the high-level API inside it (<code>from mcp.server.fastmcp import FastMCP</code>). There is also a separate community package called <code>fastmcp</code> with a similar API and more features. The two look alike, so check which one a tutorial imports before you copy code. This article uses the official one.</p>
+<h2 id="write-the-server">Write the server</h2>
+<p>This server keeps notes in memory and exposes two tools. Save it as <code>server.py</code>.</p>
+<pre><code>import os
+from mcp.server.fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import PlainTextResponse
+
+mcp = FastMCP(
+    "notes",
+    host="127.0.0.1",
+    port=int(os.environ.get("PORT", "8000")),
+)
+
+NOTES: dict[str, str] = {}
+
+@mcp.tool()
+def add_note(title: str, text: str) -&gt; str:
+    """Save a note. Use this when the user asks you to remember something."""
+    NOTES[title] = text
+    return f"Saved note '{title}'"
+
+@mcp.tool()
+def find_notes(query: str, limit: int = 5) -&gt; list[str]:
+    """Return titles of notes whose title or text contains the query."""
+    q = query.lower()
+    hits = [t for t, x in NOTES.items() if q in t.lower() or q in x.lower()]
+    return hits[:limit]
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health(request: Request) -&gt; PlainTextResponse:
+    return PlainTextResponse("ok")
+
+if __name__ == "__main__":
+    mcp.run(transport="streamable-http")</code></pre>
+<p>Three things are worth noticing. The <code>limit: int = 5</code> default makes <code>limit</code> optional in the generated schema. The docstring is what the model reads when it chooses a tool, so write it for the model. And <code>custom_route</code> adds a plain HTTP route next to the MCP endpoint, which is handy for a health check. The MCP endpoint itself is served at <code>/mcp</code> by default.</p>
+<p>The default transport of <code>mcp.run()</code> is stdio. If you want the server to be a child process of one assistant and need no port, call <code>mcp.run()</code> with no argument and see <a href="/@odykyi/build-an-mcp-server/stdio-or-streamable-http-mcp-transport/">the stdio versus HTTP comparison</a> before you decide.</p>
+<h2 id="try-it-before-connecting-an-assistant">Try it before connecting an assistant</h2>
+<p>The SDK ships a development command that starts the server and opens the MCP Inspector against it:</p>
+<pre><code>uv run mcp dev server.py</code></pre>
+<p>Or run the HTTP server and call it yourself:</p>
+<pre><code>uv run python server.py
+curl -s http://127.0.0.1:8000/health</code></pre>
+<p>For stepping through calls by hand, see <a href="/@odykyi/build-an-mcp-server/debug-an-mcp-server-with-the-inspector/">debugging with the MCP Inspector</a>.</p>
+<h2 id="run-it-with-flisk">Run it with Flisk</h2>
+<p>The <code>--type mcp</code> scaffold in Flisk is Bun and TypeScript only: it has no <code>--language</code> option. A Python server does not need the scaffold, though. Flisk can run any service that declares a <code>command</code> as a plain local process, with no Docker. Put this <code>service.json</code> next to <code>server.py</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "notes-mcp",
+  "appType": "mcp",
+  "command": "uv run python server.py",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Flisk passes the port to the process as <code>PORT</code>, which is why the server reads it from the environment. Run <code>flisk up</code> from the project folder, and the server starts at <code>http://localhost:4000</code>. Then check the protocol with Flisk's own tool:</p>
+<pre><code>flisk mcp check notes-mcp</code></pre>
+<p>That resolves the resource name to its local address plus <code>/mcp</code> and sends <code>initialize</code>, <code>tools/list</code> and a few malformed requests. A project can run either local processes or container stacks, not both at once. If the rest of your stack is on Docker, wrap the server in a Dockerfile and register it as a bring-your-own resource instead, as <a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/">the Dockerfile recipe</a> shows. For the no-Docker path in general, see <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">running local services without Docker</a>.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Do not <code>print()</code> in a stdio server.</strong> Standard output carries the protocol. Log to standard error. <a href="/@odykyi/build-an-mcp-server/mcp-stdio-server-logs-break-the-connection/">This failure</a> is the most common one.</li>
+<li><strong>In-memory state disappears on restart.</strong> The notes above are a toy. Use a database for anything that should survive.</li>
+<li><strong>Bind to 127.0.0.1 on your laptop.</strong> Use <code>0.0.0.0</code> only when the server runs in a container and something outside must reach it, and then add authentication.</li>
+<li><strong>Pin the SDK version.</strong> The Python SDK changes between minor releases. A lock file keeps your server from breaking on the next install.</li>
+</ul>
+<p>Once the server runs, the next question is what its tools should look like to a model. <a href="/@odykyi/build-an-mcp-server/design-mcp-tool-names-and-descriptions/">Designing MCP tool names and descriptions</a> covers that.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is FastMCP part of the official MCP Python SDK?</summary><p>Yes. The mcp package contains a high-level FastMCP class in mcp.server.fastmcp. A separate community package named fastmcp exists with a similar API, so check which one you import.</p></details><details><summary>Can I run a Python MCP server without Docker?</summary><p>Yes. An MCP server is an ordinary process. Run it with python or uv run, or give it a command in service.json so Flisk starts it as a local process.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build your own MCP server</span></div>
+<div class="rgrid"><a href="/@odykyi/build-an-mcp-server/stdio-or-streamable-http-mcp-transport/"><span class="lbl">Guide</span><b>MCP stdio or Streamable HTTP: which transport to choose</b><span>The transport decides how a client reaches your server. Pick it before you write much code, because it changes logging, testing and security.</span></a><a href="/@odykyi/build-an-mcp-server/debug-an-mcp-server-with-the-inspector/"><span class="lbl">Guide</span><b>How to debug an MCP server with the MCP Inspector</b><span>The Inspector is a plain MCP client with a UI. It shows what your server really returns, with no model in between.</span></a><a href="/@odykyi/build-an-mcp-server/validate-mcp-tool-arguments/"><span class="lbl">Guide</span><b>How to validate MCP tool arguments with Zod or Pydantic</b><span>A model can send the wrong type, a missing field or a huge limit. Put the rules in the schema and keep the data-dependent checks in the tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

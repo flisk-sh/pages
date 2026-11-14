@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to protect a local MCP HTTP server with a bearer token</title>
+<meta name="description" content="Secure an MCP server on localhost: bind to 127.0.0.1, validate the Origin header, require a bearer token, store the token safely and test the guard with curl.">
+<meta name="keywords" content="secure mcp server, mcp bearer token, mcp origin header dns rebinding, mcp server authentication">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/build-an-mcp-server/protect-an-mcp-http-server-with-a-token/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to protect a local MCP HTTP server with a bearer token">
+<meta property="og:description" content="Secure an MCP server on localhost: bind to 127.0.0.1, validate the Origin header, require a bearer token, store the token safely and test the guard with curl.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/build-an-mcp-server/protect-an-mcp-http-server-with-a-token/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to protect a local MCP HTTP server with a bearer token","description":"Secure an MCP server on localhost: bind to 127.0.0.1, validate the Origin header, require a bearer token, store the token safely and test the guard with curl.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/build-an-mcp-server/protect-an-mcp-http-server-with-a-token/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/build-an-mcp-server/protect-an-mcp-http-server-with-a-token/","keywords":"secure mcp server, mcp bearer token, mcp origin header dns rebinding, mcp server authentication","wordCount":922,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build your own MCP server","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/"},{"@type":"ListItem","position":3,"name":"How to protect a local MCP HTTP server with a bearer token","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/protect-an-mcp-http-server-with-a-token/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does an MCP server on localhost need authentication?","acceptedAnswer":{"@type":"Answer","text":"Yes, if it listens on a port. Other programs and browser pages can reach localhost. The specification tells servers to validate Origin, bind to localhost and implement authentication."}},{"@type":"Question","name":"Is a static bearer token enough for an MCP server?","acceptedAnswer":{"@type":"Answer","text":"For a personal or local server it is a reasonable minimum. For a server used by several people, use the OAuth-based authorization in the MCP specification or an authenticating gateway."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/build-an-mcp-server/">Build your own MCP server</a></div>
+<section class="hero"><div><div class="lbl">Build your own MCP server</div><h1>How to protect a local MCP HTTP server with a bearer token</h1><p class="dek">A port on localhost is open to every program and browser tab on your machine. Three small checks close most of the gap.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-localhost-server-needs-any-protection">Why a localhost server needs any protection</a></li><li><a href="#three-layers">Three layers</a></li><li><a href="#a-minimal-check-in-node">A minimal check in Node</a></li><li><a href="#make-and-keep-the-token">Make and keep the token</a></li><li><a href="#give-the-token-to-the-client">Give the token to the client</a></li><li><a href="#pitfalls-and-limits">Pitfalls and limits</a></li></ol></nav></aside>
+<article><p>Bind the server to 127.0.0.1, reject requests whose <code>Origin</code> header is not one you expect, and require an <code>Authorization: Bearer</code> token that you compare in constant time. Generate the token once, keep it in an environment variable, and give the same value to your client through its header setting. That is enough for a local or personal server. A server that other people use needs proper OAuth, which this article does not try to replace.</p>
+<h2 id="why-a-localhost-server-needs-any-protection">Why a localhost server needs any protection</h2>
+<p>A port on localhost is open to every program you run. It is also reachable from web pages open in your browser, because a page can send requests to <code>http://localhost:PORT</code>, and with a DNS rebinding trick can make them look same-origin. An MCP server often can read files, query a database or call internal APIs, so a stranger's page that reaches it can do the same. The MCP specification for Streamable HTTP tells servers to validate the <code>Origin</code> header on every connection to stop that, to bind to localhost rather than all interfaces when running locally, and to implement authentication.</p>
+<p>A stdio server avoids this because it has no port. That is a good reason to prefer it for a private tool, as <a href="/@odykyi/build-an-mcp-server/stdio-or-streamable-http-mcp-transport/">the transport comparison</a> explains.</p>
+<h2 id="three-layers">Three layers</h2>
+<ol>
+<li><strong>Bind narrowly.</strong> Listen on <code>127.0.0.1</code>, not <code>0.0.0.0</code>. Inside a container you do have to bind to all interfaces, so then publish the port only to localhost, or put the server behind a proxy.</li>
+<li><strong>Check Origin.</strong> Native clients such as coding assistants do not send an <code>Origin</code> header. Browsers always do. So allow a request with no <code>Origin</code>, and reject one whose <code>Origin</code> is not on your list.</li>
+<li><strong>Require a token.</strong> Compare the bearer token before you parse the body.</li>
+</ol>
+<h2 id="a-minimal-check-in-node">A minimal check in Node</h2>
+<pre><code>import { timingSafeEqual } from 'node:crypto';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+const TOKEN = process.env.MCP_TOKEN;
+if (!TOKEN) throw new Error('MCP_TOKEN is not set');
+const ALLOWED_ORIGINS = new Set(['http://localhost:6274']); // the Inspector, if you use it
+
+function guard(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin;
+  if (origin &amp;&amp; !ALLOWED_ORIGINS.has(origin)) {
+    res.statusCode = 403;
+    res.end('forbidden origin');
+    return false;
+  }
+  const header = String(req.headers.authorization ?? '');
+  const given = Buffer.from(header.startsWith('Bearer ') ? header.slice(7) : '');
+  const want = Buffer.from(TOKEN!);
+  if (given.length !== want.length || !timingSafeEqual(given, want)) {
+    res.statusCode = 401;
+    res.setHeader('www-authenticate', 'Bearer');
+    res.end('unauthorized');
+    return false;
+  }
+  return true;
+}</code></pre>
+<p>Call <code>guard(req, res)</code> at the top of the <code>/mcp</code> branch and return when it is false. Leave <code>/health</code> open if a supervisor needs it, and make sure it reveals nothing. Refuse to start without a token, as the first lines do, so a missing variable never turns into an open server. The length check comes first because <code>timingSafeEqual</code> throws on buffers of different sizes.</p>
+<p>In Python, the SDK has token-verification hooks for FastMCP, and the details vary by version, so read its authorization documentation. A plain ASGI middleware that checks the same two headers also works.</p>
+<h2 id="make-and-keep-the-token">Make and keep the token</h2>
+<p>Generate a long random value, not a word you chose:</p>
+<pre><code>openssl rand -hex 32</code></pre>
+<p>Keep it out of git. In a Flisk project that runs local processes, <code>secrets.generate</code> in <code>service.json</code> makes one for you. On <code>flisk up</code> it appends any missing name to the project <code>.env</code> once, with random bytes, and leaves existing values alone. The service reads it through <code>env</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "notes-mcp",
+  "appType": "mcp",
+  "command": "node server.js",
+  "port": 4000,
+  "secrets": { "generate": { "MCP_TOKEN": "hex:32" } },
+  "env": { "MCP_TOKEN": "${MCP_TOKEN}" }
+}</code></pre>
+<p>The Flisk scaffold from <code>flisk resource --type mcp</code> has no authentication of its own, and the Flisk docs say it is meant for <code>*.localhost</code>. If you add the check above to its <code>src/index.ts</code>, remember that <code>flisk mcp check</code> sends no <code>Authorization</code> header, so it will report failures against a guarded endpoint. Check the protocol on a dev instance without the token, and test the guard with <code>curl</code>:</p>
+<pre><code>curl -i -X POST http://localhost:4000/mcp -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# expect 401
+
+curl -i -X POST http://localhost:4000/mcp -H "authorization: Bearer $MCP_TOKEN" \
+  -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+# expect 200</code></pre>
+<p>For keeping secrets out of committed config in general, see <a href="/@odykyi/testing-and-shipping/env-var-names-not-values-in-config/">env var names, not values</a>.</p>
+<h2 id="give-the-token-to-the-client">Give the token to the client</h2>
+<p>Most clients let you set a header for an HTTP server. In Claude Code, for example, the <code>claude mcp add</code> command accepts <code>--transport http</code> and a <code>--header</code> option. Use your client's documentation for the exact syntax, and avoid pasting the token into a file you commit. <a href="/@odykyi/mcp-local-dev/test-an-mcp-server-with-claude-code/">Testing an MCP server with Claude Code</a> covers the connection steps.</p>
+<h2 id="pitfalls-and-limits">Pitfalls and limits</h2>
+<ul>
+<li><strong>A shared static token is weak.</strong> Anyone with it has full access, and you cannot revoke one person. For a server used by several people, implement the OAuth flow described in the MCP authorization specification, or put an authenticating gateway in front.</li>
+<li><strong>Plain http over a network.</strong> A bearer token sent over http can be read by anyone on the path. Use https for anything that leaves your machine.</li>
+<li><strong>Logging.</strong> Do not log request headers. A token in a log file is a leaked token.</li>
+<li><strong>Tool-level limits still matter.</strong> Authentication says who may call. Validate inputs and limit what each tool can touch, as in <a href="/@odykyi/build-an-mcp-server/validate-mcp-tool-arguments/">validating tool arguments</a>.</li>
+</ul>
+<p>Authentication is the last piece of a server others can rely on. Go back to <a href="/@odykyi/build-an-mcp-server/write-automated-tests-for-an-mcp-server/">the testing guide</a> and add a test that an unauthenticated call gets a 401.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does an MCP server on localhost need authentication?</summary><p>Yes, if it listens on a port. Other programs and browser pages can reach localhost. The specification tells servers to validate Origin, bind to localhost and implement authentication.</p></details><details><summary>Is a static bearer token enough for an MCP server?</summary><p>For a personal or local server it is a reasonable minimum. For a server used by several people, use the OAuth-based authorization in the MCP specification or an authenticating gateway.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build your own MCP server</span></div>
+<div class="rgrid"><a href="/@odykyi/build-an-mcp-server/stdio-or-streamable-http-mcp-transport/"><span class="lbl">Guide</span><b>MCP stdio or Streamable HTTP: which transport to choose</b><span>The transport decides how a client reaches your server. Pick it before you write much code, because it changes logging, testing and security.</span></a><a href="/@odykyi/build-an-mcp-server/write-automated-tests-for-an-mcp-server/"><span class="lbl">Guide</span><b>How to write automated tests for an MCP server</b><span>A server that only works when an assistant happens to call it is hard to trust. Three kinds of tests keep it honest.</span></a><a href="/@odykyi/build-an-mcp-server/validate-mcp-tool-arguments/"><span class="lbl">Guide</span><b>How to validate MCP tool arguments with Zod or Pydantic</b><span>A model can send the wrong type, a missing field or a huge limit. Put the rules in the schema and keep the data-dependent checks in the tool.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
