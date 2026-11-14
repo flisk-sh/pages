@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>App runs but is not reachable after deploy: bind and PORT</title>
+<meta name="description" content="Your container starts but the host reports no open port or a 502. Fix the usual cause: a server bound to 127.0.0.1 or listening on a hardcoded port.">
+<meta name="keywords" content="app not reachable after deploy, bind 0.0.0.0 docker, no open ports detected, 502 bad gateway after deploy, PORT environment variable listen">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/app-not-reachable-after-deploy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="App runs but is not reachable after deploy: bind and PORT">
+<meta property="og:description" content="Your container starts but the host reports no open port or a 502. Fix the usual cause: a server bound to 127.0.0.1 or listening on a hardcoded port.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/app-not-reachable-after-deploy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"App runs but is not reachable after deploy: bind and PORT","description":"Your container starts but the host reports no open port or a 502. Fix the usual cause: a server bound to 127.0.0.1 or listening on a hardcoded port.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/app-not-reachable-after-deploy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/app-not-reachable-after-deploy/","keywords":"app not reachable after deploy, bind 0.0.0.0 docker, no open ports detected, 502 bad gateway after deploy, PORT environment variable listen","wordCount":655,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"App runs but is not reachable after deploy: bind and PORT","item":"https://pages.flisk.si/@odykyi/laptop-to-production/app-not-reachable-after-deploy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is 0.0.0.0 safe to bind to?","acceptedAnswer":{"@type":"Answer","text":"Inside a container behind a platform router, yes. On a plain server it accepts connections from every network interface, so combine it with a firewall or publish the port only to 127.0.0.1 behind a reverse proxy."}},{"@type":"Question","name":"Why does it work in docker compose on my laptop?","acceptedAnswer":{"@type":"Answer","text":"Often you test through a published port and the framework default happens to bind all interfaces, or a dev server flag was set. Run the exact production image and command to compare."}},{"@type":"Question","name":"Which port should my app use if the host does not set PORT?","acceptedAnswer":{"@type":"Answer","text":"Pick one, document it, and tell the host. Reading PORT with a fallback, such as 8080, covers both cases."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>App runs but is not reachable after deploy: bind and PORT</h1><p class="dek">The logs say the server started, and the host says nothing is listening. Both are true.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-is-happening">What is happening</a></li><li><a href="#fix-it-per-runtime">Fix it per runtime</a></li><li><a href="#prove-it-on-your-laptop">Prove it on your laptop</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#other-causes-to-rule-out">Other causes to rule out</a></li></ol></nav></aside>
+<article><p>If your app starts but the host shows a timeout, a 502, or "no open ports detected", the server is almost always bound to <code>127.0.0.1</code> or listening on a port the host does not expect. Bind to <code>0.0.0.0</code> and read the port from the <code>PORT</code> environment variable. Those two changes fix most cases.</p>
+
+<h2 id="what-is-happening">What is happening</h2>
+<p>A server listens on an address and a port. The address decides who can connect. <code>127.0.0.1</code> accepts connections only from the same network namespace. Inside a container, that is the container itself, so the host's proxy, which connects from outside, is refused. <code>0.0.0.0</code> means all interfaces, which is what you want for a service behind a proxy.</p>
+<p>The port is the second half. Platforms such as Render, Heroku-style hosts and Google Cloud Run tell your app which port to use through a <code>PORT</code> variable, and their router sends traffic there. If your code listens on a fixed <code>3000</code> and the platform expects the value of <code>PORT</code>, the app runs and nothing receives traffic.</p>
+
+<h2 id="fix-it-per-runtime">Fix it per runtime</h2>
+<p>Defaults differ, so check yours rather than assuming:</p>
+<table>
+<thead><tr><th>Runtime</th><th>Listen on all interfaces, on PORT</th></tr></thead>
+<tbody>
+<tr><td>Node http or Express</td><td><code>app.listen(process.env.PORT || 3000, "0.0.0.0")</code></td></tr>
+<tr><td>Python with uvicorn</td><td><code>uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}</code> (the default host is 127.0.0.1)</td></tr>
+<tr><td>Flask</td><td><code>flask run --host 0.0.0.0 --port ${PORT:-5000}</code></td></tr>
+<tr><td>Go</td><td><code>http.ListenAndServe(":"+port, handler)</code>, where an empty host means all interfaces</td></tr>
+<tr><td>Vite preview</td><td><code>vite preview --host 0.0.0.0 --port $PORT</code></td></tr>
+</tbody>
+</table>
+<p>Do not put a development server in production if you can avoid it. A Vite dev server or <code>flask run</code> is for your laptop. Build a static bundle or use a production server such as gunicorn.</p>
+
+<h2 id="prove-it-on-your-laptop">Prove it on your laptop</h2>
+<p>You can reproduce the failure without deploying. Run the production image, publish the port, and call it from the host:</p>
+<pre><code>docker run --rm -p 8080:8080 -e PORT=8080 myapp:test
+curl -i http://localhost:8080/health</code></pre>
+<p>If the app is bound to <code>127.0.0.1</code>, <code>docker run</code> starts fine and the <code>curl</code> hangs or resets the connection, even though the log says the server is listening. That is the exact symptom the host shows. Fixing the bind address makes the same <code>curl</code> succeed.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>For a service that declares a <code>command</code>, Flisk runs it as a local process and passes the <code>port</code> from <code>service.json</code> as <code>PORT</code>, then waits until the port answers. So an app that reads <code>PORT</code> locally already has the right habit:</p>
+<pre><code>{
+  "appName": "api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>When you export a Render Blueprint with <code>flisk export render</code>, that port becomes a <code>PORT</code> entry with the same value, and <code>healthCheckPath</code> becomes the Blueprint's health check path (it falls back to <code>/health</code> if you did not set one). The app only has to read <code>PORT</code> and bind to <code>0.0.0.0</code>. The exporter does not change your code, so the bind address is still yours to fix. If <code>flisk up</code> complains that a port is already in use locally, that is a different problem, covered in <a href="/@odykyi/docker-compose-guide/fix-port-already-in-use/">how to fix "port already in use"</a>.</p>
+
+<h2 id="other-causes-to-rule-out">Other causes to rule out</h2>
+<ul>
+<li><strong>The health check path is wrong.</strong> The host probes <code>/health</code>, your app serves <code>/healthz</code>, so the deploy is marked failed. Align the two.</li>
+<li><strong>The app is slow to start.</strong> The platform gives up before it opens the port. Check the startup time in the logs and the host's timeout setting.</li>
+<li><strong>The app crashes after the first log line.</strong> A missing environment variable is common. Read the logs from the start.</li>
+<li><strong>A firewall or security group</strong> blocks the port on a plain VPS. This does not apply to managed platforms.</li>
+<li><strong>Only IPv6 or only IPv4.</strong> Some hosts connect over IPv6 internally. Binding to <code>::</code> or to <code>0.0.0.0</code> depends on your runtime, so read the host's documentation on the address to use.</li>
+</ul>
+
+<p>Once the port answers, add a check that proves it after every deploy, as in <a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/">smoke test after deploy</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is 0.0.0.0 safe to bind to?</summary><p>Inside a container behind a platform router, yes. On a plain server it accepts connections from every network interface, so combine it with a firewall or publish the port only to 127.0.0.1 behind a reverse proxy.</p></details><details><summary>Why does it work in docker compose on my laptop?</summary><p>Often you test through a published port and the framework default happens to bind all interfaces, or a dev server flag was set. Run the exact production image and command to compare.</p></details><details><summary>Which port should my app use if the host does not set PORT?</summary><p>Pick one, document it, and tell the host. Reading PORT with a fallback, such as 8080, covers both cases.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/localhost-urls-break-in-production/"><span class="lbl">Guide</span><b>Why hardcoded localhost URLs break in production</b><span>A URL that says localhost means this machine. On a host, that machine is the wrong one.</span></a><a href="/@odykyi/laptop-to-production/smoke-test-after-deploy/"><span class="lbl">Guide</span><b>How to write a smoke test that runs after every deploy</b><span>A green deploy only means the container started. A smoke test asks whether the app does its one job.</span></a><a href="/@odykyi/laptop-to-production/first-deploy-checklist/"><span class="lbl">Guide</span><b>First deploy checklist: what to check before going live</b><span>Most first-deploy failures are the same ten small things. Check them on your laptop first, when fixing them is cheap.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

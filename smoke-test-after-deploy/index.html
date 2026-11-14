@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write a smoke test that runs after every deploy</title>
+<meta name="description" content="A short script that proves a fresh deploy works: health check, one real request, a database round trip, retries and a non-zero exit code so CI can react.">
+<meta name="keywords" content="smoke test after deploy, post deploy health check script, curl health check retry, verify deployment, deploy verification ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/laptop-to-production/smoke-test-after-deploy/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write a smoke test that runs after every deploy">
+<meta property="og:description" content="A short script that proves a fresh deploy works: health check, one real request, a database round trip, retries and a non-zero exit code so CI can react.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/laptop-to-production/smoke-test-after-deploy/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write a smoke test that runs after every deploy","description":"A short script that proves a fresh deploy works: health check, one real request, a database round trip, retries and a non-zero exit code so CI can react.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/laptop-to-production/smoke-test-after-deploy/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/laptop-to-production/smoke-test-after-deploy/","keywords":"smoke test after deploy, post deploy health check script, curl health check retry, verify deployment, deploy verification ci","wordCount":750,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"From laptop to production","item":"https://pages.flisk.si/@odykyi/laptop-to-production/"},{"@type":"ListItem","position":3,"name":"How to write a smoke test that runs after every deploy","item":"https://pages.flisk.si/@odykyi/laptop-to-production/smoke-test-after-deploy/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the difference between a smoke test and an end-to-end test?","acceptedAnswer":{"@type":"Answer","text":"A smoke test is a few shallow checks that prove the deploy is alive. An end-to-end test walks through full user flows and is slower and broader. Run smoke tests after every deploy and the larger suite before it."}},{"@type":"Question","name":"Should a smoke test run against production?","acceptedAnswer":{"@type":"Answer","text":"Yes, with read-only requests or a dedicated test account. The point is to check the live environment, so avoid actions with real side effects."}},{"@type":"Question","name":"How long should a smoke test take?","acceptedAnswer":{"@type":"Answer","text":"Under a minute. If it needs more, it is turning into a full test suite and will get skipped."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/laptop-to-production/">From laptop to production</a></div>
+<section class="hero"><div><div class="lbl">From laptop to production</div><h1>How to write a smoke test that runs after every deploy</h1><p class="dek">A green deploy only means the container started. A smoke test asks whether the app does its one job.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-smoke-test-is-for">What a smoke test is for</a></li><li><a href="#make-the-health-endpoint-honest-first">Make the health endpoint honest first</a></li><li><a href="#a-script-you-can-start-with">A script you can start with</a></li><li><a href="#run-the-same-script-locally-and-in-the-pipeline">Run the same script locally and in the pipeline</a></li><li><a href="#where-to-run-it">Where to run it</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A smoke test is a small script that runs right after a deploy and fails loudly if the app is not working. Make it call the health endpoint, one real read path that touches the database, and one page or API route users depend on, with retries for the start-up window and a non-zero exit code on failure. Five requests and a few lines of shell are enough to catch most bad releases.</p>
+
+<h2 id="what-a-smoke-test-is-for">What a smoke test is for</h2>
+<p>Hosts report a deploy as healthy when the process starts and the health check passes. That tells you very little. A missing environment variable can leave <code>/health</code> green while every login fails. A smoke test checks the paths a user would take, shallowly and quickly. It is not a full test suite. Keep it under a minute, make it safe to run against production (read-only requests, or a clearly marked test account), and make it the same script everywhere.</p>
+
+<h2 id="make-the-health-endpoint-honest-first">Make the health endpoint honest first</h2>
+<p>There are two useful endpoints. A liveness check answers "is the process up" and should not touch dependencies. A readiness check answers "can it serve requests now", and may check the database with a cheap query. Use the readiness style for the post-deploy check, and keep it fast and free of side effects. For the pattern in an agent service, see <a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">health vs readiness endpoints</a>.</p>
+
+<h2 id="a-script-you-can-start-with">A script you can start with</h2>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+BASE_URL="${1:?usage: smoke.sh https://app.example.com}"
+
+check() {
+  local name="$1" path="$2"
+  curl --fail --silent --show-error --max-time 10 \
+       --retry 10 --retry-delay 3 --retry-connrefused \
+       "$BASE_URL$path" > /dev/null
+  echo "ok   $name"
+}
+
+check "health"       /health
+check "home page"    /
+check "products api" /api/products?limit=1   # reads from the database
+echo "smoke test passed"</code></pre>
+<ul>
+<li><code>--fail</code> turns HTTP 4xx and 5xx into a non-zero exit code, which is what CI and deploy hooks read.</li>
+<li><code>--retry</code> with <code>--retry-connrefused</code> covers the seconds between a new instance starting and its port opening. Retries are for start-up. If the check keeps failing after 30 seconds, it is a real failure.</li>
+<li><code>--max-time</code> stops a hung request from hanging the pipeline.</li>
+<li><code>set -euo pipefail</code> makes the script stop on the first error.</li>
+</ul>
+<p>Add checks for what your app is about: log in with a test user, create and delete one record, or load a page that renders data. Check the content too, not only the status code, for example with <code>grep -q</code> on a known string, because an error page can return 200.</p>
+
+<h2 id="run-the-same-script-locally-and-in-the-pipeline">Run the same script locally and in the pipeline</h2>
+<p>The value of a smoke test grows when you can run it against your laptop first. With Flisk, a service that sets <code>healthCheckPath</code> in <code>service.json</code> is waited on at that path before dependent services start, and <code>flisk up</code> prints the URL it found. Run the script against the printed address and fix the script on your laptop before it guards production:</p>
+<pre><code>bash smoke.sh http://localhost:4000</code></pre>
+<p><code>flisk doctor</code> also pings the <code>/health</code> endpoint of running services, which is a quick sanity check, but it is a check of your local stack, not of production. The host gets the same health path from the exported config. <code>flisk export render</code> writes <code>healthCheckPath</code> (or <code>/health</code> when you did not set one) into the Blueprint, so make sure the production app really answers there. How to wire this into a pipeline is covered in <a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/">waiting for services to be healthy in CI</a>.</p>
+
+<h2 id="where-to-run-it">Where to run it</h2>
+<ol>
+<li><strong>In CI after the deploy step</strong> when your pipeline triggers the deploy. Fail the job so the team sees it.</li>
+<li><strong>As a deploy hook</strong> on platforms that support a post-deploy command. Check your host's documentation for the name.</li>
+<li><strong>On a schedule,</strong> every few minutes, as a cheap uptime check. This becomes monitoring, which is a separate topic.</li>
+</ol>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Testing the old version.</strong> During a rolling deploy, a request may hit the previous instance. Include a version in the health response, such as a commit SHA, and have the script wait until it matches the one you deployed.</li>
+<li><strong>Side effects on production.</strong> Sending real emails or charging a card from a smoke test is a bug. Use read-only calls or test mode.</li>
+<li><strong>Flaky checks.</strong> A test that fails randomly gets ignored. Retry only the start-up window and fix or delete the rest.</li>
+<li><strong>Secrets in the script.</strong> Pass tokens from the CI secret store, not the file.</li>
+</ul>
+
+<p>When the smoke test fails, you need a fast way back. That is the subject of <a href="/@odykyi/laptop-to-production/roll-back-a-bad-deploy/">how to roll back a bad deploy</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is the difference between a smoke test and an end-to-end test?</summary><p>A smoke test is a few shallow checks that prove the deploy is alive. An end-to-end test walks through full user flows and is slower and broader. Run smoke tests after every deploy and the larger suite before it.</p></details><details><summary>Should a smoke test run against production?</summary><p>Yes, with read-only requests or a dedicated test account. The point is to check the live environment, so avoid actions with real side effects.</p></details><details><summary>How long should a smoke test take?</summary><p>Under a minute. If it needs more, it is turning into a full test suite and will get skipped.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">From laptop to production</span></div>
+<div class="rgrid"><a href="/@odykyi/laptop-to-production/app-not-reachable-after-deploy/"><span class="lbl">Guide</span><b>App runs but is not reachable after deploy: bind and PORT</b><span>The logs say the server started, and the host says nothing is listening. Both are true.</span></a><a href="/@odykyi/laptop-to-production/roll-back-a-bad-deploy/"><span class="lbl">Guide</span><b>How to roll back a bad deploy quickly and safely</b><span>The deploy is live, the error rate is climbing, and you have a few minutes. This is what to do, and what to prepare so those minutes are enough.</span></a><a href="/@odykyi/laptop-to-production/first-deploy-checklist/"><span class="lbl">Guide</span><b>First deploy checklist: what to check before going live</b><span>Most first-deploy failures are the same ten small things. Check them on your laptop first, when fixing them is cheap.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
