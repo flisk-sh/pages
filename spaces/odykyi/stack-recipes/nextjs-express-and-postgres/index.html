@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Next.js, Express and Postgres on one laptop</title>
+<meta name="description" content="Run a Next.js frontend, an Express API and Postgres with Prisma migrations on your laptop with one command, and see how the four services depend on each other.">
+<meta name="keywords" content="nextjs express postgres local, next.js prisma postgres docker local, run nextjs and express together, prisma migrate deploy local dev, nextjs postgres starter">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/stack-recipes/nextjs-express-and-postgres/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Next.js, Express and Postgres on one laptop">
+<meta property="og:description" content="Run a Next.js frontend, an Express API and Postgres with Prisma migrations on your laptop with one command, and see how the four services depend on each other.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/stack-recipes/nextjs-express-and-postgres/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Next.js, Express and Postgres on one laptop","description":"Run a Next.js frontend, an Express API and Postgres with Prisma migrations on your laptop with one command, and see how the four services depend on each other.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/stack-recipes/nextjs-express-and-postgres/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/stack-recipes/nextjs-express-and-postgres/","keywords":"nextjs express postgres local, next.js prisma postgres docker local, run nextjs and express together, prisma migrate deploy local dev, nextjs postgres starter","wordCount":739,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Language and framework recipes","item":"https://pages.flisk.si/@odykyi/stack-recipes/"},{"@type":"ListItem","position":3,"name":"Next.js, Express and Postgres on one laptop","item":"https://pages.flisk.si/@odykyi/stack-recipes/nextjs-express-and-postgres/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Where should Prisma migrations run in local development?","acceptedAnswer":{"@type":"Answer","text":"In a separate one-shot step that runs before the API starts, not in the API start script. That avoids races between several instances and keeps a failed migration from crash-looping the API."}},{"@type":"Question","name":"Does the next-postgres starter need Docker?","acceptedAnswer":{"@type":"Answer","text":"Yes. It runs Postgres, a Prisma migrator, an Express API and a Next.js app as containers, so Docker must be running before flisk up."}},{"@type":"Question","name":"How do I add a column after the stack is running?","acceptedAnswer":{"@type":"Answer","text":"Add a new migration folder with a migration.sql file under api-migrator/prisma/migrations, then run flisk restart api-migrator. The migrator applies it and exits."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/stack-recipes/">Language and framework recipes</a></div>
+<section class="hero"><div><div class="lbl">Language and framework recipes</div><h1>Next.js, Express and Postgres on one laptop</h1><p class="dek">A web app, an API, a database and a migration step make four things that must start in the right order. Here is a starter that wires them and the reasoning behind it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-order-matters">Why the order matters</a></li><li><a href="#the-same-thing-in-plain-docker-compose">The same thing in plain Docker Compose</a></li><li><a href="#the-flisk-way-the-next-postgres-starter">The Flisk way: the next-postgres starter</a></li><li><a href="#find-the-urls">Find the URLs</a></li><li><a href="#change-the-table">Change the table</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>To run Next.js, Express and Postgres together, you need four things in order: the database, a one-shot migration, the API, then the web app. With Flisk, <code>flisk create myapp --starter next-postgres</code> followed by <code>flisk up</code> builds exactly that stack in Docker. The same shape works without Flisk, and the reasoning below applies to any tool.</p>
+
+<h2 id="why-the-order-matters">Why the order matters</h2>
+<p>A Next.js page that fetches from an API on first render fails if the API is not up. The API fails on its first query if the table does not exist. The table does not exist until the migration has run, and the migration needs a database that accepts connections. That chain is the whole problem.</p>
+<p>A common shortcut is to run <code>prisma migrate deploy</code> in the API start script. It works with one API instance and breaks as soon as there are two replicas, a worker that shares the database, or a failed migration that makes the API crash in a loop with a confusing error. The cleaner pattern is a separate step that runs once, exits, and is a hard dependency of the services that need the schema.</p>
+
+<h2 id="the-same-thing-in-plain-docker-compose">The same thing in plain Docker Compose</h2>
+<p>Compose can express the chain with <code>depends_on</code> conditions:</p>
+<pre><code>services:
+  db:
+    image: postgres:16
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+  migrate:
+    build: ./api
+    command: npx prisma migrate deploy
+    depends_on:
+      db: { condition: service_healthy }
+  api:
+    build: ./api
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  web:
+    build: ./web
+    depends_on: [api]</code></pre>
+<p>That is a fair setup and many teams keep it. You maintain the Dockerfiles, the health checks, the port mapping and the hostnames yourself.</p>
+
+<h2 id="the-flisk-way-the-next-postgres-starter">The Flisk way: the next-postgres starter</h2>
+<p>Flisk ships this stack as a starter. You need Docker running.</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk create myapp --starter next-postgres
+cd myapp
+flisk up</code></pre>
+<p>You can also write <code>flisk project next-postgres --path myapp</code>. The starter has four resources:</p>
+<ul>
+<li><strong>db</strong>: a database resource with the <code>postgres</code> framework, the shared Flisk Postgres.</li>
+<li><strong>api-migrator</strong>: an <code>appType: migrator</code> resource that uses Prisma and depends on <code>postgres</code>. It runs <code>prisma migrate deploy</code> against the migrations in <code>prisma/migrations</code> and then exits.</li>
+<li><strong>api</strong>: an Express API that depends on <code>api-migrator</code>. It serves <code>GET</code> and <code>POST</code> on <code>/items</code> and <code>PATCH</code> and <code>DELETE</code> on <code>/items/:id</code>, reads <code>DATABASE_URL</code>, and its <code>/health/ready</code> route runs <code>SELECT 1</code>.</li>
+<li><strong>web</strong>: a Next.js app with <code>backendName: api</code> that depends on <code>api</code>.</li>
+</ul>
+<p>The dependency is written in each <code>service.json</code> and, for the dependencies that need a condition, it can also be an object:</p>
+<pre><code>"dependsOn": [
+  { "name": "api-migrator", "condition": "service_completed_successfully" }
+]</code></pre>
+<p>The accepted conditions are <code>service_started</code>, <code>service_healthy</code> and <code>service_completed_successfully</code>, the same words Compose uses. A plain string in <code>dependsOn</code> is the short form.</p>
+
+<h2 id="find-the-urls">Find the URLs</h2>
+<p>Ports are not published on your host. Ask Flisk instead of guessing:</p>
+<pre><code>flisk networks
+flisk open
+flisk status</code></pre>
+<p>The API is reachable at <code>http://api.&lt;project&gt;.localhost/api/&lt;name&gt;</code> and the web app at <code>http://app.&lt;project&gt;.localhost/web</code>. If the host port is not 80, the port is appended. The Next.js resource runs <code>next dev</code>, so edits to a page reload in the browser, and its health check is at <code>/web/health</code> because Next.js is served under the <code>/web</code> base path.</p>
+
+<h2 id="change-the-table">Change the table</h2>
+<p>Add a new folder with a <code>migration.sql</code> file under <code>api-migrator/prisma/migrations</code>, then restart only the migrator:</p>
+<pre><code>flisk restart api-migrator</code></pre>
+<p>The migrator runs again, applies the new migration and exits. The API keeps running. After editing <code>dependsOn</code>, <code>backendName</code> or <code>apiPath</code> of the web app, run <code>flisk restart web</code>, because those values are read when the frontend starts. To confirm that generated files match the manifests, run <code>flisk config verify</code>. For the Prisma side in more detail, see <a href="/@odykyi/local-database-guide/prisma-migrations-locally/">Prisma migrations locally</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Next.js needs a recent Flisk.</strong> The Next.js provider needs Flisk 1.4.3 or newer.</li>
+<li><strong>Do not hand-edit generated files.</strong> Files under <code>.autogenerated/</code> and <code>.flisk/</code> are rewritten. Change <code>service.json</code> instead.</li>
+<li><strong>Server code calling the API.</strong> Browser code uses the public API URL. Server-side code in a container uses the Docker network, so check which one your fetch runs in before you hard-code a URL.</li>
+<li><strong>No Docker, no this stack.</strong> The Postgres container and the Prisma migrator need Docker. For a database-free app, see the local-process route in <a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/">Express and Vite</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>Seed the table and look at the data with the database guides, or add a background worker as a fifth resource that shares the same database.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Where should Prisma migrations run in local development?</summary><p>In a separate one-shot step that runs before the API starts, not in the API start script. That avoids races between several instances and keeps a failed migration from crash-looping the API.</p></details><details><summary>Does the next-postgres starter need Docker?</summary><p>Yes. It runs Postgres, a Prisma migrator, an Express API and a Next.js app as containers, so Docker must be running before flisk up.</p></details><details><summary>How do I add a column after the stack is running?</summary><p>Add a new migration folder with a migration.sql file under api-migrator/prisma/migrations, then run flisk restart api-migrator. The migrator applies it and exits.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Language and framework recipes</span></div>
+<div class="rgrid"><a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/"><span class="lbl">Guide</span><b>Express API and Vite frontend in one dev command</b><span>An Express API and a Vite app are two processes that must agree on ports and origins. Here is the plain way, and the one-command way.</span></a><a href="/@odykyi/stack-recipes/bring-your-own-dockerfile/"><span class="lbl">Guide</span><b>Run an existing Dockerfile in a local dev stack</b><span>Not every service is written from a template. This is how to bring a container you already have into a local stack and what you give up.</span></a><a href="/@odykyi/stack-recipes/bun-and-hono-api/"><span class="lbl">Guide</span><b>Bun and Hono API: local dev setup with live reload</b><span>Bun starts fast and has a built-in watcher, and Hono is a small router that fits it. This is the setup, with and without Flisk.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">9 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a><a href="/@odykyi/testing-and-shipping/"><span class="lbl">Topic 10</span><b>Test the real stack, then hand it off</b><span>Integration and browser tests against the stack you actually run, CI setup, and handing a working app to Render, Cloudflare or a VPS.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
