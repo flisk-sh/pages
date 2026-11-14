@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test a Kafka consumer on your machine</title>
+<meta name="description" content="Run a Kafka consumer against a local broker, send it test messages with the console producer, and watch lag and logs, with a kafkajs example and Flisk setup.">
+<meta name="keywords" content="test kafka consumer locally, kafkajs consumer example, kafka console producer test message, kafka consumer live reload">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test a Kafka consumer on your machine">
+<meta property="og:description" content="Run a Kafka consumer against a local broker, send it test messages with the console producer, and watch lag and logs, with a kafkajs example and Flisk setup.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test a Kafka consumer on your machine","description":"Run a Kafka consumer against a local broker, send it test messages with the console producer, and watch lag and logs, with a kafkajs example and Flisk setup.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/","keywords":"test kafka consumer locally, kafkajs consumer example, kafka console producer test message, kafka consumer live reload","wordCount":779,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"How to test a Kafka consumer on your machine","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my consumer not see a message I just sent?","acceptedAnswer":{"@type":"Answer","text":"The group has a committed offset from an earlier run, and fromBeginning only applies to a new group id. Reset the offsets or use a new group id."}},{"@type":"Question","name":"Which broker address should a local consumer use?","acceptedAnswer":{"@type":"Answer","text":"Use the external listener, for example localhost:29092, when the consumer runs on your machine. Use the internal address, for example broker:9092, when it runs in a container on the same network."}},{"@type":"Question","name":"How do I send a test message without installing anything?","acceptedAnswer":{"@type":"Answer","text":"Run the console producer that ships in the broker image, in the broker container. flisk run broker -- runs a command inside the service."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>How to test a Kafka consumer on your machine</h1><p class="dek">Keep the handler separate, point the consumer at a broker on your machine, and feed it messages from the terminal.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#split-the-handler-from-the-consumer">Split the handler from the consumer</a></li><li><a href="#which-address-does-the-consumer-use">Which address does the consumer use</a></li><li><a href="#send-it-test-messages">Send it test messages</a></li><li><a href="#run-the-consumer-with-flisk">Run the consumer with Flisk</a></li><li><a href="#watch-it-work">Watch it work</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Keep the message handling in a plain function, run the consumer against a local broker, and send it test messages from the broker container's own console producer. You see the effect in seconds and you never touch a shared cluster.</p>
+
+<h2 id="split-the-handler-from-the-consumer">Split the handler from the consumer</h2>
+<p>Most consumer bugs are logic bugs, not Kafka bugs. If the logic lives inside the <code>eachMessage</code> callback, the only way to test it is with a broker. Put it in its own file so a unit test can call it directly:</p>
+<pre><code>// handler.js
+export async function handleOrder(order, { save }) {
+  if (order.id === undefined) throw new Error("order without id");
+  await save({ id: order.id, total: order.total ?? 0 });
+}</code></pre>
+<p>The consumer file only wires Kafka to that function. This one uses <a href="https://kafka.js.org">kafkajs</a>:</p>
+<pre><code>// consumer.js
+import { Kafka } from "kafkajs";
+import { handleOrder } from "./handler.js";
+
+const kafka = new Kafka({
+  clientId: "orders-consumer",
+  brokers: (process.env.KAFKA_BROKERS || "localhost:29092").split(","),
+});
+const consumer = kafka.consumer({ groupId: "orders-consumer" });
+
+await consumer.connect();
+await consumer.subscribe({ topic: process.env.KAFKA_TOPIC || "orders", fromBeginning: true });
+await consumer.run({
+  eachMessage: async ({ topic, partition, message }) =&gt; {
+    const order = JSON.parse(message.value.toString());
+    await handleOrder(order, { save: async (o) =&gt; console.log("saved", o) });
+    console.log(`handled ${topic}[${partition}]@${message.offset}`);
+  },
+});</code></pre>
+<p><code>fromBeginning: true</code> only matters the first time a group id is seen. After that the group resumes from its committed offset, which is the usual surprise when a new test message "does not arrive". See <a href="/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/">replaying messages by resetting offsets</a>.</p>
+
+<h2 id="which-address-does-the-consumer-use">Which address does the consumer use</h2>
+<p>This depends on where the consumer runs, and it is the same listener question as in <a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/">the advertised listeners article</a>:</p>
+<ul>
+<li><strong>On your machine</strong> (a plain <code>node consumer.js</code>): use the external listener, <code>localhost:29092</code> in the broker from <a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">the KRaft article</a>.</li>
+<li><strong>In a container on the same network</strong>: use <code>broker:9092</code>.</li>
+</ul>
+<p>Reading the address from an environment variable lets the same code run in both places.</p>
+
+<h2 id="send-it-test-messages">Send it test messages</h2>
+<p>The broker image already contains a console producer, so you need nothing extra installed. Without Flisk, ask Docker to run it in the broker's container. With Flisk, <code>flisk run</code> runs a command inside a service:</p>
+<pre><code>echo '{"id":"o-1","total":42}' | flisk run broker -- \
+  /opt/kafka/bin/kafka-console-producer.sh \
+  --bootstrap-server localhost:9092 --topic orders</code></pre>
+<p>Inside the broker container the broker is reachable at <code>localhost:9092</code>, because that is the internal listener. A producer with <code>--property parse.key=true --property key.separator=:</code> reads lines like <code>o-1:{"id":"o-1"}</code> and sends the part before the colon as the key. If your terminal does not forward standard input through <code>flisk run</code>, wrap the command in <code>sh -c</code> and use a here-string inside it. I checked that the command exists in CLI 1.4.57 but did not pipe data through it on a running stack.</p>
+
+<h2 id="run-the-consumer-with-flisk">Run the consumer with Flisk</h2>
+<p>A consumer is a normal backend with no port that anyone calls. Two ways to run it:</p>
+<ol>
+<li><strong>As a local process.</strong> Give the resource a <code>command</code> and Flisk runs it on your machine with your toolchain, with live reload. Set <code>KAFKA_BROKERS=localhost:29092</code> and turn the health check off, because a consumer serves no HTTP. See <a href="/@odykyi/docker-compose-guide/run-services-without-docker/">run services without Docker</a>.</li>
+<li><strong>As a container.</strong> Build it like any other service and set <code>KAFKA_BROKERS=broker:9092</code>. Add <code>"dependsOn": ["topics"]</code> so it starts after the <a href="/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">topics job</a>.</li>
+</ol>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "consumer",
+  "appType": "worker",
+  "stack": "streaming",
+  "port": 4002,
+  "command": "node --watch consumer.js",
+  "toolchain": "node@22",
+  "healthCheck": false,
+  "env": { "KAFKA_BROKERS": "localhost:29092", "KAFKA_TOPIC": "orders" }
+}</code></pre>
+<p>Edit and save <code>consumer.js</code>, the process restarts, and the group rejoins. Check the field names against <code>flisk config verify</code> in your project, since I validated the other manifests in this series but not this exact combination against a running broker.</p>
+
+<h2 id="watch-it-work">Watch it work</h2>
+<pre><code>flisk logs --service consumer</code></pre>
+<p>Open <a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">the Kafka UI</a> and look at the consumer group. Lag of 0 means the consumer has read everything. A lag that grows means it is stuck or slower than the producer.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>A rebalance on every restart.</strong> Each restart of a live-reloading process leaves and rejoins the group. The broker waits for the session to time out before it reassigns partitions, so the first message after a restart can be slow. A short <code>session.timeout.ms</code> in development helps.</li>
+<li><strong>Poison messages.</strong> A handler that throws on one message stalls that partition when it retries forever. Decide what happens: skip it, or publish it to a dead-letter topic such as <code>orders.dlq</code>.</li>
+<li><strong>Offsets committed too early.</strong> If you commit before the work is done, a crash loses the message. kafkajs commits after <code>eachMessage</code> resolves by default, which is the safe order.</li>
+</ul>
+
+<p>To prove the same code in CI without sharing a broker between tests, read <a href="/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/">integration tests against a local Kafka broker</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my consumer not see a message I just sent?</summary><p>The group has a committed offset from an earlier run, and fromBeginning only applies to a new group id. Reset the offsets or use a new group id.</p></details><details><summary>Which broker address should a local consumer use?</summary><p>Use the external listener, for example localhost:29092, when the consumer runs on your machine. Use the internal address, for example broker:9092, when it runs in a container on the same network.</p></details><details><summary>How do I send a test message without installing anything?</summary><p>Run the console producer that ships in the broker image, in the broker container. flisk run broker -- runs a command inside the service.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/kafka-integration-tests-local-broker/"><span class="lbl">Guide</span><b>Kafka integration tests against a local broker</b><span>A shared local broker is faster than a container per test. Unique names and a join wait keep the tests from flaking.</span></a><a href="/@odykyi/kafka-and-streaming-local/replay-kafka-messages-reset-consumer-offsets/"><span class="lbl">Guide</span><b>How to replay Kafka messages by resetting consumer offsets</b><span>The messages are still in the topic. Move the group&#39;s bookmark back and the consumer reads them again.</span></a><a href="/@odykyi/kafka-and-streaming-local/read-kafka-messages-from-the-command-line/"><span class="lbl">Guide</span><b>How to read Kafka messages from the command line</b><span>You do not need application code to see what is in a topic. Three small tools print it, keys and offsets included.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to create Kafka topics automatically on startup</title>
+<meta name="description" content="Create Kafka topics with the right partitions every time the local stack starts: a one-shot kafka-topics job, an init script and a Flisk dependsOn on the job.">
+<meta name="keywords" content="create kafka topics on startup, kafka init topics docker, kafka-topics.sh create if not exists, kafka auto.create.topics.enable local">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to create Kafka topics automatically on startup">
+<meta property="og:description" content="Create Kafka topics with the right partitions every time the local stack starts: a one-shot kafka-topics job, an init script and a Flisk dependsOn on the job.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to create Kafka topics automatically on startup","description":"Create Kafka topics with the right partitions every time the local stack starts: a one-shot kafka-topics job, an init script and a Flisk dependsOn on the job.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/","keywords":"create kafka topics on startup, kafka init topics docker, kafka-topics.sh create if not exists, kafka auto.create.topics.enable local","wordCount":739,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"How to create Kafka topics automatically on startup","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/create-kafka-topics-on-startup/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is it safe to run the topic creation job on every start?","acceptedAnswer":{"@type":"Answer","text":"Yes, if you use --if-not-exists. The command exits 0 when the topic exists and changes nothing."}},{"@type":"Question","name":"Why not let Kafka auto-create topics?","acceptedAnswer":{"@type":"Answer","text":"You get the default partition count of 1 and no settings, and a mistyped topic name silently creates an empty topic. Explicit creation also matches production clusters that disable auto-creation."}},{"@type":"Question","name":"How do I change the partition count of an existing topic?","acceptedAnswer":{"@type":"Answer","text":"Run kafka-topics.sh --alter --topic NAME --partitions N with a larger N. You cannot reduce partitions, and more partitions change which partition each key maps to."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>How to create Kafka topics automatically on startup</h1><p class="dek">Auto-created topics have one partition and no settings. A short init job creates the real ones before any service connects.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-rely-on-auto-creation">Why not rely on auto-creation</a></li><li><a href="#the-plain-command">The plain command</a></li><li><a href="#put-the-topics-in-a-script">Put the topics in a script</a></li><li><a href="#run-it-as-a-flisk-one-shot-job">Run it as a Flisk one-shot job</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Add a one-shot container that runs <code>kafka-topics.sh --create --if-not-exists</code> after the broker is healthy, and make your services wait for it. Then every developer and every CI run gets the same topics with the same partition counts, and nobody has to remember a manual step.</p>
+
+<h2 id="why-not-rely-on-auto-creation">Why not rely on auto-creation</h2>
+<p>A Kafka broker creates a topic the first time a client produces to it or subscribes to it, unless <code>auto.create.topics.enable</code> is false. The default is true. That is convenient and wrong for development in three ways:</p>
+<ul>
+<li>You get the broker's default partition count (1), so ordering and parallelism bugs hide until production, where the topic has more partitions.</li>
+<li>A typo in a topic name silently creates a new empty topic. The consumer then waits for messages that were sent somewhere else.</li>
+<li>Per-topic settings such as retention and compaction cannot be set at creation time this way.</li>
+</ul>
+<p>Production clusters often turn auto-creation off, so creating topics explicitly locally also matches how they run.</p>
+
+<h2 id="the-plain-command">The plain command</h2>
+<pre><code>/opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092 \
+  --create --if-not-exists --topic orders \
+  --partitions 3 --replication-factor 1</code></pre>
+<p><code>--if-not-exists</code> makes the command safe to run again: it exits 0 when the topic exists. Replication factor is 1 because there is one broker. Configuration goes in repeated <code>--config</code> flags, for example <code>--config retention.ms=604800000</code> for seven days. Partitions can be increased later with <code>--alter</code> but never decreased, and increasing them changes which partition a given key lands on (see <a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/">keys, partitions and message order</a>).</p>
+
+<h2 id="put-the-topics-in-a-script">Put the topics in a script</h2>
+<p>Keep the list in a file in the repository so reviewers see topic changes. Save this as <code>services/streaming/topics/create-topics.sh</code>:</p>
+<pre><code>set -e
+KT="/opt/kafka/bin/kafka-topics.sh --bootstrap-server broker:9092"
+
+$KT --create --if-not-exists --topic orders      --partitions 3 --replication-factor 1
+$KT --create --if-not-exists --topic orders.dlq  --partitions 1 --replication-factor 1 \
+    --config retention.ms=604800000
+$KT --list</code></pre>
+<p>A file avoids a quoting problem: Compose reads a lone <code>$</code> in a manifest, so inline commands need <code>$$</code>, while a script mounted as a file keeps its variables as written.</p>
+
+<h2 id="run-it-as-a-flisk-one-shot-job">Run it as a Flisk one-shot job</h2>
+<p>Add a second bring-your-own resource using the same image as the broker, so the Kafka scripts are already inside it. The key setting is <code>"restart": "no"</code>. A container is restarted by default, and a job that exits cleanly would otherwise start again forever. You can create the file with the CLI:</p>
+<pre><code>flisk resource topics --type bring-your-own --image apache/kafka:4.2.2 \
+  --stack streaming --restart no --no-proxy --yes</code></pre>
+<p>Then edit <code>services/streaming/topics/service.json</code>:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "topics",
+  "appType": "bring-your-own",
+  "stack": "streaming",
+  "port": 4001,
+  "exposeViaProxy": false,
+  "image": "apache/kafka:4.2.2",
+  "restart": "no",
+  "dependsOn": [{ "name": "broker", "condition": "service_healthy" }],
+  "volumes": [{ "source": "./create-topics.sh", "target": "/create-topics.sh", "readOnly": true }],
+  "container": {
+    "entrypoint": ["sh", "-c"],
+    "command": ["sh /create-topics.sh"]
+  }
+}</code></pre>
+<p>Here <code>container.entrypoint</code> replaces the image's entrypoint and <code>container.command</code> is the argument list, so the container runs <code>sh -c "sh /create-topics.sh"</code>. The bind mount path starts with <code>./</code>, so it is relative to the folder that holds this <code>service.json</code>. The broker side is in <a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">the KRaft article</a>.</p>
+<p>Any service that should not start before the topics exist lists the job:</p>
+<pre><code>"dependsOn": ["topics"]</code></pre>
+<p>The Flisk docs say a service that lists a one-shot job in <code>dependsOn</code> starts only after the job exited 0, and that when the job fails the services after it are not started. The same file also runs through <code>flisk config verify</code>, which accepted both manifests in CLI 1.4.57. I did not start the stack, so run <code>flisk logs --service topics</code> after <code>flisk up streaming</code> to see the job's output.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Healthy is not the same as started.</strong> Use the <code>service_healthy</code> condition, with the broker's health check, so the job does not run before the broker accepts connections. See <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a>.</li>
+<li><strong>Edits do not reshape existing topics.</strong> <code>--if-not-exists</code> skips a topic that already exists, so changing the partition count in the script changes nothing on a broker whose volume remembers the old topic. Use <code>--alter --partitions</code> or reset the volume.</li>
+<li><strong>Do not put topic creation in the app's start script.</strong> It is the same mistake as running database migrations from the API's entrypoint. A separate job runs once, and restarting the app does not repeat it.</li>
+<li><strong>The job shows as exited.</strong> That is normal for a one-shot container.</li>
+</ul>
+
+<p>Topics exist now, so you can look at what lands in them. <a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/">Kafka UI for local development</a> adds a browser view, and <a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/">testing a Kafka consumer locally</a> puts a consumer on them.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is it safe to run the topic creation job on every start?</summary><p>Yes, if you use --if-not-exists. The command exits 0 when the topic exists and changes nothing.</p></details><details><summary>Why not let Kafka auto-create topics?</summary><p>You get the default partition count of 1 and no settings, and a mistyped topic name silently creates an empty topic. Explicit creation also matches production clusters that disable auto-creation.</p></details><details><summary>How do I change the partition count of an existing topic?</summary><p>Run kafka-topics.sh --alter --topic NAME --partitions N with a larger N. You cannot reduce partitions, and more partitions change which partition each key maps to.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/"><span class="lbl">Guide</span><b>How to run Kafka locally without ZooKeeper (KRaft mode)</b><span>ZooKeeper is gone from Kafka 4.0. Here is a single-node broker that your containers and your own tools can both reach.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-keys-partitions-message-order/"><span class="lbl">Guide</span><b>Kafka keys, partitions and message order, tested locally</b><span>Order is per partition and the key picks the partition. Three short experiments on a local topic make that concrete.</span></a><a href="/@odykyi/kafka-and-streaming-local/test-a-kafka-consumer-locally/"><span class="lbl">Guide</span><b>How to test a Kafka consumer on your machine</b><span>Keep the handler separate, point the consumer at a broker on your machine, and feed it messages from the terminal.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

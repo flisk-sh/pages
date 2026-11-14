@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Redpanda or Kafka for local development: which one to run</title>
+<meta name="description" content="Compare Redpanda and Apache Kafka for a dev laptop: protocol compatibility, memory, tooling and license, with a Flisk service.json for each broker.">
+<meta name="keywords" content="redpanda vs kafka local, redpanda docker local development, kafka alternative for local dev, redpanda dev-container mode">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Redpanda or Kafka for local development: which one to run">
+<meta property="og:description" content="Compare Redpanda and Apache Kafka for a dev laptop: protocol compatibility, memory, tooling and license, with a Flisk service.json for each broker.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Redpanda or Kafka for local development: which one to run","description":"Compare Redpanda and Apache Kafka for a dev laptop: protocol compatibility, memory, tooling and license, with a Flisk service.json for each broker.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/","keywords":"redpanda vs kafka local, redpanda docker local development, kafka alternative for local dev, redpanda dev-container mode","wordCount":754,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Kafka and streaming locally","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/"},{"@type":"ListItem","position":3,"name":"Redpanda or Kafka for local development: which one to run","item":"https://pages.flisk.si/@odykyi/kafka-and-streaming-local/redpanda-or-kafka-for-local-development/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is Redpanda a drop-in replacement for Kafka?","acceptedAnswer":{"@type":"Answer","text":"For standard producers, consumers and consumer groups, yes: clients use the Kafka API. Check anything beyond that, such as Connect plugins, broker-specific settings or JMX metrics, against the broker you deploy."}},{"@type":"Question","name":"Does Redpanda need ZooKeeper?","acceptedAnswer":{"@type":"Answer","text":"No. Redpanda is a single binary with its own Raft-based metadata, so there is nothing to start before it."}},{"@type":"Question","name":"Can I use Kafka CLI tools against Redpanda?","acceptedAnswer":{"@type":"Answer","text":"Often yes, because they speak the Kafka protocol, but rpk is the supported tool and is already in the Redpanda image."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/kafka-and-streaming-local/">Kafka and streaming locally</a></div>
+<section class="hero"><div><div class="lbl">Kafka and streaming locally</div><h1>Redpanda or Kafka for local development: which one to run</h1><p class="dek">Both speak the Kafka protocol. The practical question is which one matches production and fits in your laptop&#39;s memory.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-they-differ-for-local-work">How they differ for local work</a></li><li><a href="#run-kafka">Run Kafka</a></li><li><a href="#run-redpanda-the-same-way">Run Redpanda the same way</a></li><li><a href="#what-the-client-code-sees">What the client code sees</a></li><li><a href="#picking-in-practice">Picking in practice</a></li></ol></nav></aside>
+<article><p>Run the one your production system uses. If you deploy on Apache Kafka, Amazon MSK or Confluent, use <code>apache/kafka</code> locally, because the closest match hides the fewest surprises. If you have no fixed target, or your laptop is short on memory, Redpanda is a reasonable choice: it speaks the Kafka protocol, starts as one binary and has no JVM.</p>
+
+<h2 id="how-they-differ-for-local-work">How they differ for local work</h2>
+<table>
+<thead><tr><th>Question</th><th>Apache Kafka</th><th>Redpanda</th></tr></thead>
+<tbody>
+<tr><td>Wire protocol</td><td>Kafka</td><td>Kafka API compatible, so existing clients connect without code changes</td></tr>
+<tr><td>Runtime</td><td>JVM, 1 GB heap by default</td><td>One native binary, memory set with <code>--memory</code></td></tr>
+<tr><td>Extra components</td><td>Schema registry and REST proxy are separate products</td><td>Schema registry and an HTTP proxy are built into the same binary</td></tr>
+<tr><td>Admin tool</td><td><code>kafka-topics.sh</code> and friends</td><td><code>rpk</code>, also ships in the image</td></tr>
+<tr><td>License</td><td>Apache 2.0</td><td>Source available under the Business Source License, check the terms for your use</td></tr>
+</tbody>
+</table>
+<p>Compatibility is the part to be careful about. Producers, consumers, consumer groups and transactions work through the standard client libraries on both. Edge cases can differ: specific broker settings, Kafka Connect plugins, tools that read broker internals or JMX metrics. If your code depends on one of those, test it against the broker you deploy.</p>
+
+<h2 id="run-kafka">Run Kafka</h2>
+<p>The Kafka setup, with two listeners so that containers and your laptop both connect, is in <a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/">How to run Kafka locally without ZooKeeper</a>. It is a bring-your-own container: Flisk's built-in queue frameworks are NATS and RabbitMQ, not Kafka.</p>
+
+<h2 id="run-redpanda-the-same-way">Run Redpanda the same way</h2>
+<p>Create the resource, then replace the generated file. <code>flisk resource --help</code> lists <code>--image</code> as the flag that skips the Dockerfile for bring-your-own resources:</p>
+<pre><code>flisk resource broker --type bring-your-own \
+  --image docker.redpanda.com/redpandadata/redpanda:v25.3.18 \
+  --stack streaming --no-proxy --yes</code></pre>
+<p>Then set <code>services/streaming/broker/service.json</code> to this. The image tag is an example, pick a current one from the Redpanda registry:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "broker",
+  "appType": "bring-your-own",
+  "stack": "streaming",
+  "port": 9092,
+  "exposeViaProxy": false,
+  "image": "docker.redpanda.com/redpandadata/redpanda:v25.3.18",
+  "container": {
+    "command": ["redpanda", "start", "--mode", "dev-container", "--smp", "1", "--memory", "1G",
+      "--kafka-addr", "internal://0.0.0.0:9092,external://0.0.0.0:19092",
+      "--advertise-kafka-addr", "internal://broker:9092,external://127.0.0.1:19092"]
+  },
+  "healthCheck": { "command": ["rpk", "cluster", "health", "--exit-when-healthy"], "startPeriod": 20 },
+  "extraPorts": [{ "port": 19092 }],
+  "volumes": [{ "source": "broker-data", "target": "/var/lib/redpanda/data" }],
+  "provides": { "KAFKA_BROKERS": "broker:9092" }
+}</code></pre>
+<p>The pattern is the same as for Kafka. <code>container.command</code> replaces the image's default command, so it carries the flags. There are two named Kafka listeners: <code>internal</code> is for other containers at <code>broker:9092</code> and <code>external</code> is for your machine at <code>127.0.0.1:19092</code>. <code>extraPorts</code> publishes the external port on loopback only. Services that depend on <code>broker</code> get <code>KAFKA_BROKERS</code>.</p>
+<pre><code>flisk config verify
+flisk up streaming
+flisk run broker -- rpk cluster info</code></pre>
+<p><code>flisk config verify</code> accepted this manifest in CLI 1.4.57. I did not start the container, so if Redpanda rejects a flag for your image version, <code>flisk logs --service broker</code> prints its message. Redpanda's own docs describe the flags, and they change between releases more than Kafka's.</p>
+
+<h2 id="what-the-client-code-sees">What the client code sees</h2>
+<p>Nothing, if you did the wiring right. Your service reads <code>KAFKA_BROKERS</code>, which Flisk fills from <code>provides</code>, and connects. It does not know whether <code>broker</code> is Kafka or Redpanda. That is the real benefit of keeping the choice in one committed manifest: swapping the image and the listener flags is a diff in one file, and you can run the same integration tests against both before you decide. If you see differences, they are worth knowing about before production does it for you.</p>
+<p>A schema registry is the one place where the choice shows up in your code. Redpanda serves a registry from the same process, on its own port. With Kafka you add a separate registry container. Either way you can still add it later as one more bring-your-own resource, so do not let it decide the broker today.</p>
+
+<h2 id="picking-in-practice">Picking in practice</h2>
+<ul>
+<li><strong>Same as production wins.</strong> A different broker locally is a source of bugs that only appear in staging.</li>
+<li><strong>Memory.</strong> Redpanda lets you cap memory explicitly. Kafka's heap can be cut with <code>KAFKA_HEAP_OPTS</code>. Both run in about a gigabyte, so measure on your machine instead of trusting a rule of thumb. <a href="/@odykyi/team-dev-environments/many-services-on-one-laptop/">Running many services on one laptop</a> covers how.</li>
+<li><strong>Tooling.</strong> If your team uses <code>kafka-*.sh</code> scripts in runbooks, stay with Kafka. If you like <code>rpk</code>, use Redpanda.</li>
+<li><strong>Do not mix without reason.</strong> Switching brokers between developers produces "works on my machine" reports. Put one choice in the committed <code>service.json</code>.</li>
+</ul>
+
+<p>Both brokers need the same two-listener layout to be reachable from a container and from your laptop. <a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/">Kafka advertised listeners: fix connection refused</a> explains why.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is Redpanda a drop-in replacement for Kafka?</summary><p>For standard producers, consumers and consumer groups, yes: clients use the Kafka API. Check anything beyond that, such as Connect plugins, broker-specific settings or JMX metrics, against the broker you deploy.</p></details><details><summary>Does Redpanda need ZooKeeper?</summary><p>No. Redpanda is a single binary with its own Raft-based metadata, so there is nothing to start before it.</p></details><details><summary>Can I use Kafka CLI tools against Redpanda?</summary><p>Often yes, because they speak the Kafka protocol, but rpk is the supported tool and is already in the Redpanda image.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Kafka and streaming locally</span></div>
+<div class="rgrid"><a href="/@odykyi/kafka-and-streaming-local/run-kafka-locally-without-zookeeper/"><span class="lbl">Guide</span><b>How to run Kafka locally without ZooKeeper (KRaft mode)</b><span>ZooKeeper is gone from Kafka 4.0. Here is a single-node broker that your containers and your own tools can both reach.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-advertised-listeners-connection-refused/"><span class="lbl">Guide</span><b>Kafka advertised listeners: fix &quot;broker may not be available&quot;</b><span>The broker tells clients where to connect, and that address is wrong for where the client runs. Two listeners solve it.</span></a><a href="/@odykyi/kafka-and-streaming-local/kafka-ui-to-browse-topics-locally/"><span class="lbl">Guide</span><b>Kafka UI for local development: browse topics and messages</b><span>A browser view of your topics saves a lot of terminal commands. Kafbat UI is one container and two environment variables.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
