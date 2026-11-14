@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Actions service containers or the whole stack in CI?</title>
+<meta name="description" content="Compare GitHub Actions service containers with booting your whole stack in CI: what each can and cannot do, and a simple rule for choosing between them.">
+<meta name="keywords" content="github actions service containers, services postgres github actions, ci full stack vs service containers, integration tests ci database, github actions redis service">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/ci-service-containers-or-full-stack/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GitHub Actions service containers or the whole stack in CI?">
+<meta property="og:description" content="Compare GitHub Actions service containers with booting your whole stack in CI: what each can and cannot do, and a simple rule for choosing between them.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/ci-service-containers-or-full-stack/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GitHub Actions service containers or the whole stack in CI?","description":"Compare GitHub Actions service containers with booting your whole stack in CI: what each can and cannot do, and a simple rule for choosing between them.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/ci-service-containers-or-full-stack/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/ci-service-containers-or-full-stack/","keywords":"github actions service containers, services postgres github actions, ci full stack vs service containers, integration tests ci database, github actions redis service","wordCount":826,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"CI for multi-service apps","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/"},{"@type":"ListItem","position":3,"name":"GitHub Actions service containers or the whole stack in CI?","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/ci-service-containers-or-full-stack/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can GitHub Actions service containers build my Dockerfile?","acceptedAnswer":{"@type":"Answer","text":"No. The services key runs images that already exist. To run your own services, build and start them in a step, or boot the stack with Compose or another tool."}},{"@type":"Question","name":"What host name do I use to reach a service container?","acceptedAnswer":{"@type":"Answer","text":"If the job runs on the runner, use localhost and the mapped port. If the job runs inside a container, use the service label, for example postgres."}},{"@type":"Question","name":"Do service containers work on macOS or Windows runners?","acceptedAnswer":{"@type":"Answer","text":"No. Service containers and job containers need a Linux runner."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a></div>
+<section class="hero"><div><div class="lbl">CI for multi-service apps</div><h1>GitHub Actions service containers or the whole stack in CI?</h1><p class="dek">Service containers are the fast path for one service and a database. A full stack is for tests that cross service boundaries.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-service-containers-give-you">What service containers give you</a></li><li><a href="#where-service-containers-stop">Where service containers stop</a></li><li><a href="#when-each-one-fits">When each one fits</a></li><li><a href="#use-the-same-service-json-for-both">Use the same service.json for both</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-use-the-whole-stack">When not to use the whole stack</a></li></ol></nav></aside>
+<article><p>Use GitHub Actions service containers when one service under test needs a few backing images such as Postgres or Redis. Boot the whole stack when the thing you are testing is how services work together. Service containers are simpler and start in parallel with your job, but they only run ready-made images, with no build step and no ordering between them.</p>
+
+<h2 id="what-service-containers-give-you">What service containers give you</h2>
+<p>The <code>services:</code> key in a workflow job starts containers next to the job and removes them when the job ends. You can pass a health check in <code>options</code>, and the runner waits for it before your first step runs:</p>
+<pre><code>jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: app
+        ports:
+          - 5432:5432
+        options: &gt;-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm test
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/app</code></pre>
+<p>If the job runs directly on the runner, as above, reach the container on <code>localhost</code> and the port you mapped. If the job itself runs in a container (<code>container:</code>), use the service label (<code>postgres</code>) as the hostname instead. Service containers need a Linux runner.</p>
+
+<h2 id="where-service-containers-stop">Where service containers stop</h2>
+<ul>
+<li><strong>Images only.</strong> There is no <code>build:</code>. Your own services must run some other way, usually as processes started in a step.</li>
+<li><strong>No ordering.</strong> The containers start together. If one needs another to be ready first, you handle that yourself.</li>
+<li><strong>No routing.</strong> You get published ports, not the host names and paths your frontend uses in development. Anything that depends on a gateway or a hostname behaves differently from your laptop.</li>
+<li><strong>Different from local.</strong> The configuration lives in the workflow file, so it is a second description of your backing services next to the one developers run locally. The two drift.</li>
+</ul>
+
+<h2 id="when-each-one-fits">When each one fits</h2>
+<table>
+<thead><tr><th>Question</th><th>Service containers</th><th>Whole stack</th></tr></thead>
+<tbody>
+<tr><td>Does one service need a database for its tests?</td><td>Yes, this is the case they are made for</td><td>More than you need</td></tr>
+<tr><td>Do services call each other over the network in the test?</td><td>You must start the others yourself</td><td>Yes</td></tr>
+<tr><td>Do you need your own images built from Dockerfiles?</td><td>No</td><td>Yes</td></tr>
+<tr><td>Do you test migrations followed by a real service start?</td><td>Partly</td><td>Yes</td></tr>
+<tr><td>Browser tests through the real URLs?</td><td>Hard</td><td>Yes</td></tr>
+<tr><td>Does the job need to be as short as possible?</td><td>Yes</td><td>Slower: images are built and every service boots</td></tr>
+</tbody>
+</table>
+<p>Many teams use both. Unit and per-service integration tests run on every push with service containers. The whole-stack job runs on pull requests that touch more than one service, or nightly. That keeps the fast feedback loop fast and still gives you one job that proves the wiring.</p>
+
+<h2 id="use-the-same-service-json-for-both">Use the same service.json for both</h2>
+<p>With Flisk you can keep one description of your services and choose where the database comes from. A service that has a <code>command</code> in its <code>service.json</code> runs as a local process, and <code>${VAR}</code> in its <code>env</code> resolves from your shell first, then from the project <code>.env</code>, then from the <code>:-default</code>. So the same manifest works on a laptop and in a job that sets <code>APP_DATABASE_URL</code> to point at a service container (the name differs from <code>DATABASE_URL</code> on purpose, because a project <code>.env</code> can define that one too):</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "env": {
+    "DATABASE_URL": "${APP_DATABASE_URL:-postgres://postgres:postgres@localhost:5432/app}"
+  }
+}</code></pre>
+<p>The workflow then installs Flisk, runs <code>flisk up --wait</code> after the Postgres service container is healthy, runs the tests and ends with <code>flisk down</code>. This path needs no Docker for your own code, but it also has no gateway: services are reached at <code>http://localhost:&lt;port&gt;</code>. The article on <a href="/@odykyi/ci-for-multi-service-apps/run-integration-tests-in-ci-without-docker/">running integration tests in CI without Docker</a> covers its limits.</p>
+<p>If your stack uses Flisk's container path, Flisk provisions its own Postgres, and a service container on port 5432 would clash with it. Pick one source of Postgres per job. The runner image may also have Postgres installed and listening on 5432, which is worth checking in either approach.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Missing health options.</strong> Without <code>--health-cmd</code> the runner cannot know when the database is ready, and the first test is the one that finds out.</li>
+<li><strong>Version drift.</strong> Pin the image tag to the major version you run in production, not <code>latest</code>.</li>
+<li><strong>Wrong host name.</strong> <code>localhost</code> works on the runner; the service label works inside a job container. Mixing them gives a connection refused that looks like a flaky service.</li>
+<li><strong>Passwords in the workflow.</strong> Throwaway CI database credentials are fine in the file. Real credentials are not.</li>
+</ul>
+
+<h2 id="when-not-to-use-the-whole-stack">When not to use the whole stack</h2>
+<p>If your tests mock every network boundary, booting everything buys you nothing. Start with service containers, and add a stack job for the specific journeys that cross service boundaries.</p>
+
+<p>If you decide to boot the stack, the next thing to make reliable is the start-up itself: <a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/">how to wait for every service to be healthy before CI tests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can GitHub Actions service containers build my Dockerfile?</summary><p>No. The services key runs images that already exist. To run your own services, build and start them in a step, or boot the stack with Compose or another tool.</p></details><details><summary>What host name do I use to reach a service container?</summary><p>If the job runs on the runner, use localhost and the mapped port. If the job runs inside a container, use the service label, for example postgres.</p></details><details><summary>Do service containers work on macOS or Windows runners?</summary><p>No. Service containers and job containers need a Linux runner.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI for multi-service apps</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/"><span class="lbl">Guide</span><b>How to wait for every service to be healthy before CI tests</b><span>Replace the fixed sleep with a readiness wait that fails fast, names the unhealthy service and prints its last log lines.</span></a><a href="/@odykyi/ci-for-multi-service-apps/run-integration-tests-in-ci-without-docker/"><span class="lbl">Guide</span><b>How to run integration tests in CI without Docker</b><span>No image builds, no pulls. Each service runs as a local process and CI waits until all of them answer.</span></a><a href="/@odykyi/ci-for-multi-service-apps/keep-ci-the-same-as-local-dev/"><span class="lbl">Guide</span><b>How to keep CI the same as local development</b><span>One definition of the stack, used in both places. Pin the versions and write down what legitimately differs.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

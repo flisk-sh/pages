@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to wait for every service to be healthy before CI tests</title>
+<meta name="description" content="Why a running container is not a ready one, and how to block CI until every service passes a real health check using Compose, curl or flisk up --wait.">
+<meta name="keywords" content="wait for services healthy ci, docker compose up --wait, wait for database in ci, flisk up --wait, ci health check before tests, flaky integration tests ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to wait for every service to be healthy before CI tests">
+<meta property="og:description" content="Why a running container is not a ready one, and how to block CI until every service passes a real health check using Compose, curl or flisk up --wait.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to wait for every service to be healthy before CI tests","description":"Why a running container is not a ready one, and how to block CI until every service passes a real health check using Compose, curl or flisk up --wait.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/","keywords":"wait for services healthy ci, docker compose up --wait, wait for database in ci, flisk up --wait, ci health check before tests, flaky integration tests ci","wordCount":1052,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"CI for multi-service apps","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/"},{"@type":"ListItem","position":3,"name":"How to wait for every service to be healthy before CI tests","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does docker compose up --wait wait for services without a healthcheck?","acceptedAnswer":{"@type":"Answer","text":"It waits until they are running. A service with no healthcheck is treated as ready once it is running, so write a healthcheck for every service you want the wait to cover."}},{"@type":"Question","name":"What exit code does flisk up --wait return?","acceptedAnswer":{"@type":"Answer","text":"0 when every service is healthy, 1 when the stack fails or the --wait-timeout (default 1800 seconds, at most 21600) passes. The stack keeps running either way, and flisk down stops it."}},{"@type":"Question","name":"Why not just sleep for 30 seconds?","acceptedAnswer":{"@type":"Answer","text":"A fixed sleep is too long on a fast run and too short on a slow one. Waiting for a health check takes exactly as long as needed and fails with a reason when something never starts."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a></div>
+<section class="hero"><div><div class="lbl">CI for multi-service apps</div><h1>How to wait for every service to be healthy before CI tests</h1><p class="dek">Replace the fixed sleep with a readiness wait that fails fast, names the unhealthy service and prints its last log lines.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-started-is-not-ready">Why &quot;started&quot; is not &quot;ready&quot;</a></li><li><a href="#design-the-health-endpoint-first">Design the health endpoint first</a></li><li><a href="#three-ways-to-block-until-ready">Three ways to block until ready</a></li><li><a href="#what-flisk-waits-for">What Flisk waits for</a></li><li><a href="#check-the-public-url-too">Check the public URL too</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-a-wait-is-not-the-answer">When a wait is not the answer</a></li></ol></nav></aside>
+<article><p>Do not start your tests when the containers are merely running. Start them when every service answers a real readiness check, and give that wait a timeout that is shorter than the job timeout. In CI that means a health endpoint per service, one blocking wait command (Compose <code>--wait</code>, a polling script, or <code>flisk up --wait</code>), and a clear failure message when the wait times out.</p>
+
+<h2 id="why-started-is-not-ready">Why "started" is not "ready"</h2>
+<p>A container is running as soon as its main process has been forked. A Postgres container accepts TCP connections before it can run a query. An API can listen on its port while it is still running migrations or warming a cache. Tests that start in that gap fail with connection resets, 502 responses or empty tables, and the failure disappears when you re-run the job. That is the most common source of "flaky" integration runs in CI, and the cure is a deliberate wait, not a <code>sleep 30</code>.</p>
+<p>A fixed sleep is wrong in both directions. On a fast run it wastes time, and on a slow runner (a cold image cache, a noisy neighbour) it is too short. Wait for a condition instead.</p>
+
+<h2 id="design-the-health-endpoint-first">Design the health endpoint first</h2>
+<p>Whatever tool does the waiting, it needs something to ask. Keep two ideas apart:</p>
+<ul>
+<li><strong>Liveness</strong>: the process is up. A restart is the only cure if it fails.</li>
+<li><strong>Readiness</strong>: the service can do its job now. Its database connection works, its migrations are done, and it can serve a request.</li>
+</ul>
+<p>For CI you want readiness. Return a non-2xx status until the service has connected to what it needs. Do not make the check call other services deeply, or one slow neighbour will turn the whole stack red for the wrong reason. The article on <a href="/@odykyi/ai-agents-local/agent-health-and-readiness-endpoints/">health and readiness endpoints for an agent service</a> shows the same split in a concrete service.</p>
+
+<h2 id="three-ways-to-block-until-ready">Three ways to block until ready</h2>
+<p><strong>Docker Compose.</strong> Give each service a <code>healthcheck</code>, then start with <code>--wait</code>. The command returns once the services are running and healthy, and fails if one cannot reach that state:</p>
+<pre><code>docker compose up -d --wait --wait-timeout 300
+npm test</code></pre>
+<p>A service without a <code>healthcheck</code> counts as ready when it is running, so the flag only helps if you wrote the checks. See <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a> for the check itself.</p>
+<p><strong>A polling script.</strong> When the services are not in Compose, poll the URLs. With curl, <code>--retry-connrefused</code> is needed because a refused connection is not retried by default, and a 404 is not retried either:</p>
+<pre><code>for url in http://localhost:4000/health http://localhost:3000/; do
+  curl --fail --silent --show-error \
+    --retry 60 --retry-delay 2 --retry-connrefused \
+    "$url" &gt; /dev/null
+done</code></pre>
+<p>Node projects often use the <code>wait-on</code> package for the same job: <code>npx wait-on -t 120000 http://localhost:4000/health</code>.</p>
+<p><strong>Flisk.</strong> <code>flisk up --wait</code> starts the stack in the background and returns when every service is healthy. It exits 0 on success and 1 on failure or timeout, and the stack keeps running, so the next step can use it. <code>flisk down</code> stops it:</p>
+<pre><code>flisk up --wait --wait-timeout 600
+npm test --prefix tests/integration
+flisk down</code></pre>
+<p>The timeout is in seconds, from 1 to 21600, and defaults to 1800. That default is long for CI: pick a value a little below your job's <code>timeout-minutes</code> so the wait fails with a useful message instead of the job being killed with none.</p>
+
+<h2 id="what-flisk-waits-for">What Flisk waits for</h2>
+<p>For services started as local processes (a <code>command</code> in <code>service.json</code>), a service is ready once its <code>healthCheckPath</code> answers, or, with no path, once its port accepts connections. A service that declares <code>dependsOn</code> starts only after those are ready. For container services, <code>healthCheckPath</code> sets the container health check. You can set the probe in <code>service.json</code> with the <code>healthCheck</code> field: a <code>path</code>, a TCP <code>port</code>, or a <code>command</code> that must exit 0. A gRPC server or a database proxy is the usual reason to use <code>port</code> or <code>command</code>.</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "orders-api",
+  "appType": "backend",
+  "stack": "shop",
+  "port": 4000,
+  "healthCheckPath": "/health",
+  "dependsOn": ["postgres"]
+}</code></pre>
+<p>When the wait fails, <code>flisk up --wait</code> prints which services were unhealthy and the last lines of each one's log (up to 5 per service and 20 in total), which is often the whole diagnosis. With <code>--json</code> it prints one result object instead, with the same log lines under <code>data.failures</code>.</p>
+
+<h2 id="check-the-public-url-too">Check the public URL too</h2>
+<p>A container can be healthy while the route in front of it returns 404. On the Docker and Tilt path you can add a <code>smoke</code> block to <code>service.json</code>. <code>flisk up</code> then sends HTTP requests to the public URL it prints and exits non-zero when a step fails, retrying 404, 502, 503 and 504 for <code>timeoutSeconds</code> (default 60) before it gives up. A step can save a value from one response, such as an id, and use it in the next request. The smoke check is HTTP only, so it does not replace a browser test. The <a href="/@odykyi/testing-and-shipping/integration-tests-against-the-real-stack/">integration tests against the real stack</a> article covers what to assert once the stack is up.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Waiting on a stack that is already running.</strong> <code>flisk up --wait</code> on a stack that is already up returns success without checking health. On a fresh CI runner this never happens, but on a self-hosted runner a leftover stack can hide a broken start. End every job with <code>flisk down</code> in an <code>if: always()</code> step.</li>
+<li><strong>A health endpoint that always returns 200.</strong> The wait then proves nothing. Make the endpoint fail until the dependencies are reachable.</li>
+<li><strong>Deferred services.</strong> Services configured with <code>sablier.deferStart</code> are not waited for. They start on their first request, so the first test that hits one will be slower.</li>
+<li><strong>Mixing up timeouts.</strong> Keep three numbers in order: the per-request timeout of the poll, the wait timeout, and the job timeout. Each should be smaller than the next.</li>
+</ul>
+
+<h2 id="when-a-wait-is-not-the-answer">When a wait is not the answer</h2>
+<p>If a test fails because it ran before some background work finished (a queue consumer, an index build), a health check cannot help. Poll for the outcome in the test itself, with a timeout, instead of waiting for the whole stack to be quiet.</p>
+
+<p>Once the wait is reliable, the next question is what to keep when it still fails: <a href="/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/">how to get useful logs when a multi-service CI run fails</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does docker compose up --wait wait for services without a healthcheck?</summary><p>It waits until they are running. A service with no healthcheck is treated as ready once it is running, so write a healthcheck for every service you want the wait to cover.</p></details><details><summary>What exit code does flisk up --wait return?</summary><p>0 when every service is healthy, 1 when the stack fails or the --wait-timeout (default 1800 seconds, at most 21600) passes. The stack keeps running either way, and flisk down stops it.</p></details><details><summary>Why not just sleep for 30 seconds?</summary><p>A fixed sleep is too long on a fast run and too short on a slow one. Waiting for a health check takes exactly as long as needed and fails with a reason when something never starts.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI for multi-service apps</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/"><span class="lbl">Guide</span><b>How to get useful logs when a multi-service CI run fails</b><span>The runner disappears after the job. Collect status and logs before it does, and choose the files you upload.</span></a><a href="/@odykyi/ci-for-multi-service-apps/migrations-and-seed-data-in-ci/"><span class="lbl">Guide</span><b>How to run migrations and seed data in CI before tests</b><span>Make migrations a service the stack waits for, so tests never start against a half-built schema.</span></a><a href="/@odykyi/ci-for-multi-service-apps/split-slow-e2e-tests-across-ci-jobs/"><span class="lbl">Guide</span><b>How to split slow end-to-end tests across parallel CI jobs</b><span>Each runner boots its own stack and runs a slice of the tests, then one job merges the reports.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

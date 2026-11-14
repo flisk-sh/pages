@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to get useful logs when a multi-service CI run fails</title>
+<meta name="description" content="Keep the evidence when a CI stack fails: print unhealthy services, run a collector with if: always(), upload logs as an artifact, and keep .env out of it.">
+<meta name="keywords" content="ci logs multi service, github actions upload logs on failure, flisk logs --unhealthy, debug failing ci stack, docker compose logs ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to get useful logs when a multi-service CI run fails">
+<meta property="og:description" content="Keep the evidence when a CI stack fails: print unhealthy services, run a collector with if: always(), upload logs as an artifact, and keep .env out of it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to get useful logs when a multi-service CI run fails","description":"Keep the evidence when a CI stack fails: print unhealthy services, run a collector with if: always(), upload logs as an artifact, and keep .env out of it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/","keywords":"ci logs multi service, github actions upload logs on failure, flisk logs --unhealthy, debug failing ci stack, docker compose logs ci","wordCount":791,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"CI for multi-service apps","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/"},{"@type":"ListItem","position":3,"name":"How to get useful logs when a multi-service CI run fails","item":"https://pages.flisk.si/@odykyi/ci-for-multi-service-apps/collect-logs-when-a-ci-stack-fails/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my cleanup step not run after a failure?","acceptedAnswer":{"@type":"Answer","text":"Steps are skipped after a failure unless they have if: always() or if: failure()."}},{"@type":"Question","name":"Is it safe to upload the whole project directory?","acceptedAnswer":{"@type":"Answer","text":"No. The generated .env holds passwords and keys, and artifacts can be read by anyone with repository read access. Upload chosen files from a dedicated folder."}},{"@type":"Question","name":"Where are logs for services running as local processes?","acceptedAnswer":{"@type":"Answer","text":"In .flisk/native/logs/\u003cservice>.log, and flisk logs prints them too."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a></div>
+<section class="hero"><div><div class="lbl">CI for multi-service apps</div><h1>How to get useful logs when a multi-service CI run fails</h1><p class="dek">The runner disappears after the job. Collect status and logs before it does, and choose the files you upload.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#print-the-failure-where-people-look-first">Print the failure where people look first</a></li><li><a href="#step-1-a-step-that-always-runs">Step 1: a step that always runs</a></li><li><a href="#step-2-save-the-full-logs-as-an-artifact">Step 2: save the full logs as an artifact</a></li><li><a href="#what-never-goes-in-the-artifact">What never goes in the artifact</a></li><li><a href="#plain-compose-for-comparison">Plain Compose, for comparison</a></li><li><a href="#make-the-summary-readable">Make the summary readable</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-not-to-bother">When not to bother</a></li></ol></nav></aside>
+<article><p>When a multi-service CI run fails, the useful evidence is gone as soon as the runner is discarded. Add a step that runs even on failure, prints which services are unhealthy and their last log lines, and uploads the full logs as an artifact. With Flisk that is <code>flisk status --json</code> plus <code>flisk logs --unhealthy</code>, and you never upload your <code>.env</code>.</p>
+
+<h2 id="print-the-failure-where-people-look-first">Print the failure where people look first</h2>
+<p><code>flisk up --wait</code> already helps. When the wait fails, it prints the last log lines of the unhealthy services, up to 5 lines per service and 20 in total. With <code>--json</code> the same lines appear as <code>logs</code> inside <code>data.failures</code>. For many failures that is enough to name the broken service in the job log. For the rest you need more, and that is what the next steps add.</p>
+
+<h2 id="step-1-a-step-that-always-runs">Step 1: a step that always runs</h2>
+<p>By default a step is skipped once an earlier step has failed. Use <code>if: always()</code> (or <code>if: failure()</code> to run only on failure):</p>
+<pre><code>- name: Stack state on failure
+  if: failure()
+  run: |
+    echo "::group::status"
+    flisk status --json || true
+    echo "::endgroup::"
+    echo "::group::unhealthy logs"
+    flisk logs --unhealthy --tail 200 || true
+    echo "::endgroup::"</code></pre>
+<p>The <code>::group::</code> lines make each block collapsible in the Actions log. The <code>|| true</code> keeps the diagnostic step itself from hiding the real failure. <code>flisk status --json</code> lists each service and whether it is ready. <code>flisk logs</code> also takes <code>--service</code>, <code>--since</code> and <code>--json</code>. Flisk masks secret values it knows from <code>.env</code> in log output, so the lines are safer to read. That is a safeguard, not a guarantee: a secret that your own code prints in another form is not covered.</p>
+
+<h2 id="step-2-save-the-full-logs-as-an-artifact">Step 2: save the full logs as an artifact</h2>
+<p>A tail is often too short. Write everything to files and upload them:</p>
+<pre><code>- name: Save logs
+  if: always()
+  run: |
+    mkdir -p ci-logs
+    flisk status --json > ci-logs/status.json || true
+    flisk logs --tail 2000 > ci-logs/all.log || true
+    flisk doctor --json --no-ping > ci-logs/doctor.json || true
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: stack-logs
+    path: ci-logs
+    retention-days: 7</code></pre>
+<p><code>flisk doctor --json</code> records the environment checks (Docker, ports, versions). <code>--no-ping</code> skips the network ping, which is useful when the failure might itself be a network problem. When you run services as local processes, their raw logs are also in <code>.flisk/native/logs/&lt;service&gt;.log</code>, and you can upload that directory instead. Upload from <code>ci-logs</code> or a specific log directory, not from the project root.</p>
+
+<h2 id="what-never-goes-in-the-artifact">What never goes in the artifact</h2>
+<ul>
+<li><strong>The <code>.env</code> file.</strong> It holds generated passwords and keys. Artifacts can be downloaded by anyone with read access to the repository, and for a public repository that is everyone.</li>
+<li><strong>Whole directories.</strong> Do not upload <code>.</code> or <code>.flisk</code> without checking what is inside. Pick the files you want.</li>
+<li><strong>Raw output of commands that print the environment.</strong> A debug <code>env</code> dump is a leak waiting to happen.</li>
+</ul>
+<p>If a log might contain a secret, mask it before it is printed with <code>::add-mask::</code>, and keep retention short.</p>
+
+<h2 id="plain-compose-for-comparison">Plain Compose, for comparison</h2>
+<p>If you run a Compose file yourself, the equivalent is <code>docker compose logs --no-color --timestamps</code>, plus <code>docker compose ps -a</code> to see which containers exited and with what code. The timestamps matter: they let you line up a crash in one service with the error that appeared in another a moment earlier. Flisk's own wait output and logs give you the same starting point without writing that yourself, but the approach is the same.</p>
+
+<h2 id="make-the-summary-readable">Make the summary readable</h2>
+<p>Write a short note to <code>$GITHUB_STEP_SUMMARY</code> so the run page shows the answer without opening the log. For example, append the names of the unhealthy services from the status JSON. Keep it to a few lines and link to the artifact by name.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The step is skipped.</strong> Without <code>if: always()</code> or <code>failure()</code> it never runs when you need it.</li>
+<li><strong>A cancelled job.</strong> A timeout or manual cancel may leave no time for cleanup steps. Set the wait timeout below the job timeout.</li>
+<li><strong>Logs from the wrong moment.</strong> If you stop the stack before collecting, the logs may be gone. Collect first, then run <code>flisk down</code>.</li>
+<li><strong>The smoke records.</strong> If you use the <code>smoke</code> feature, its records are kept under <code>.flisk/smoke/</code>. They have secret values masked, but check them before you upload.</li>
+</ul>
+
+<h2 id="when-not-to-bother">When not to bother</h2>
+<p>For a two-service stack that fails rarely, the output of <code>flisk up --wait</code> alone is usually enough. Add the artifact step when failures happen on CI only and you cannot reproduce them, which is when you most need the evidence.</p>
+
+<p>Better logs are one half; the other half is failing less often, so read <a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/">how to wait for every service to be healthy</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my cleanup step not run after a failure?</summary><p>Steps are skipped after a failure unless they have if: always() or if: failure().</p></details><details><summary>Is it safe to upload the whole project directory?</summary><p>No. The generated .env holds passwords and keys, and artifacts can be read by anyone with repository read access. Upload chosen files from a dedicated folder.</p></details><details><summary>Where are logs for services running as local processes?</summary><p>In .flisk/native/logs/&lt;service&gt;.log, and flisk logs prints them too.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI for multi-service apps</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-for-multi-service-apps/wait-for-services-healthy-in-ci/"><span class="lbl">Guide</span><b>How to wait for every service to be healthy before CI tests</b><span>Replace the fixed sleep with a readiness wait that fails fast, names the unhealthy service and prints its last log lines.</span></a><a href="/@odykyi/ci-for-multi-service-apps/split-slow-e2e-tests-across-ci-jobs/"><span class="lbl">Guide</span><b>How to split slow end-to-end tests across parallel CI jobs</b><span>Each runner boots its own stack and runs a slice of the tests, then one job merges the reports.</span></a><a href="/@odykyi/ci-for-multi-service-apps/secrets-and-env-files-for-ci-stacks/"><span class="lbl">Guide</span><b>How to handle secrets and .env files for a stack in CI</b><span>Let the stack generate its own values, add only the real secrets a test needs, and keep them away from forks and logs.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a><a href="/@odykyi/event-driven-local/"><span class="lbl">Topic 34</span><b>Event-driven systems locally</b><span>Events, outbox, sagas and idempotent consumers: build and debug event-driven services on a laptop.</span></a><a href="/@odykyi/kafka-and-streaming-local/"><span class="lbl">Topic 35</span><b>Kafka and streaming locally</b><span>Run Kafka or Redpanda for development, create topics, test consumers and inspect messages without a cluster.</span></a><a href="/@odykyi/graphql-and-grpc-local/"><span class="lbl">Topic 36</span><b>GraphQL and gRPC in local dev</b><span>Run GraphQL gateways and gRPC services locally, generate clients, inspect calls and connect them to a frontend.</span></a><a href="/@odykyi/data-and-ml-local/"><span class="lbl">Topic 37</span><b>Data and ML tools locally</b><span>Notebooks, pipelines, experiment tracking and model serving on a laptop next to the app that uses them.</span></a><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
