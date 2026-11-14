@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to generate embeddings locally with Ollama, no API key</title>
+<meta name="description" content="Run Ollama in a container, pull an embedding model such as nomic-embed-text, call /api/embed from your code and keep the model between restarts, with a Flisk setup.">
+<meta name="keywords" content="ollama embeddings, local embeddings no api key, nomic-embed-text ollama, ollama docker embeddings, ollama api embed">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to generate embeddings locally with Ollama, no API key">
+<meta property="og:description" content="Run Ollama in a container, pull an embedding model such as nomic-embed-text, call /api/embed from your code and keep the model between restarts, with a Flisk setup.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to generate embeddings locally with Ollama, no API key","description":"Run Ollama in a container, pull an embedding model such as nomic-embed-text, call /api/embed from your code and keep the model between restarts, with a Flisk setup.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/","keywords":"ollama embeddings, local embeddings no api key, nomic-embed-text ollama, ollama docker embeddings, ollama api embed","wordCount":730,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"RAG and vector databases locally","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/"},{"@type":"ListItem","position":3,"name":"How to generate embeddings locally with Ollama, no API key","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which Ollama model should I use for embeddings?","acceptedAnswer":{"@type":"Answer","text":"nomic-embed-text (768 dimensions) is a good default. mxbai-embed-large is larger and often a bit better, and all-minilm is tiny and fast."}},{"@type":"Question","name":"Do I need a GPU to compute embeddings?","acceptedAnswer":{"@type":"Answer","text":"No. Embedding models are small and work on a CPU. A GPU only matters when you embed a very large corpus."}},{"@type":"Question","name":"Can I use the OpenAI SDK with Ollama embeddings?","acceptedAnswer":{"@type":"Answer","text":"Yes. Ollama exposes an OpenAI-compatible /v1/embeddings route, so you can set the SDK base URL to your Ollama server and pass the model name."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/rag-and-vector-db-local/">RAG and vector databases locally</a></div>
+<section class="hero"><div><div class="lbl">RAG and vector databases locally</div><h1>How to generate embeddings locally with Ollama, no API key</h1><p class="dek">A local embedding model costs nothing per call, works offline and keeps your documents on your machine. Setting it up takes one container and one pull.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#pick-a-model-and-note-its-dimension">Pick a model and note its dimension</a></li><li><a href="#run-ollama-and-call-the-api">Run Ollama and call the API</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#check-that-the-vectors-are-sane">Check that the vectors are sane</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Run Ollama, pull an embedding model with <code>ollama pull nomic-embed-text</code>, then POST your text to <code>/api/embed</code>. You get back one vector per input string. No API key and no network access to a paid service is needed, and the model stays on your disk. Embeddings are small enough to compute on a CPU.</p>
+
+<h2 id="pick-a-model-and-note-its-dimension">Pick a model and note its dimension</h2>
+<p>The model fixes the vector length, and your vector database must be created with that exact size. Common local choices:</p>
+<ul>
+<li><code>nomic-embed-text</code>: 768 dimensions, a good general default for English text.</li>
+<li><code>mxbai-embed-large</code>: 1024 dimensions, larger and usually a little better, a little slower.</li>
+<li><code>all-minilm</code>: 384 dimensions, very small and fast, weaker on hard retrieval.</li>
+</ul>
+<p>Check the model page for its dimension and its recommended prefixes. Some models, including <code>nomic-embed-text</code>, are trained with a task prefix such as <code>search_document: </code> for stored chunks and <code>search_query: </code> for questions. Using them consistently often improves retrieval, and mixing them up quietly hurts it.</p>
+
+<h2 id="run-ollama-and-call-the-api">Run Ollama and call the API</h2>
+<pre><code>docker run -d --name ollama -p 11434:11434 \
+  -v ollama-models:/root/.ollama ollama/ollama
+
+docker exec ollama ollama pull nomic-embed-text
+
+curl http://localhost:11434/api/embed \
+  -d '{"model": "nomic-embed-text", "input": ["search_document: Refunds take 5 days."]}'</code></pre>
+<p>The response has an <code>embeddings</code> array with one vector for each string in <code>input</code>. Send many chunks in one request, for example 32 at a time, instead of one request per chunk. Ollama also serves an OpenAI-compatible <code>/v1/embeddings</code> route, which lets code written for the OpenAI SDK point at <code>http://localhost:11434/v1</code>.</p>
+<p>The named volume on <code>/root/.ollama</code> matters. Without it the pulled model is deleted with the container, and the next start has to download it again.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has an <code>inference</code> resource type for exactly this container:</p>
+<pre><code>flisk resource embed --type inference --stack rag --yes</code></pre>
+<p>It writes a bring-your-own <code>service.json</code> with the image <code>ollama/ollama</code>, port 11434 and <code>/v1/models</code> as the health path. Other services in the stack reach it at <code>http://embed:11434</code>, the resource name being its host name on the Docker network. The preset mounts no volume, so add one yourself, as in the Docker command above:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "embed",
+  "appType": "bring-your-own",
+  "stack": "rag",
+  "port": 11434,
+  "healthCheckPath": "/v1/models",
+  "image": "ollama/ollama",
+  "exposeViaProxy": false,
+  "volumes": [{ "source": "ollama-models", "target": "/root/.ollama" }]
+}</code></pre>
+<p>Start the stack with <code>flisk up rag</code>, then pull the model inside the running container with Flisk's one-off command runner:</p>
+<pre><code>flisk run embed -- ollama pull nomic-embed-text</code></pre>
+<p>With the volume in place, <code>flisk down</code> keeps the model, so you pull once. Without it, you pull again after every <code>flisk up</code>.</p>
+
+<h2 id="check-that-the-vectors-are-sane">Check that the vectors are sane</h2>
+<p>Before you embed a whole corpus, embed three sentences and look at the result. The array length must equal the dimension you gave your vector database. Two paraphrases should be closer to each other than to an unrelated sentence, which you can check with a cosine similarity in a few lines. If similar sentences do not score higher than unrelated ones, something is wrong: a missing prefix, the wrong model name, or a text that was cut off by the input limit. A thirty-second check here saves an hour of confusing retrieval results later.</p>
+<p>Also time one batch. A batch of 32 short chunks tells you roughly how long a full corpus will take, and lets you decide whether to run Ollama on the host instead of in a container.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>No GPU in a Mac container.</strong> Docker on macOS cannot use the GPU. Embedding small batches on a CPU is fine, but a large corpus is faster if you run Ollama directly on the host and point your code at <code>http://host.docker.internal:11434</code> or run your services as local processes.</li>
+<li><strong>Never mix models in one index.</strong> Vectors from two models are not comparable, even when the sizes match. See <a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/">re-embedding after a model change</a>.</li>
+<li><strong>Model not pulled yet.</strong> A request for a model that is missing returns an error, so make your ingestion script fail loudly, or check <code>/api/tags</code> first.</li>
+<li><strong>Input length.</strong> Each model has a context limit. Text beyond it is cut off, so chunk first, as described in <a href="/@odykyi/rag-and-vector-db-local/chunk-documents-for-rag/">chunking documents for RAG</a>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>With vectors coming out of Ollama, store them in a database, such as <a href="/@odykyi/rag-and-vector-db-local/run-qdrant-locally-for-development/">Qdrant</a>. For a local chat model on the same server, see how an agent can call it in <a href="/@odykyi/ai-agents-local/run-an-ai-agent-locally-with-tools/">running an AI agent locally with tools</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which Ollama model should I use for embeddings?</summary><p>nomic-embed-text (768 dimensions) is a good default. mxbai-embed-large is larger and often a bit better, and all-minilm is tiny and fast.</p></details><details><summary>Do I need a GPU to compute embeddings?</summary><p>No. Embedding models are small and work on a CPU. A GPU only matters when you embed a very large corpus.</p></details><details><summary>Can I use the OpenAI SDK with Ollama embeddings?</summary><p>Yes. Ollama exposes an OpenAI-compatible /v1/embeddings route, so you can set the SDK base URL to your Ollama server and pass the model name.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">RAG and vector databases locally</span></div>
+<div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/run-qdrant-locally-for-development/"><span class="lbl">Guide</span><b>How to run Qdrant locally for development and RAG tests</b><span>Qdrant is a single container with a REST API and a web dashboard. Five curl commands are enough to know it works, and one volume keeps your data.</span></a><a href="/@odykyi/rag-and-vector-db-local/chunk-documents-for-rag/"><span class="lbl">Guide</span><b>How to chunk documents for RAG: size, overlap and splitters</b><span>Chunking decides what the retriever can find. Most weak RAG answers come from chunks that cut an idea in half or bury it in unrelated text.</span></a><a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/"><span class="lbl">Guide</span><b>How to re-embed documents after changing the embedding model</b><span>A new embedding model means a new index. Done in the wrong order you get silently bad search, so build beside the old one and switch when it is proven.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

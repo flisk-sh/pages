@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run a full RAG stack on your laptop with Docker</title>
+<meta name="description" content="Run a vector database, a local embedding model and an API as one stack on your laptop, with Flisk commands and service.json files, and no paid API for the retrieval half.">
+<meta name="keywords" content="rag stack local docker, run rag locally, local rag setup qdrant ollama, rag architecture laptop, local retrieval augmented generation">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-a-rag-stack-on-a-laptop/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run a full RAG stack on your laptop with Docker">
+<meta property="og:description" content="Run a vector database, a local embedding model and an API as one stack on your laptop, with Flisk commands and service.json files, and no paid API for the retrieval half.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-a-rag-stack-on-a-laptop/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run a full RAG stack on your laptop with Docker","description":"Run a vector database, a local embedding model and an API as one stack on your laptop, with Flisk commands and service.json files, and no paid API for the retrieval half.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-a-rag-stack-on-a-laptop/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-a-rag-stack-on-a-laptop/","keywords":"rag stack local docker, run rag locally, local rag setup qdrant ollama, rag architecture laptop, local retrieval augmented generation","wordCount":607,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"RAG and vector databases locally","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/"},{"@type":"ListItem","position":3,"name":"How to run a full RAG stack on your laptop with Docker","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-a-rag-stack-on-a-laptop/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What do I need to run RAG locally?","acceptedAnswer":{"@type":"Answer","text":"A vector database, an embedding model server, an ingestion job and an API. Qdrant plus Ollama is a common free combination that runs in Docker on a laptop."}},{"@type":"Question","name":"Does the question have to use the same embedding model as the documents?","acceptedAnswer":{"@type":"Answer","text":"Yes. Vectors from different models are not comparable, so the API must embed questions with the model used at ingestion."}},{"@type":"Question","name":"Can this run without Docker?","acceptedAnswer":{"@type":"Answer","text":"Qdrant and Ollama can each run as a native program on the host, but the Flisk preset for them uses containers, so this stack needs Docker."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/rag-and-vector-db-local/">RAG and vector databases locally</a></div>
+<section class="hero"><div><div class="lbl">RAG and vector databases locally</div><h1>How to run a full RAG stack on your laptop with Docker</h1><p class="dek">A RAG app is a few small services: a vector store, an embedding model, an ingestion job and an API. Here is how to start them together and check each one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-parts-and-how-they-talk">The parts and how they talk</a></li><li><a href="#without-flisk">Without Flisk</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#verify-each-link-in-order">Verify each link, in order</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A local RAG stack has four parts: a vector database, an embedding model server, an ingestion job that fills the database, and an API that embeds a question and returns the nearest chunks. With Qdrant and Ollama, all four run on a laptop with no paid API. This article starts them together and shows how to verify each link.</p>
+
+<h2 id="the-parts-and-how-they-talk">The parts and how they talk</h2>
+<ul>
+<li><strong>Vector store</strong> (Qdrant): holds chunk vectors and their text.</li>
+<li><strong>Embedding server</strong> (Ollama with <code>nomic-embed-text</code>): turns text into vectors, for both documents and questions.</li>
+<li><strong>Ingestion job</strong>: reads documents, chunks, embeds, upserts. Runs on demand.</li>
+<li><strong>API</strong>: receives a question, embeds it with the same model, queries the store, and returns chunks. It can then call a chat model to write the answer.</li>
+</ul>
+<p>The key rule is that the document side and the question side use the same embedding model. Most broken local setups violate it.</p>
+
+<h2 id="without-flisk">Without Flisk</h2>
+<p>You can write a Compose file with Qdrant, Ollama and your own service, mount two volumes and add health checks and <code>depends_on</code> conditions, see <a href="/@odykyi/docker-compose-guide/compose-depends-on-and-healthchecks/">Compose depends_on and healthchecks</a>. That is a fine answer, and it works.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Inside a Flisk project, create the pieces in one stack named <code>rag</code>:</p>
+<pre><code>flisk resource vectors --type database --framework qdrant --stack rag --yes
+flisk resource embed --type inference --stack rag --yes
+flisk resource api --type backend --stack rag --yes</code></pre>
+<p>The first command runs Qdrant with a data volume and gives its dependents <code>QDRANT_URL</code>. The second runs the <code>ollama/ollama</code> image, reachable by other services at <code>http://embed:11434</code>. The third is a Bun and Hono API; use <code>--language python</code> for a FastAPI one instead. Edit the API's <code>service.json</code> to wait for the other two:</p>
+<pre><code>{
+  "appName": "api",
+  "appType": "backend",
+  "stack": "rag",
+  "port": 4000,
+  "dependsOn": ["vectors", "embed"],
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>Give the Ollama resource a volume for its models, as shown in <a href="/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/">generating embeddings locally with Ollama</a>, otherwise the model is lost whenever the container is recreated. Then:</p>
+<pre><code>flisk config verify
+flisk up rag
+flisk run embed -- ollama pull nomic-embed-text
+flisk status</code></pre>
+<p><code>flisk config verify</code> checks the files before Docker is involved. <code>flisk status</code> lists the services, their URLs and their health. If one is not healthy, <code>flisk logs --service embed --tail 50</code> prints its recent log lines. This stack needs Docker, because Qdrant and Ollama are containers, and Flisk does not mix local processes and containers in one project yet.</p>
+
+<h2 id="verify-each-link-in-order">Verify each link, in order</h2>
+<ol>
+<li>Qdrant answers: open its dashboard on <code>http://127.0.0.1:6333/dashboard</code>.</li>
+<li>Ollama has the model: <code>flisk run embed -- ollama list</code>.</li>
+<li>Create the collection with the model's size (768), then run ingestion, see <a href="/@odykyi/rag-and-vector-db-local/ingest-documents-into-a-vector-database/">ingesting documents</a>.</li>
+<li>Ask the API a question you know the answer to and read the returned chunks before you add a chat model.</li>
+</ol>
+<p>The retrieval half is local and free. For the answering half you either point the same API at a chat model served by another <code>inference</code> resource, or call a hosted API with a key in your <code>.env</code>, never in <code>service.json</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Memory.</strong> Ollama, Qdrant and your API all need RAM. If containers get killed, raise the Docker VM memory before suspecting your code.</li>
+<li><strong>First start is slow.</strong> Images and the model download once. Do not read that as a hang.</li>
+<li><strong>Chat model on a Mac container.</strong> A container on macOS cannot use the GPU, so a large chat model is slow in it. Embeddings are fine on a CPU.</li>
+</ul>
+<p>Once it works, add a quality check from <a href="/@odykyi/rag-and-vector-db-local/test-rag-retrieval-quality-with-a-small-eval-set/">testing retrieval quality</a>, and decide if the vector store should be Qdrant at all with <a href="/@odykyi/rag-and-vector-db-local/chroma-vs-qdrant-vs-pgvector/">the comparison of Chroma, Qdrant and pgvector</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What do I need to run RAG locally?</summary><p>A vector database, an embedding model server, an ingestion job and an API. Qdrant plus Ollama is a common free combination that runs in Docker on a laptop.</p></details><details><summary>Does the question have to use the same embedding model as the documents?</summary><p>Yes. Vectors from different models are not comparable, so the API must embed questions with the model used at ingestion.</p></details><details><summary>Can this run without Docker?</summary><p>Qdrant and Ollama can each run as a native program on the host, but the Flisk preset for them uses containers, so this stack needs Docker.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">RAG and vector databases locally</span></div>
+<div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/generate-embeddings-locally-with-ollama/"><span class="lbl">Guide</span><b>How to generate embeddings locally with Ollama, no API key</b><span>A local embedding model costs nothing per call, works offline and keeps your documents on your machine. Setting it up takes one container and one pull.</span></a><a href="/@odykyi/rag-and-vector-db-local/ingest-documents-into-a-vector-database/"><span class="lbl">Guide</span><b>How to ingest documents into a vector database, repeatably</b><span>Ingestion is a build step. If you can run it twice and get the same index, you can change chunking or models without fear.</span></a><a href="/@odykyi/rag-and-vector-db-local/run-qdrant-locally-for-development/"><span class="lbl">Guide</span><b>How to run Qdrant locally for development and RAG tests</b><span>Qdrant is a single container with a REST API and a web dashboard. Five curl commands are enough to know it works, and one volume keeps your data.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

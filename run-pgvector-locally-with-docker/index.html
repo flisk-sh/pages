@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run pgvector locally with Docker for vector search</title>
+<meta name="description" content="Start Postgres with the pgvector extension in Docker, create a vector column, add an HNSW index and run a cosine similarity query, with data that survives restarts.">
+<meta name="keywords" content="pgvector docker, run pgvector locally, postgres vector extension, pgvector docker compose, pgvector hnsw index">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-pgvector-locally-with-docker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run pgvector locally with Docker for vector search">
+<meta property="og:description" content="Start Postgres with the pgvector extension in Docker, create a vector column, add an HNSW index and run a cosine similarity query, with data that survives restarts.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-pgvector-locally-with-docker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run pgvector locally with Docker for vector search","description":"Start Postgres with the pgvector extension in Docker, create a vector column, add an HNSW index and run a cosine similarity query, with data that survives restarts.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-pgvector-locally-with-docker/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-pgvector-locally-with-docker/","keywords":"pgvector docker, run pgvector locally, postgres vector extension, pgvector docker compose, pgvector hnsw index","wordCount":715,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"RAG and vector databases locally","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/"},{"@type":"ListItem","position":3,"name":"How to run pgvector locally with Docker for vector search","item":"https://pages.flisk.si/@odykyi/rag-and-vector-db-local/run-pgvector-locally-with-docker/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I add pgvector to the official postgres image?","acceptedAnswer":{"@type":"Answer","text":"You can build your own image that installs the extension package, but the simpler route is the pgvector/pgvector image, which is Postgres with the extension already included."}},{"@type":"Question","name":"Do I need an index for pgvector?","acceptedAnswer":{"@type":"Answer","text":"Not for small tables. An exact scan over a few thousand rows is fast and returns perfect results. Add an HNSW index when queries get slow, and use the operator class that matches your distance."}},{"@type":"Question","name":"Does Flisk's built-in Postgres include pgvector?","acceptedAnswer":{"@type":"Answer","text":"No. It runs a plain postgres:16-alpine image, so run a separate pgvector container, for example as a bring-your-own resource."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/rag-and-vector-db-local/">RAG and vector databases locally</a></div>
+<section class="hero"><div><div class="lbl">RAG and vector databases locally</div><h1>How to run pgvector locally with Docker for vector search</h1><p class="dek">If your app already uses Postgres, pgvector lets you store embeddings next to the rest of your data. Here is the smallest setup that works and keeps its data.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-the-stock-postgres-image-is-not-enough">Why the stock Postgres image is not enough</a></li><li><a href="#start-it-with-plain-docker-compose">Start it with plain Docker Compose</a></li><li><a href="#create-the-extension-a-table-and-an-index">Create the extension, a table and an index</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#when-pgvector-is-the-wrong-choice">When pgvector is the wrong choice</a></li></ol></nav></aside>
+<article><p>To run pgvector locally, start the <code>pgvector/pgvector</code> image instead of plain <code>postgres</code>, run <code>CREATE EXTENSION vector;</code> once per database, and store embeddings in a <code>vector(N)</code> column, where N is the dimension of your embedding model. Mount a volume on the data directory so the rows survive a container restart.</p>
+
+<h2 id="why-the-stock-postgres-image-is-not-enough">Why the stock Postgres image is not enough</h2>
+<p>The official <code>postgres</code> image does not ship the pgvector extension. If you run <code>CREATE EXTENSION vector;</code> against it, you get an error that the extension is not available. The maintainers publish a separate image, <code>pgvector/pgvector</code>, with tags that follow the Postgres major version, for example <code>pg17</code>. It is a normal Postgres with the extension files added, so everything you know about Postgres still applies: the same ports, the same <code>psql</code>, the same backup tools.</p>
+<p>The same applies to a database that Flisk or another tool runs for you. The shared Postgres that Flisk starts for a project uses a plain <code>postgres:16-alpine</code> image, so it has no pgvector. For vectors you start a second Postgres of your own, with the pgvector image, next to it.</p>
+
+<h2 id="start-it-with-plain-docker-compose">Start it with plain Docker Compose</h2>
+<p>A minimal Compose service looks like this:</p>
+<pre><code>services:
+  pgvector:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_PASSWORD: dev
+    ports:
+      - "15433:5432"
+    volumes:
+      - pgvector-data:/var/lib/postgresql/data
+volumes:
+  pgvector-data:</code></pre>
+<p>The host port is 15433 so it does not collide with a Postgres you may already run on 5432. The volume matters: without it, <code>docker compose down</code> followed by <code>up</code> gives you an empty database. For Postgres 18 images the data directory layout changed, so if you move to <code>pg18</code> read the image notes before reusing a volume.</p>
+
+<h2 id="create-the-extension-a-table-and-an-index">Create the extension, a table and an index</h2>
+<p>Connect with <code>psql postgres://postgres:dev@localhost:15433/postgres</code> and run:</p>
+<pre><code>CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE chunks (
+  id bigserial PRIMARY KEY,
+  source text NOT NULL,
+  content text NOT NULL,
+  embedding vector(768) NOT NULL
+);
+
+CREATE INDEX chunks_embedding_idx
+  ON chunks USING hnsw (embedding vector_cosine_ops);</code></pre>
+<p>The number in <code>vector(768)</code> must match your embedding model exactly, and Postgres rejects a vector of the wrong length. The HNSW index is optional for small tables: with a few thousand rows an exact scan is fast, and it gives perfect recall. Add the index when queries slow down, and match the operator class to the distance you query with (<code>vector_cosine_ops</code> for <code>&lt;=&gt;</code>, <code>vector_l2_ops</code> for <code>&lt;-&gt;</code>).</p>
+<p>Query the five nearest chunks to a query embedding. The <code>&lt;=&gt;</code> operator is cosine distance, so smaller is closer:</p>
+<pre><code>SELECT id, source, embedding &lt;=&gt; '[0.01, 0.02, ...]' AS distance
+FROM chunks
+ORDER BY embedding &lt;=&gt; '[0.01, 0.02, ...]'
+LIMIT 5;</code></pre>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has no dedicated pgvector preset, so you describe it as a bring-your-own container. Create the resource, then edit its <code>service.json</code>:</p>
+<pre><code>flisk resource pgv --type bring-your-own --image pgvector/pgvector:pg17 --port 5432 --no-proxy --stack rag --yes</code></pre>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "pgv",
+  "appType": "bring-your-own",
+  "stack": "rag",
+  "port": 5432,
+  "image": "pgvector/pgvector:pg17",
+  "exposeViaProxy": false,
+  "healthCheck": { "command": ["pg_isready", "-U", "postgres"] },
+  "env": { "POSTGRES_PASSWORD": "dev" },
+  "volumes": [{ "source": "pgv-data", "target": "/var/lib/postgresql/data" }],
+  "extraPorts": [{ "port": 5432, "hostPort": 15433 }],
+  "provides": { "PGVECTOR_URL": "postgres://postgres:dev@pgv:5432/postgres" }
+}</code></pre>
+<p>What each part does: <code>healthCheck.command</code> makes Flisk wait until <code>pg_isready</code> succeeds, <code>volumes</code> creates a named volume that <code>flisk down</code> keeps, <code>extraPorts</code> publishes the database on the host so you can use <code>psql</code>, and <code>provides</code> adds <code>PGVECTOR_URL</code> to the environment of every service that lists <code>pgv</code> in <code>dependsOn</code>. Run <code>flisk config verify</code> to check the file, then <code>flisk up rag</code>. The password is a throwaway development value in a file you commit, so never reuse it anywhere real.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Dimension mismatch.</strong> Switching embedding models changes N. Plan a new column or table and a re-index, see <a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/">re-embedding after a model change</a>.</li>
+<li><strong>Index limits.</strong> The plain <code>vector</code> type can be indexed up to 2000 dimensions. Larger vectors need a different type or a reduced dimension.</li>
+<li><strong>Not the shared database.</strong> Do not point your migrations at the vector instance unless you mean to. Keep one connection string per database, as in <a href="/@odykyi/local-database-guide/one-database-per-service/">one database per service</a>.</li>
+</ul>
+
+<h2 id="when-pgvector-is-the-wrong-choice">When pgvector is the wrong choice</h2>
+<p>If you only need a vector store and nothing relational, a dedicated engine can be simpler. Compare them in <a href="/@odykyi/rag-and-vector-db-local/chroma-vs-qdrant-vs-pgvector/">Chroma vs Qdrant vs pgvector</a>. Next, fill the table with real data using a small ingestion script.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I add pgvector to the official postgres image?</summary><p>You can build your own image that installs the extension package, but the simpler route is the pgvector/pgvector image, which is Postgres with the extension already included.</p></details><details><summary>Do I need an index for pgvector?</summary><p>Not for small tables. An exact scan over a few thousand rows is fast and returns perfect results. Add an HNSW index when queries get slow, and use the operator class that matches your distance.</p></details><details><summary>Does Flisk&#39;s built-in Postgres include pgvector?</summary><p>No. It runs a plain postgres:16-alpine image, so run a separate pgvector container, for example as a bring-your-own resource.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">RAG and vector databases locally</span></div>
+<div class="rgrid"><a href="/@odykyi/rag-and-vector-db-local/chroma-vs-qdrant-vs-pgvector/"><span class="lbl">Guide</span><b>Chroma vs Qdrant vs pgvector for a local RAG prototype</b><span>All three store vectors and return nearest neighbours. They differ in what else they give you, and in how much of your prototype you must rewrite when you move on.</span></a><a href="/@odykyi/rag-and-vector-db-local/persist-vector-database-data-between-restarts/"><span class="lbl">Guide</span><b>How to keep vector database data between restarts</b><span>Re-embedding a large corpus can take hours. Put the vector store on a named volume, and know exactly which command deletes it.</span></a><a href="/@odykyi/rag-and-vector-db-local/re-embed-documents-after-changing-the-model/"><span class="lbl">Guide</span><b>How to re-embed documents after changing the embedding model</b><span>A new embedding model means a new index. Done in the wrong order you get silently bad search, so build beside the old one and switch when it is proven.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/build-an-mcp-server/"><span class="lbl">Topic 24</span><b>Build your own MCP server</b><span>Write an MCP server in TypeScript or Python, design its tools, test it locally and hand it to coding assistants.</span></a><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
