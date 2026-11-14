@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep API requests as test files in git with Hurl</title>
+<meta name="description" content="Store HTTP requests and assertions as plain text files with Hurl, chain calls with captures, run them against a local stack and reuse them in CI.">
+<meta name="keywords" content="hurl http tests, api tests as files, http request files in git, hurl vs postman, test rest api from command line">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep API requests as test files in git with Hurl">
+<meta property="og:description" content="Store HTTP requests and assertions as plain text files with Hurl, chain calls with captures, run them against a local stack and reuse them in CI.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep API requests as test files in git with Hurl","description":"Store HTTP requests and assertions as plain text files with Hurl, chain calls with captures, run them against a local stack and reuse them in CI.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/","keywords":"hurl http tests, api tests as files, http request files in git, hurl vs postman, test rest api from command line","wordCount":824,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to keep API requests as test files in git with Hurl","item":"https://pages.flisk.si/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How is Hurl different from curl?","acceptedAnswer":{"@type":"Answer","text":"Curl sends one request. Hurl runs a sequence of requests from a file, captures values between them and asserts on the responses, with a pass or fail exit code."}},{"@type":"Question","name":"Can Hurl share variables across requests?","acceptedAnswer":{"@type":"Answer","text":"Yes. Use [Captures] to save a value from a response and reference it with {{name}} in later requests of the same file."}},{"@type":"Question","name":"Can I run the same Hurl files against different environments?","acceptedAnswer":{"@type":"Answer","text":"Yes. Put the base URL in a variable and pass --variable base=... on the command line."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to keep API requests as test files in git with Hurl</h1><p class="dek">A pile of curl commands in a wiki goes stale. A folder of request files in git can run in CI and doubles as living documentation.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-requests-belong-in-the-repo">Why requests belong in the repo</a></li><li><a href="#a-first-file">A first file</a></li><li><a href="#run-them-against-your-local-stack">Run them against your local stack</a></li><li><a href="#what-to-put-in-these-files">What to put in these files</a></li><li><a href="#organize-the-files">Organize the files</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Hurl is a command line tool that runs HTTP requests written in plain text files and checks the responses. Put <code>.hurl</code> files in your repository, run <code>hurl --test tests/*.hurl</code>, and the same files serve as documentation, a smoke test on your laptop and a CI check. There is no GUI and no account.</p>
+
+<h2 id="why-requests-belong-in-the-repo">Why requests belong in the repo</h2>
+<p>API collections that live in a desktop app or a wiki have three problems: they are not reviewed with the change that made them stale, they cannot run in CI without extra tooling, and teammates have their own copies. Text files in git fix all three. Alternatives with the same idea exist: Bruno stores collections as files in a folder, and VS Code or JetBrains editors run <code>.http</code> files. Pick the one your team will actually keep up to date. Hurl suits command line and CI use best.</p>
+
+<h2 id="a-first-file">A first file</h2>
+<p>Install with <code>brew install hurl</code> or a release package. Save this as <code>tests/orders.hurl</code>:</p>
+<pre><code>POST {{base}}/orders
+Content-Type: application/json
+{
+  "sku": "A-1",
+  "quantity": 2
+}
+HTTP 201
+[Captures]
+order_id: jsonpath "$.id"
+[Asserts]
+jsonpath "$.status" == "pending"
+
+GET {{base}}/orders/{{order_id}}
+HTTP 200
+[Asserts]
+header "Content-Type" contains "application/json"
+jsonpath "$.quantity" == 2</code></pre>
+<p>Each entry is a request, then the expected status after <code>HTTP</code>. <code>[Captures]</code> saves a value from the response into a variable, and the second request uses it, so one file can walk a whole flow: create, read, update, delete. <code>[Asserts]</code> checks headers and body with JSONPath. A file with several entries stops at the first failure, with a message that shows the request and what was different.</p>
+<p>Run it with the base URL as a variable, not hard-coded:</p>
+<pre><code>hurl --test --variable base=http://localhost:4000 tests/*.hurl</code></pre>
+<p><code>--test</code> prints a pass or fail line per file and exits non-zero when anything fails. Because the base URL is a variable, the same files run against your laptop, a staging host, or an older version of the API (<a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/">two versions side by side</a>).</p>
+
+<h2 id="run-them-against-your-local-stack">Run them against your local stack</h2>
+<p>The files need a running API. Start it, wait, run the tests, stop it. With Flisk and services declared as local processes:</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+cleanup() { flisk down || true; }
+trap cleanup EXIT
+
+flisk up --wait --wait-timeout 300
+hurl --test --variable base=http://localhost:4000 tests/*.hurl</code></pre>
+<p><code>flisk up --wait</code> returns when every service is healthy and exits 1 on failure or timeout, so the script does not start requests against a service that is still booting. Take the real port from the service's <code>service.json</code> or from the URLs <code>flisk up</code> prints. If the API needs data, create it in the test itself (the first request above does) or run a seed command first (<a href="/@odykyi/local-database-guide/seed-a-local-database/">seeding a local database</a>). The same script works in CI; see <a href="/@odykyi/testing-and-shipping/run-the-stack-in-github-actions/">running a stack in GitHub Actions</a>.</p>
+
+<h2 id="what-to-put-in-these-files">What to put in these files</h2>
+<ul>
+<li><strong>Smoke tests:</strong> every endpoint returns the right status and content type. Cheap and catches most breakage.</li>
+<li><strong>Flows:</strong> the three or four sequences users really do (sign up, create, pay), chained with captures.</li>
+<li><strong>Error cases:</strong> an invalid body gets <code>422</code>, a missing item gets <code>404</code>, and the body matches your error format (<a href="/@odykyi/api-design-local/api-error-responses-problem-details/">problem details</a>).</li>
+<li><strong>Headers that are contract:</strong> pagination cursors, deprecation and sunset headers (<a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">deprecation</a>).</li>
+</ul>
+<p>Keep secrets out of the files. Pass tokens with <code>--variable token=$TOKEN</code> or an environment variable that starts with <code>HURL_</code>, and reference <code>{{token}}</code> in a header.</p>
+
+<h2 id="organize-the-files">Organize the files</h2>
+<p>A layout that stays readable as the suite grows: one folder per area (<code>tests/orders/</code>, <code>tests/auth/</code>), one file per flow, and a name that says what the flow proves, such as <code>create-and-cancel-order.hurl</code>. Keep the smoke tests in their own folder so you can run them alone with a single glob before a push, and run the slower flows in CI. Hurl also has options for retrying a request and for waiting until a condition holds, which helps with endpoints that become correct a moment after a write, for example a search index or a queue consumer. Check the documentation of your installed version for the exact option names.</p>
+<p>Review the files like code. A pull request that adds an endpoint should add or change a <code>.hurl</code> file in the same diff, and a reviewer can read the new expectations in plain text without opening an app.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Not a load tester.</strong> Hurl runs sequentially and checks correctness. Use a dedicated tool for performance.</li>
+<li><strong>Tests that depend on leftover data.</strong> Create what you read. A file that assumes order 1 exists passes once and fails on a fresh database.</li>
+<li><strong>Brittle assertions.</strong> Do not assert a whole body with timestamps or generated IDs. Assert the fields that matter.</li>
+<li><strong>Syntax across versions.</strong> Older Hurl releases wrote the status as <code>HTTP/1.1 200</code>. Check the documentation of the version you install.</li>
+</ul>
+<p>When you also need to prove a consumer's expectations rather than your own, add a contract test: <a href="/@odykyi/api-design-local/pact-consumer-driven-contract-tests/">Pact walkthrough</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How is Hurl different from curl?</summary><p>Curl sends one request. Hurl runs a sequence of requests from a file, captures values between them and asserts on the responses, with a pass or fail exit code.</p></details><details><summary>Can Hurl share variables across requests?</summary><p>Yes. Use [Captures] to save a value from a response and reference it with {{name}} in later requests of the same file.</p></details><details><summary>Can I run the same Hurl files against different environments?</summary><p>Yes. Put the base URL in a variable and pass --variable base=... on the command line.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/"><span class="lbl">Guide</span><b>How to run a mock API server from an OpenAPI file with Prism</b><span>A mock built from the spec lets the frontend team work today and keeps requests honest, because Prism rejects calls that break the contract.</span></a><a href="/@odykyi/api-design-local/pact-consumer-driven-contract-tests/"><span class="lbl">Guide</span><b>Consumer-driven contract testing with Pact: a walkthrough</b><span>Contract tests let the service that calls an API say what it needs, and let the API team check that before they ship.</span></a><a href="/@odykyi/api-design-local/cursor-vs-offset-pagination/"><span class="lbl">Guide</span><b>Cursor vs offset pagination: which one to build</b><span>Pagination is easy to add and hard to change once clients depend on it, so choose with the data in mind.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

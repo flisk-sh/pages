@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to detect breaking API changes before you merge</title>
+<meta name="description" content="Compare two OpenAPI files with oasdiff to catch removed endpoints, new required fields and changed types, and fail a pull request before clients break.">
+<meta name="keywords" content="oasdiff breaking changes, detect breaking api changes, openapi diff, api backward compatibility check, openapi changelog">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to detect breaking API changes before you merge">
+<meta property="og:description" content="Compare two OpenAPI files with oasdiff to catch removed endpoints, new required fields and changed types, and fail a pull request before clients break.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to detect breaking API changes before you merge","description":"Compare two OpenAPI files with oasdiff to catch removed endpoints, new required fields and changed types, and fail a pull request before clients break.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/","keywords":"oasdiff breaking changes, detect breaking api changes, openapi diff, api backward compatibility check, openapi changelog","wordCount":743,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to detect breaking API changes before you merge","item":"https://pages.flisk.si/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is adding a field to a response a breaking change?","acceptedAnswer":{"@type":"Answer","text":"Usually not, as long as clients ignore fields they do not know. Say so in your API guidelines. Adding a value to a response enum can still break strict clients."}},{"@type":"Question","name":"How do I make oasdiff fail a CI job?","acceptedAnswer":{"@type":"Answer","text":"Run oasdiff breaking base.yaml revision.yaml --fail-on ERR. The exit code is non-zero when an error-level change is found."}},{"@type":"Question","name":"Does Flisk detect breaking API changes?","acceptedAnswer":{"@type":"Answer","text":"No. Flisk starts your services so you can fetch the live spec. The comparison is done by a tool such as oasdiff."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to detect breaking API changes before you merge</h1><p class="dek">Most API outages from a deploy are a field someone renamed. A diff of the spec catches that in the pull request, not in production.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-counts-as-breaking">What counts as breaking</a></li><li><a href="#compare-two-specs">Compare two specs</a></li><li><a href="#check-against-the-spec-the-running-service-really-serves">Check against the spec the running service really serves</a></li><li><a href="#deal-with-an-intended-break">Deal with an intended break</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To detect breaking API changes, keep the OpenAPI spec in git and compare the version on your branch with the version on the main branch using a diff tool such as oasdiff. <code>oasdiff breaking base.yaml revision.yaml</code> lists removed paths, new required parameters and changed types, and exits non-zero when you ask it to, so the pull request fails before a client does.</p>
+
+<h2 id="what-counts-as-breaking">What counts as breaking</h2>
+<p>A change is breaking when a client that worked yesterday can fail today without changing its own code. Rules of thumb for JSON over HTTP:</p>
+<ul>
+<li><strong>Breaking:</strong> removing or renaming a path, method, field or enum value that clients read; making an optional request field required; adding a required query parameter; changing a field's type; narrowing what you accept (a shorter maximum length); changing a status code that clients branch on.</li>
+<li><strong>Usually safe:</strong> adding an optional request field; adding a new response field (if clients ignore unknown fields, which you must tell them to do); adding a new endpoint; widening what you accept.</li>
+<li><strong>Depends on the client:</strong> adding a new value to a response enum. A client with an exhaustive <code>switch</code> may crash. Many diff tools flag this one for that reason.</li>
+</ul>
+<p>Decide your policy once and write it down. For public APIs the safe default is: anything in the first list needs a new version (see <a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/">running two API versions side by side</a>) and a deprecation period (<a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">deprecating an endpoint</a>).</p>
+
+<h2 id="compare-two-specs">Compare two specs</h2>
+<p>oasdiff is a free command line tool for OpenAPI files. Install it with <code>brew install oasdiff</code> or from its GitHub releases, or run it from its container image. Get the spec from your main branch and compare:</p>
+<pre><code>git show origin/main:openapi.yaml &gt; /tmp/openapi.base.yaml
+oasdiff breaking /tmp/openapi.base.yaml openapi.yaml --fail-on ERR</code></pre>
+<p>Each finding has a severity. <code>--fail-on ERR</code> makes the exit code non-zero when there is an error-level change, so you can use the command as a CI step. For a human-readable list of everything that changed, breaking or not, use the changelog form:</p>
+<pre><code>oasdiff changelog /tmp/openapi.base.yaml openapi.yaml</code></pre>
+<p>Paste that into the pull request description and reviewers see the API change without reading the YAML. If you generate the spec from code, the generated file is the input, as explained in <a href="/@odykyi/api-design-local/openapi-spec-first-or-from-code/">spec first or from code</a>.</p>
+
+<h2 id="check-against-the-spec-the-running-service-really-serves">Check against the spec the running service really serves</h2>
+<p>A committed file can be stale. The strongest check compares the base spec with what the new code actually serves. With a Flisk project of local processes, wrap it in a script:</p>
+<pre><code>#!/usr/bin/env bash
+set -euo pipefail
+
+cleanup() { flisk down || true; }
+trap cleanup EXIT
+
+flisk up --wait --wait-timeout 300
+curl -fsS http://localhost:4000/openapi.json -o /tmp/openapi.current.json
+
+git show origin/main:openapi.json &gt; /tmp/openapi.base.json
+oasdiff breaking /tmp/openapi.base.json /tmp/openapi.current.json --fail-on ERR</code></pre>
+<p><code>flisk up --wait</code> starts the project in the background and returns once every service is healthy, or exits 1 on failure or timeout (<code>--wait-timeout</code> is in seconds). <code>flisk down</code> in the <code>trap</code> stops everything even when the diff fails. Replace the URL and port with your service's, as written in its <code>service.json</code>. This catches the case where someone forgot to regenerate the committed file.</p>
+
+<h2 id="deal-with-an-intended-break">Deal with an intended break</h2>
+<p>Sometimes you mean it. Do not turn the check off. Options, in order of preference:</p>
+<ol>
+<li>Add the change under a new version path, keep the old one, and mark it deprecated.</li>
+<li>If no external client exists (an internal API consumed by one repo you control), change both sides in one pull request and note it. Some teams use a label such as <code>breaking-change-ok</code> that CI reads to skip the failure.</li>
+<li>Use the tool's ignore file for a single known item, with a comment that says why.</li>
+</ol>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The spec is not the behavior.</strong> A diff of two specs cannot see that a server now returns <code>null</code> where it used to omit a field, if the spec says nothing about it. Pair this with request-level tests (<a href="/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/">API tests as files</a>).</li>
+<li><strong>Nothing about consumers.</strong> The diff says what changed, not who uses it. If you have many clients, consumer-driven contract tests (<a href="/@odykyi/api-design-local/pact-consumer-driven-contract-tests/">Pact</a>) tell you who would break.</li>
+<li><strong>Base branch drift.</strong> Compare against the target branch of the pull request, not a fixed old tag, or you will report changes that were already merged.</li>
+<li><strong>Tool version.</strong> Pin the oasdiff version in CI. Rules for what counts as breaking can change between releases.</li>
+</ul>
+<p>Next, make the spec itself consistent with a linter (<a href="/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">Spectral</a>) so the diff has clean input.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is adding a field to a response a breaking change?</summary><p>Usually not, as long as clients ignore fields they do not know. Say so in your API guidelines. Adding a value to a response enum can still break strict clients.</p></details><details><summary>How do I make oasdiff fail a CI job?</summary><p>Run oasdiff breaking base.yaml revision.yaml --fail-on ERR. The exit code is non-zero when an error-level change is found.</p></details><details><summary>Does Flisk detect breaking API changes?</summary><p>No. Flisk starts your services so you can fetch the live spec. The comparison is done by a tool such as oasdiff.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/openapi-spec-first-or-from-code/"><span class="lbl">Guide</span><b>OpenAPI: write the spec first or generate it from code?</b><span>Both approaches work. The mistake is having two sources of truth that drift apart, so pick one and let a check enforce it.</span></a><a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/"><span class="lbl">Guide</span><b>How to run two API versions side by side locally</b><span>Before you retire v1 you need to prove it still works while v2 exists. Running both on your laptop is the cheapest way to do that.</span></a><a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/"><span class="lbl">Guide</span><b>How to deprecate an API endpoint with a Sunset header</b><span>Removing an endpoint is a breaking change. A dated warning in every response gives clients time to move.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

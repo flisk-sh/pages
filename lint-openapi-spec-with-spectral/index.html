@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to lint an OpenAPI spec with Spectral and fail CI on mistakes</title>
+<meta name="description" content="Lint OpenAPI files with Spectral: run the built-in rules, add a rule for kebab-case paths, tune severities and fail the build only on errors.">
+<meta name="keywords" content="spectral openapi lint, openapi linter, spectral ruleset, api style guide automation, lint openapi in ci">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to lint an OpenAPI spec with Spectral and fail CI on mistakes">
+<meta property="og:description" content="Lint OpenAPI files with Spectral: run the built-in rules, add a rule for kebab-case paths, tune severities and fail the build only on errors.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/lint-openapi-spec-with-spectral/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to lint an OpenAPI spec with Spectral and fail CI on mistakes","description":"Lint OpenAPI files with Spectral: run the built-in rules, add a rule for kebab-case paths, tune severities and fail the build only on errors.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/lint-openapi-spec-with-spectral/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/lint-openapi-spec-with-spectral/","keywords":"spectral openapi lint, openapi linter, spectral ruleset, api style guide automation, lint openapi in ci","wordCount":770,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to lint an OpenAPI spec with Spectral and fail CI on mistakes","item":"https://pages.flisk.si/@odykyi/api-design-local/lint-openapi-spec-with-spectral/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How do I make Spectral fail on warnings?","acceptedAnswer":{"@type":"Answer","text":"Add --fail-severity warn to the lint command. By default only errors produce a non-zero exit code."}},{"@type":"Question","name":"Does Spectral lint only OpenAPI?","acceptedAnswer":{"@type":"Answer","text":"No. It also lints AsyncAPI and any JSON or YAML document for which you write rules, but the built-in spectral:oas ruleset targets OpenAPI."}},{"@type":"Question","name":"Can a clean Spectral run prove my API matches its spec?","acceptedAnswer":{"@type":"Answer","text":"No. It checks the document, not the running server. Use contract tests or a spec-driven request tool for behavior."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to lint an OpenAPI spec with Spectral and fail CI on mistakes</h1><p class="dek">A linter turns your API style guide from a document nobody reads into a check that runs on every pull request.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-lint-a-spec-at-all">Why lint a spec at all</a></li><li><a href="#run-it-once">Run it once</a></li><li><a href="#tune-the-rules">Tune the rules</a></li><li><a href="#decide-what-fails-the-build">Decide what fails the build</a></li><li><a href="#read-the-output">Read the output</a></li><li><a href="#lint-the-spec-you-generate-too">Lint the spec you generate, too</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Spectral is a linter for OpenAPI and other JSON or YAML files. Run <code>npx @stoplight/spectral-cli lint openapi.yaml</code> with a ruleset file that extends <code>spectral:oas</code>, and it reports missing operation IDs, broken references, unused components and any custom rule you add. Put the same command in CI and the style guide enforces itself.</p>
+
+<h2 id="why-lint-a-spec-at-all">Why lint a spec at all</h2>
+<p>An OpenAPI file is code that other people generate clients from. Duplicate <code>operationId</code> values produce clashing function names in a generated SDK. A missing response schema turns into <code>any</code> in the client. A path called <code>/getOrders</code> next to <code>/orders</code> tells readers nobody was in charge. None of that breaks a build today and all of it costs time later. A linter catches it while the change is small.</p>
+
+<h2 id="run-it-once">Run it once</h2>
+<pre><code>echo 'extends: ["spectral:oas"]' &gt; .spectral.yaml
+npx @stoplight/spectral-cli lint openapi.yaml</code></pre>
+<p>The <code>spectral:oas</code> ruleset ships with the tool. Each finding has a rule name, a severity (error, warn, info or hint), and a path into the document, for example <code>paths./orders.get</code>. Start by running it on an existing spec and reading the output before you change anything. The first run on an old file usually shows a long list. Do not fix everything at once: decide which rules you agree with, and turn the others off.</p>
+
+<h2 id="tune-the-rules">Tune the rules</h2>
+<p>Rules are switched on, off or re-rated in <code>.spectral.yaml</code>:</p>
+<pre><code>extends: ["spectral:oas"]
+rules:
+  operation-description: off
+  operation-tags: warn
+  info-contact: off
+  paths-kebab-case:
+    description: Path segments use lowercase kebab-case
+    severity: error
+    given: $.paths[*]~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^(/([a-z0-9-]+|\\{[a-zA-Z]+\\}))+$"</code></pre>
+<p>The custom rule has three parts. <code>given</code> is a JSONPath query for the nodes to check; the trailing <code>~</code> selects the property name, here each path string. <code>then</code> names a function (<code>pattern</code> is built in) and its options. This one accepts <code>/orders/{orderId}</code> and rejects <code>/getOrders</code> and <code>/Order_Items</code>.</p>
+<p>Other useful custom checks use the same shape: every operation has an <code>operationId</code>, every <code>4xx</code> response uses your error schema, every list endpoint documents a <code>limit</code> parameter. Keep the list short. Ten rules the team respects beat sixty that people disable.</p>
+
+<h2 id="decide-what-fails-the-build">Decide what fails the build</h2>
+<p>By default Spectral exits with a non-zero code when it finds errors. To also fail on warnings, pass the failure severity:</p>
+<pre><code>npx @stoplight/spectral-cli lint openapi.yaml --fail-severity warn</code></pre>
+<p>A practical rollout: leave new strict rules at <code>warn</code> for a few weeks, fix what they find, then raise them to <code>error</code>. The command above is the whole CI step, and it works the same in any system that can run Node.</p>
+<p>Pin the version in <code>package.json</code> (<code>npm install --save-dev @stoplight/spectral-cli</code>, then <code>npx spectral lint ...</code>) so a new release of the ruleset does not turn your build red on a Monday.</p>
+
+<h2 id="read-the-output">Read the output</h2>
+<p>A finding looks like a compiler message: a line and column in the file, the severity, the rule name and a sentence. Fix the oldest and most common rule first, because one root cause (for example a missing <code>operationId</code> pattern) often explains dozens of lines. When a rule is wrong for one place only, add an override for that path instead of switching the rule off for the whole file. Keep a short note next to the override saying why, so the next reader does not remove it by accident or copy it everywhere.</p>
+<p>Rules also work on examples. A rule that requires every response schema to have an <code>example</code> pays back twice: documentation reads better, and a mock server such as the one in <a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/">the Prism guide</a> returns realistic data instead of placeholders.</p>
+
+<h2 id="lint-the-spec-you-generate-too">Lint the spec you generate, too</h2>
+<p>If the spec comes from code, lint the exported file, not the source. Generated specs often fail rules about descriptions and examples, and that is useful feedback: it tells you which models and routes need documentation. The export step is described in <a href="/@odykyi/api-design-local/openapi-spec-first-or-from-code/">spec first or from code</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Linting is not validating behavior.</strong> A clean report says the document is well formed and follows your style. It does not say the server matches it. Test that separately with a contract test or a tool that sends requests from the spec.</li>
+<li><strong>Huge specs are slow to read.</strong> Split with <code>$ref</code> into several files, and lint the entry file. Spectral resolves references.</li>
+<li><strong>Do not lint with an editor plugin only.</strong> Editors differ. CI is the place that everyone shares.</li>
+<li><strong>Style rules need an owner.</strong> Someone has to say yes or no to a new rule, or the ruleset grows into noise.</li>
+</ul>
+<p>After style, the next question is compatibility: which edits to the spec would break existing clients. That is covered in <a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">detecting breaking changes with oasdiff</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How do I make Spectral fail on warnings?</summary><p>Add --fail-severity warn to the lint command. By default only errors produce a non-zero exit code.</p></details><details><summary>Does Spectral lint only OpenAPI?</summary><p>No. It also lints AsyncAPI and any JSON or YAML document for which you write rules, but the built-in spectral:oas ruleset targets OpenAPI.</p></details><details><summary>Can a clean Spectral run prove my API matches its spec?</summary><p>No. It checks the document, not the running server. Use contract tests or a spec-driven request tool for behavior.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/openapi-spec-first-or-from-code/"><span class="lbl">Guide</span><b>OpenAPI: write the spec first or generate it from code?</b><span>Both approaches work. The mistake is having two sources of truth that drift apart, so pick one and let a check enforce it.</span></a><a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/"><span class="lbl">Guide</span><b>How to detect breaking API changes before you merge</b><span>Most API outages from a deploy are a field someone renamed. A diff of the spec catches that in the pull request, not in production.</span></a><a href="/@odykyi/api-design-local/mock-api-server-from-openapi-prism/"><span class="lbl">Guide</span><b>How to run a mock API server from an OpenAPI file with Prism</b><span>A mock built from the spec lets the frontend team work today and keeps requests honest, because Prism rejects calls that break the contract.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

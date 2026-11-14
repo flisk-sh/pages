@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cursor vs offset pagination: which one to build</title>
+<meta name="description" content="Offset pagination is simple but skips and repeats rows and slows down deep pages. Cursor (keyset) pagination fixes both. Here is how to build and test it.">
+<meta name="keywords" content="cursor vs offset pagination, keyset pagination postgres, api pagination design, pagination next_cursor, limit offset performance">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/cursor-vs-offset-pagination/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Cursor vs offset pagination: which one to build">
+<meta property="og:description" content="Offset pagination is simple but skips and repeats rows and slows down deep pages. Cursor (keyset) pagination fixes both. Here is how to build and test it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/cursor-vs-offset-pagination/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Cursor vs offset pagination: which one to build","description":"Offset pagination is simple but skips and repeats rows and slows down deep pages. Cursor (keyset) pagination fixes both. Here is how to build and test it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/cursor-vs-offset-pagination/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/cursor-vs-offset-pagination/","keywords":"cursor vs offset pagination, keyset pagination postgres, api pagination design, pagination next_cursor, limit offset performance","wordCount":742,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"Cursor vs offset pagination: which one to build","item":"https://pages.flisk.si/@odykyi/api-design-local/cursor-vs-offset-pagination/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is cursor pagination always faster than offset?","acceptedAnswer":{"@type":"Answer","text":"On deep pages of large tables, yes, when an index supports the sort. For small tables the difference is not noticeable, and offset is simpler."}},{"@type":"Question","name":"Can I get a total count with cursor pagination?","acceptedAnswer":{"@type":"Answer","text":"Not for free. A count is a separate query that may be slow on big tables. Offer it as an opt-in parameter or return an estimate."}},{"@type":"Question","name":"Why do I need an id in the sort for a cursor?","acceptedAnswer":{"@type":"Answer","text":"Many rows can share a timestamp. A unique tiebreaker such as the id keeps the order total, so no rows are skipped or repeated across pages."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>Cursor vs offset pagination: which one to build</h1><p class="dek">Pagination is easy to add and hard to change once clients depend on it, so choose with the data in mind.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#how-offset-pagination-breaks">How offset pagination breaks</a></li><li><a href="#how-cursor-pagination-works">How cursor pagination works</a></li><li><a href="#design-the-response">Design the response</a></li><li><a href="#what-you-give-up">What you give up</a></li><li><a href="#test-pagination-before-clients-depend-on-it">Test pagination before clients depend on it</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Use offset pagination (<code>?page=3&amp;limit=20</code>) for small, slow-changing lists where users jump to a page number. Use cursor pagination (<code>?after=abc&amp;limit=20</code>) for feeds, large tables and anything that changes while people read it. Cursors stay fast on deep pages and never skip or repeat rows when data is inserted.</p>
+
+<h2 id="how-offset-pagination-breaks">How offset pagination breaks</h2>
+<p>Offset pagination translates to <code>LIMIT 20 OFFSET 40</code>. It has two problems.</p>
+<p><strong>Unstable pages.</strong> You load page 1 (rows 1 to 20). Someone adds a new row at the top. Page 2 now starts with what used to be row 20, so the user sees it twice. Delete a row and the opposite happens: one is skipped without any error.</p>
+<p><strong>Cost that grows with depth.</strong> The database must read and throw away all the skipped rows. <code>OFFSET 100000</code> reads 100000 rows to return 20. Whether this matters depends on your table size, so measure with realistic data (<a href="/@odykyi/local-database-guide/seed-a-local-database/">seeding a local database</a> helps).</p>
+<p>Offset has real strengths: it is trivial to implement, works with any sort order, supports "jump to page 7" and can return a total count for page numbers. For an admin table of a few thousand rows that is often the right trade.</p>
+
+<h2 id="how-cursor-pagination-works">How cursor pagination works</h2>
+<p>A cursor says "continue after this row". In SQL that is a keyset query, comparing against the last row's sort key rather than counting rows. In Postgres, with a stable sort on <code>(created_at, id)</code>:</p>
+<pre><code>SELECT id, created_at, status
+FROM orders
+WHERE (created_at, id) &lt; ($1, $2)
+ORDER BY created_at DESC, id DESC
+LIMIT 21;</code></pre>
+<p>The row-value comparison <code>(created_at, id) &lt; ($1, $2)</code> is valid in Postgres. An index on <code>(created_at, id)</code> lets it jump straight to the right place, so page 5000 costs about the same as page 1. Fetch <code>limit + 1</code> rows: if you get 21, there is a next page, and you return 20 plus a cursor built from the 20th row. The <code>id</code> is the tiebreaker; without it, rows with the same timestamp can be skipped.</p>
+
+<h2 id="design-the-response">Design the response</h2>
+<pre><code>GET /orders?limit=20&amp;after=eyJjIjoiMjAyNi0xMS0xNFQxMDowMDowMFoiLCJpIjo5MX0
+
+{
+  "data": [ ... 20 orders ... ],
+  "next_cursor": "eyJjIjoiMjAyNi0xMS0xM1QwOTozMDowMFoiLCJpIjo3MX0",
+  "has_more": true
+}</code></pre>
+<ul>
+<li>Make the cursor <strong>opaque</strong>: base64url of a small JSON object is typical. Clients must not parse it, so you can change the internals later.</li>
+<li>When <code>has_more</code> is false, return <code>next_cursor: null</code>.</li>
+<li>Cap <code>limit</code> on the server (for example 100) and give it a default. Return a clear error for a value outside the range, using <a href="/@odykyi/api-design-local/api-error-responses-problem-details/">problem details</a>.</li>
+<li>Document the sort order. A cursor is only valid for the sort it was made with, so reject a cursor combined with a different <code>sort</code>.</li>
+<li>Optionally add a <code>Link</code> header with <code>rel="next"</code> (RFC 8288) for clients that follow links.</li>
+</ul>
+
+<h2 id="what-you-give-up">What you give up</h2>
+<p>No random access: a client cannot jump to page 7, only walk forward (and backward if you build a <code>before</code> cursor). A total count is a separate query, <code>SELECT count(*)</code>, which can be slow on large tables. Either skip it, return an approximate figure, or put it behind an opt-in parameter. Sorting by a non-unique or nullable column needs care: always append a unique column to the sort, and decide where nulls sort.</p>
+
+<h2 id="test-pagination-before-clients-depend-on-it">Test pagination before clients depend on it</h2>
+<p>Pagination bugs hide in small data sets. Test with these cases:</p>
+<ol>
+<li>More rows than one page, and exactly one page, and zero rows.</li>
+<li>Many rows with the same sort value, to prove the tiebreaker works.</li>
+<li>Insert a row between page 1 and page 2, and check nothing repeats or disappears.</li>
+<li>Walk every page and assert the full list equals the expected set with no duplicates.</li>
+<li>A tampered or expired cursor returns a <code>400</code> and not a <code>500</code>.</li>
+</ol>
+<p>Run them against a real database, not a mock, since the bugs live in the query. A seeded local Postgres with a few thousand rows is enough to catch ordering mistakes, and <code>EXPLAIN</code> on the keyset query will show whether your index is used.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Switching later is a breaking change.</strong> Clients that send <code>page=2</code> will break when you remove it. Decide early, or support both for a while and deprecate one (<a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">deprecation headers</a>).</li>
+<li><strong>Leaking the schema in the cursor.</strong> Do not put a raw SQL fragment or a table name in it, and sign or encrypt it if tampering matters.</li>
+<li><strong>Soft deletes and filters.</strong> Apply filters in the same query as the cursor condition so the page size stays correct.</li>
+</ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is cursor pagination always faster than offset?</summary><p>On deep pages of large tables, yes, when an index supports the sort. For small tables the difference is not noticeable, and offset is simpler.</p></details><details><summary>Can I get a total count with cursor pagination?</summary><p>Not for free. A count is a separate query that may be slow on big tables. Offer it as an opt-in parameter or return an estimate.</p></details><details><summary>Why do I need an id in the sort for a cursor?</summary><p>Many rows can share a timestamp. A unique tiebreaker such as the id keeps the order total, so no rows are skipped or repeated across pages.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/api-error-responses-problem-details/"><span class="lbl">Guide</span><b>API error responses: use RFC 9457 problem details</b><span>Clients write one error handler if every endpoint fails the same way. RFC 9457 gives you that shape without inventing your own.</span></a><a href="/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/"><span class="lbl">Guide</span><b>How to keep API requests as test files in git with Hurl</b><span>A pile of curl commands in a wiki goes stale. A folder of request files in git can run in CI and doubles as living documentation.</span></a><a href="/@odykyi/api-design-local/run-two-api-versions-side-by-side/"><span class="lbl">Guide</span><b>How to run two API versions side by side locally</b><span>Before you retire v1 you need to prove it still works while v2 exists. Running both on your laptop is the cheapest way to do that.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

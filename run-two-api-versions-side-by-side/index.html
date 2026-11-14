@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run two API versions side by side locally</title>
+<meta name="description" content="Version an API with /v1 and /v2 in one service, or run an old release as a second local service, and test both against the same client and contract.">
+<meta name="keywords" content="api versioning url vs header, run two versions of an api locally, v1 v2 api side by side, api versioning strategy, maintain old api version">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/api-design-local/run-two-api-versions-side-by-side/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run two API versions side by side locally">
+<meta property="og:description" content="Version an API with /v1 and /v2 in one service, or run an old release as a second local service, and test both against the same client and contract.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/api-design-local/run-two-api-versions-side-by-side/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run two API versions side by side locally","description":"Version an API with /v1 and /v2 in one service, or run an old release as a second local service, and test both against the same client and contract.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/api-design-local/run-two-api-versions-side-by-side/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/api-design-local/run-two-api-versions-side-by-side/","keywords":"api versioning url vs header, run two versions of an api locally, v1 v2 api side by side, api versioning strategy, maintain old api version","wordCount":729,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Design and test APIs locally","item":"https://pages.flisk.si/@odykyi/api-design-local/"},{"@type":"ListItem","position":3,"name":"How to run two API versions side by side locally","item":"https://pages.flisk.si/@odykyi/api-design-local/run-two-api-versions-side-by-side/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I version an API in the URL or in a header?","acceptedAnswer":{"@type":"Answer","text":"A URL path prefix such as /v2 is the easiest to see in logs, cache and test. Headers keep URLs stable but hide the version. Most teams pick the path."}},{"@type":"Question","name":"When does an API need a new version?","acceptedAnswer":{"@type":"Answer","text":"Only for breaking changes: removed or renamed fields, new required inputs, changed types or status codes. Adding optional fields or new endpoints does not."}},{"@type":"Question","name":"Can Flisk run two versions of one service?","acceptedAnswer":{"@type":"Answer","text":"Yes, as two services with different appName and port values, each with its own command. In local-process mode you reach them by port, not by hostname."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/api-design-local/">Design and test APIs locally</a></div>
+<section class="hero"><div><div class="lbl">Design and test APIs locally</div><h1>How to run two API versions side by side locally</h1><p class="dek">Before you retire v1 you need to prove it still works while v2 exists. Running both on your laptop is the cheapest way to do that.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#where-the-version-goes">Where the version goes</a></li><li><a href="#option-1-two-routers-in-one-service">Option 1: two routers in one service</a></li><li><a href="#option-2-the-old-release-as-a-separate-service">Option 2: the old release as a separate service</a></li><li><a href="#prove-both-versions-still-work">Prove both versions still work</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>The simplest way to serve two API versions is one service that mounts both under different path prefixes, <code>/v1/orders</code> and <code>/v2/orders</code>, sharing the same database. When v1 must stay frozen at an older release, run that release as a second service on another port and send clients to the one they were built for.</p>
+
+<h2 id="where-the-version-goes">Where the version goes</h2>
+<p>Three styles are common:</p>
+<ul>
+<li><strong>Path prefix</strong> (<code>/v2/orders</code>): visible in logs, easy to cache, easy to try with a browser or <code>curl</code>. Most public APIs choose it.</li>
+<li><strong>Header or media type</strong> (<code>Accept: application/vnd.shop.v2+json</code>): the URL stays stable, but the version is hidden from logs, links and casual testing.</li>
+<li><strong>Date-based header</strong> (a header with a date such as <code>2026-01-15</code>): each client pins to the API as of a date. It needs good internal tooling to keep many behaviors alive.</li>
+</ul>
+<p>For a team that owns its clients, a path prefix is the least surprising. Also decide what a new version means: bump it only for breaking changes (<a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/">how to detect them</a>). A new optional field does not need <code>v2</code>.</p>
+
+<h2 id="option-1-two-routers-in-one-service">Option 1: two routers in one service</h2>
+<p>Keep one codebase, one database, two sets of handlers. Share the business logic, and change only the request and response shapes per version:</p>
+<pre><code>// Express
+app.use('/v1/orders', ordersV1);   // returns { id, total }
+app.use('/v2/orders', ordersV2);   // returns { id, total: { amount, currency } }</code></pre>
+<p>Both routers call the same <code>OrderService</code>. The version-specific part is a thin mapping layer, and each version can have its own OpenAPI file (<code>openapi.v1.yaml</code>, <code>openapi.v2.yaml</code>) so a mock or a diff can target one. Delete a version by deleting its router and mapper. This is the cheapest approach and the right default.</p>
+
+<h2 id="option-2-the-old-release-as-a-separate-service">Option 2: the old release as a separate service</h2>
+<p>Sometimes v1 must not change at all, for example when it serves a mobile app that you cannot update, and the new code has moved on. Then run the old release next to the new one. Check out the tagged release into its own folder (a git worktree works well):</p>
+<pre><code>git worktree add services/orders-v1 v1.8.0
+echo "services/orders-v1/" &gt;&gt; .gitignore</code></pre>
+<p>Add a <code>service.json</code> in that folder. The name and port must differ from the current service:</p>
+<pre><code>{
+  "$schema": "https://flisk.sh/schema.service.json",
+  "schemaVersion": 1,
+  "appName": "orders-v1",
+  "appType": "backend",
+  "command": "node server.js",
+  "port": 4001,
+  "healthCheckPath": "/health"
+}</code></pre>
+<p>The current service stays as it is, say <code>orders</code> on port 4000. <code>flisk up</code> starts both as local processes, in <code>dependsOn</code> order, and prints one URL for each: <code>http://localhost:4000</code> and <code>http://localhost:4001</code>. Flisk checks that the ports are free and refuses to start when two services share one. Both can use the same Postgres if the old release is compatible with the current schema, which is the real constraint (see below).</p>
+<p>A frontend or script then chooses its target with an env var, for example <code>"env": { "API_URL": "http://localhost:4001" }</code> in a <code>service.json</code> for an old client build. Without Docker there is no gateway that routes by hostname, so the choice happens through ports. If you need hostnames, that is a case for the container path with Traefik instead.</p>
+
+<h2 id="prove-both-versions-still-work">Prove both versions still work</h2>
+<p>A second version is only useful if it stays correct. Write the same request checks once and run them against both targets by changing a base URL variable (see <a href="/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/">API requests as test files</a>):</p>
+<pre><code>hurl --test --variable base=http://localhost:4001 tests/v1/*.hurl
+hurl --test --variable base=http://localhost:4000 tests/v2/*.hurl</code></pre>
+<p>Run this in CI as well as on your laptop. If v1 is frozen, its tests should never need edits, so a change to them is a red flag in review.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>The database is shared state.</strong> Migrations that drop or rename a column break the older version. Use expand-and-contract: add the new column, write both, migrate readers, then remove the old column after the old version is gone.</li>
+<li><strong>Do not copy and paste the whole service.</strong> Two diverging copies double every bug fix. Prefer shared logic with separate mappers, and use a separate old release only for a frozen version.</li>
+<li><strong>Old versions need a retirement date.</strong> Announce it in headers and docs: <a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/">deprecation and Sunset headers</a>.</li>
+<li><strong>Two runtimes, two dependency sets.</strong> A worktree has its own <code>node_modules</code> or virtualenv. Install dependencies in it before the first run.</li>
+</ul>
+<p>For the general problem of starting several services and ordering them, see <a href="/@odykyi/microservices-local-dev/service-startup-order/">how to control service startup order</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I version an API in the URL or in a header?</summary><p>A URL path prefix such as /v2 is the easiest to see in logs, cache and test. Headers keep URLs stable but hide the version. Most teams pick the path.</p></details><details><summary>When does an API need a new version?</summary><p>Only for breaking changes: removed or renamed fields, new required inputs, changed types or status codes. Adding optional fields or new endpoints does not.</p></details><details><summary>Can Flisk run two versions of one service?</summary><p>Yes, as two services with different appName and port values, each with its own command. In local-process mode you reach them by port, not by hostname.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Design and test APIs locally</span></div>
+<div class="rgrid"><a href="/@odykyi/api-design-local/detect-breaking-api-changes-oasdiff/"><span class="lbl">Guide</span><b>How to detect breaking API changes before you merge</b><span>Most API outages from a deploy are a field someone renamed. A diff of the spec catches that in the pull request, not in production.</span></a><a href="/@odykyi/api-design-local/deprecate-an-api-endpoint-sunset-header/"><span class="lbl">Guide</span><b>How to deprecate an API endpoint with a Sunset header</b><span>Removing an endpoint is a breaking change. A dated warning in every response gives clients time to move.</span></a><a href="/@odykyi/api-design-local/api-requests-as-test-files-with-hurl/"><span class="lbl">Guide</span><b>How to keep API requests as test files in git with Hurl</b><span>A pile of curl commands in a wiki goes stale. A folder of request files in git can run in CI and doubles as living documentation.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a><a href="/@odykyi/workers-and-queues/"><span class="lbl">Topic 07</span><b>Background jobs and queues locally</b><span>Run workers, queues, cron jobs, webhooks and one-off tasks on your laptop, and debug them when they get stuck.</span></a><a href="/@odykyi/dev-env-troubleshooting/"><span class="lbl">Topic 08</span><b>When the local stack breaks</b><span>Fixes for the usual local development failures: a service that will not start, missing logs, restarts, DNS, disk and env vars.</span></a><a href="/@odykyi/team-dev-environments/"><span class="lbl">Topic 09</span><b>Team dev environments and onboarding</b><span>Get a new developer running on day one, keep setup in the repo, check drift in CI, and set up Mac, Windows and Linux.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
