@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to proxy API requests in the Vite dev server</title>
+<meta name="description" content="Use server.proxy in vite.config.ts to forward /api calls to a local backend, strip prefixes, proxy WebSockets, and avoid CORS errors during development.">
+<meta name="keywords" content="vite proxy api, vite server.proxy, vite proxy backend localhost, vite proxy rewrite path, vite proxy websocket">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to proxy API requests in the Vite dev server">
+<meta property="og:description" content="Use server.proxy in vite.config.ts to forward /api calls to a local backend, strip prefixes, proxy WebSockets, and avoid CORS errors during development.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to proxy API requests in the Vite dev server","description":"Use server.proxy in vite.config.ts to forward /api calls to a local backend, strip prefixes, proxy WebSockets, and avoid CORS errors during development.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/","keywords":"vite proxy api, vite server.proxy, vite proxy backend localhost, vite proxy rewrite path, vite proxy websocket","wordCount":757,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Frontend dev servers and APIs","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/"},{"@type":"ListItem","position":3,"name":"How to proxy API requests in the Vite dev server","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the Vite proxy work in production?","acceptedAnswer":{"@type":"Answer","text":"No. server.proxy only applies to the dev server, and to vite preview through preview.proxy. A production build is static files, so the deployed site needs a reverse proxy or an API with CORS rules."}},{"@type":"Question","name":"Why does my proxied request return index.html?","acceptedAnswer":{"@type":"Answer","text":"The path did not match a proxy key, so Vite served the single page app fallback. Check the prefix, a missing leading slash, or a trailing slash in the key."}},{"@type":"Question","name":"Do I still need CORS with the Vite proxy?","acceptedAnswer":{"@type":"Answer","text":"Not for requests that go through the proxy, because the browser only talks to the Vite origin. You need CORS again if any code calls the API origin directly."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/frontend-dev-servers/">Frontend dev servers and APIs</a></div>
+<section class="hero"><div><div class="lbl">Frontend dev servers and APIs</div><h1>How to proxy API requests in the Vite dev server</h1><p class="dek">The Vite dev server can forward some URLs to your backend, so the browser only ever talks to one origin. Here is the config, the options that matter, and the traps.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-proxy-does-and-does-not-do">What the proxy does and does not do</a></li><li><a href="#the-basic-config">The basic config</a></li><li><a href="#options-you-will-actually-use">Options you will actually use</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>Add a <code>server.proxy</code> entry to <code>vite.config.ts</code> that maps a path prefix such as <code>/api</code> to your backend URL. The browser then calls <code>/api/items</code> on the Vite origin, Vite forwards the request to the backend, and no CORS check applies because the page and the request share one origin.</p>
+
+<h2 id="what-the-proxy-does-and-does-not-do">What the proxy does and does not do</h2>
+<p>The Vite dev server is a Node HTTP server. When a request path matches a proxy key, Vite hands it to an HTTP proxy (<code>http-proxy</code>) instead of looking for a file. The request leaves from the dev server process, not from the browser, which is why the backend never sees a cross-origin browser request.</p>
+<p>This only exists while the dev server runs. <code>vite build</code> produces static files and has no proxy, so a deployed frontend needs its own answer: a reverse proxy, a gateway or the API's own CORS rules. The same applies to the page you open with <code>vite preview</code>: it uses <code>preview.proxy</code>, which defaults to the value of <code>server.proxy</code>.</p>
+
+<h2 id="the-basic-config">The basic config</h2>
+<pre><code>import { defineConfig } from 'vite';
+
+export default defineConfig({
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
+});</code></pre>
+<p>In the frontend code, call relative URLs and never write the backend port:</p>
+<pre><code>const path = '/api/items';
+const res = await fetch(path);</code></pre>
+<p>A fast way to test the rule without the browser is <code>curl http://localhost:5173/api/items</code>. If that returns the backend's JSON, the proxy works. If it returns your <code>index.html</code>, the path did not match a key and Vite fell back to the single page app.</p>
+
+<h2 id="options-you-will-actually-use">Options you will actually use</h2>
+<ul>
+<li><strong>changeOrigin</strong> rewrites the <code>Host</code> header to the target's host. Turn it on when the backend routes by host name. It is harmless for a plain <code>localhost</code> target.</li>
+<li><strong>rewrite</strong> changes the path before forwarding. Use it to strip a prefix: <code>rewrite: (path) =&gt; path.replace(/^\/api/, '')</code> sends <code>/api/items</code> to the backend as <code>/items</code>.</li>
+<li><strong>ws: true</strong> also proxies WebSocket upgrades on that prefix, which you need for a socket server that lives on the backend.</li>
+<li><strong>secure: false</strong> accepts a self-signed certificate when the target is <code>https</code>.</li>
+<li><strong>configure</strong> gives you the underlying proxy object, handy for logging a failed target: <code>proxy.on('error', (err) =&gt; console.log(err.message))</code>.</li>
+</ul>
+<p>A key that starts with <code>^</code> is treated as a regular expression, so <code>'^/(api|auth)/.*'</code> covers two prefixes in one rule.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>If you start the backend and the frontend with Flisk as local processes, the scaffold writes this proxy for you. This is the verified route:</p>
+<pre><code>npm install -g @flisk-sh/flisk
+flisk project --yes
+flisk resource api --framework express --local --stack app --yes
+flisk resource web --type frontend --local --stack app --yes</code></pre>
+<p>The frontend gets a plain <code>vite.config.ts</code> with <code>server.host</code> set to <code>localhost</code>, <code>strictPort: true</code>, and a proxy that forwards <code>/health</code> and <code>/api</code> to the API's local port (the port from the API's <code>service.json</code>). The frontend's manifest lists the API in <code>dependsOn</code> and has <code>"command": "npm run dev"</code>, so <code>flisk up</code> starts the API first and waits for its health check before it starts Vite. The starter page calls a relative <code>/health</code>, which goes through the proxy.</p>
+<p>The config is a normal file in your repo. If your API lives under another prefix, such as <code>/v1</code> or <code>/graphql</code>, add it to the same <code>proxy</code> object. Flisk does not rewrite the file again afterwards. If you change the API's <code>port</code> in its <code>service.json</code>, update the proxy target by hand.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Hard-coded absolute URLs skip the proxy.</strong> a call to <code>http://localhost:3001/api/items</code> goes straight from the browser to the API and brings CORS back. Search the code for the backend port.</li>
+<li><strong>A trailing path matters.</strong> The key <code>/api</code> also matches <code>/apiary</code>. Use <code>/api/</code> if you have routes that share the start of the word.</li>
+<li><strong>The proxy hides cookie domain problems, not all of them.</strong> A cookie the backend sets arrives on the Vite origin, which is usually what you want. See <a href="/@odykyi/frontend-dev-servers/cookies-not-sent-from-frontend-to-local-api/">cookies not sent from a frontend to a local API</a> for the cases where it is not.</li>
+<li><strong>Do not use a proxy as the production plan.</strong> It only helps in development. Decide early how the deployed frontend reaches the API.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If you prefer to keep the API on its own origin instead, the other half of the story is CORS. Read <a href="/@odykyi/frontend-dev-servers/fix-cors-error-frontend-calling-local-api/">how to fix a CORS error when a frontend calls a local API</a>. For the full two-process setup with Express, see <a href="/@odykyi/stack-recipes/express-api-and-vite-frontend/">Express API and Vite frontend in one dev command</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the Vite proxy work in production?</summary><p>No. server.proxy only applies to the dev server, and to vite preview through preview.proxy. A production build is static files, so the deployed site needs a reverse proxy or an API with CORS rules.</p></details><details><summary>Why does my proxied request return index.html?</summary><p>The path did not match a proxy key, so Vite served the single page app fallback. Check the prefix, a missing leading slash, or a trailing slash in the key.</p></details><details><summary>Do I still need CORS with the Vite proxy?</summary><p>Not for requests that go through the proxy, because the browser only talks to the Vite origin. You need CORS again if any code calls the API origin directly.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Frontend dev servers and APIs</span></div>
+<div class="rgrid"><a href="/@odykyi/frontend-dev-servers/fix-cors-error-frontend-calling-local-api/"><span class="lbl">Guide</span><b>How to fix a CORS error when your frontend calls a local API</b><span>The browser blocked a response your API did send. These are the three headers that decide it, the common mistakes, and the options for local development.</span></a><a href="/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/"><span class="lbl">Guide</span><b>How to set the API URL in Vite with env variables</b><span>The frontend needs to know where the API is, and that address changes per machine and per environment. Here is how Vite reads it, and what bites people.</span></a><a href="/@odykyi/frontend-dev-servers/make-the-dev-server-wait-for-the-api/"><span class="lbl">Guide</span><b>How to make the frontend dev server wait for the API to be ready</b><span>You start both with one command, and the page loads before the API listens. Here are three ways to order the start, and why readiness beats a fixed sleep.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

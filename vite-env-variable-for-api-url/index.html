@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to set the API URL in Vite with env variables</title>
+<meta name="description" content="Set the API base URL with a VITE_ variable and import.meta.env, know the .env file order, why values freeze into the bundle, and how Flisk passes it.">
+<meta name="keywords" content="vite env variables, import.meta.env vite_api_url, vite .env file not loaded, vite api base url, vite environment variables undefined">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to set the API URL in Vite with env variables">
+<meta property="og:description" content="Set the API base URL with a VITE_ variable and import.meta.env, know the .env file order, why values freeze into the bundle, and how Flisk passes it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to set the API URL in Vite with env variables","description":"Set the API base URL with a VITE_ variable and import.meta.env, know the .env file order, why values freeze into the bundle, and how Flisk passes it.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/","keywords":"vite env variables, import.meta.env vite_api_url, vite .env file not loaded, vite api base url, vite environment variables undefined","wordCount":731,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Frontend dev servers and APIs","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/"},{"@type":"ListItem","position":3,"name":"How to set the API URL in Vite with env variables","item":"https://pages.flisk.si/@odykyi/frontend-dev-servers/vite-env-variable-for-api-url/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is import.meta.env.VITE_API_URL undefined?","acceptedAnswer":{"@type":"Answer","text":"The name probably lacks the VITE_ prefix, the .env file is not next to vite.config.ts, or the dev server was started before you added it. Fix the name or location and restart the dev server."}},{"@type":"Question","name":"Can I change a VITE_ variable without rebuilding?","acceptedAnswer":{"@type":"Answer","text":"In development, restart the dev server. In a production build the value is fixed in the output, so build again or load a runtime config file instead."}},{"@type":"Question","name":"What overrides what in Vite env files?","acceptedAnswer":{"@type":"Answer","text":"A variable set in the shell wins. Then mode-specific local files, mode-specific files, .env.local and finally .env."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/frontend-dev-servers/">Frontend dev servers and APIs</a></div>
+<section class="hero"><div><div class="lbl">Frontend dev servers and APIs</div><h1>How to set the API URL in Vite with env variables</h1><p class="dek">The frontend needs to know where the API is, and that address changes per machine and per environment. Here is how Vite reads it, and what bites people.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#where-the-value-comes-from">Where the value comes from</a></li><li><a href="#why-the-value-feels-frozen">Why the value feels frozen</a></li><li><a href="#the-flisk-way-local-processes">The Flisk way, local processes</a></li><li><a href="#the-flisk-way-docker">The Flisk way, Docker</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#next-step">Next step</a></li></ol></nav></aside>
+<article><p>In Vite, put the API address in a variable that starts with <code>VITE_</code>, such as <code>VITE_API_URL</code>, and read it with <code>import.meta.env.VITE_API_URL</code>. Vite loads <code>.env</code> files at start-up, exposes only the prefixed names to the browser code, and replaces them with their values in the bundle. A variable without the prefix is <code>undefined</code> in the client.</p>
+
+<h2 id="where-the-value-comes-from">Where the value comes from</h2>
+<p>Vite reads these files from the project root, in this order of increasing priority:</p>
+<ul>
+<li><code>.env</code>, always loaded</li>
+<li><code>.env.local</code>, loaded and ignored by git in the default Vite template</li>
+<li><code>.env.development</code> or <code>.env.production</code>, chosen by the mode (<code>vite</code> runs in <code>development</code>, <code>vite build</code> in <code>production</code>)</li>
+<li><code>.env.development.local</code> and <code>.env.production.local</code></li>
+</ul>
+<p>A variable that already exists in the shell when Vite starts beats all of the files. That is useful: <code>VITE_API_URL=http://localhost:4010 npm run dev</code> overrides the file for one run.</p>
+<pre><code># .env
+VITE_API_URL=http://localhost:4000
+
+// src/api.ts
+const API_URL = import.meta.env.VITE_API_URL ?? '';
+
+export async function getItems() {
+  const res = await fetch(API_URL + '/api/items');
+  if (!res.ok) throw new Error('API returned ' + res.status);
+  return res.json();
+}</code></pre>
+<p>For TypeScript, declare the name in <code>src/vite-env.d.ts</code> by extending <code>ImportMetaEnv</code>, so a typo becomes a compile error instead of an <code>undefined</code> at run time.</p>
+
+<h2 id="why-the-value-feels-frozen">Why the value feels frozen</h2>
+<p>Vite does not ship a way for the browser to ask the server for env values. The text <code>import.meta.env.VITE_API_URL</code> is replaced by the string. In development that happens when the dev server starts, so if you change a shell variable or an env file and the page still shows the old value, restart the dev server and hard reload. In a production build the value is fixed forever in the output files: you build once per environment, or you load a small <code>config.json</code> at start-up instead.</p>
+<p>Leave the variable empty and call relative URLs when you use a dev server proxy. The code above then sends <code>/api/items</code> to the Vite origin, which forwards it. See <a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/">how to proxy API requests in the Vite dev server</a>.</p>
+
+<h2 id="the-flisk-way-local-processes">The Flisk way, local processes</h2>
+<p>When a frontend has a <code>command</code>, Flisk runs it as a normal process and passes the manifest's <code>env</code> to it, plus <code>PORT</code>. Vite reads the process environment, so a <code>VITE_</code> name in <code>env</code> is visible in the code:</p>
+<pre><code>{
+  "schemaVersion": 1,
+  "appName": "web",
+  "appType": "frontend",
+  "command": "npm run dev",
+  "port": 3000,
+  "dependsOn": ["api"],
+  "env": { "VITE_API_URL": "${VITE_API_URL:-http://localhost:4000}" }
+}</code></pre>
+<p>Values in <code>env</code> may use <code>${VAR}</code> or <code>${VAR:-default}</code>. For a local process Flisk resolves them from your shell first, then the project <code>.env</code>, then the service's own <code>.env</code> next to its <code>service.json</code>, then the default. So a teammate can point the frontend at a different API with a one-line <code>.env</code> change, and the committed manifest does not move. Without Docker there is no generated frontend env file: you pass the address yourself, as above.</p>
+
+<h2 id="the-flisk-way-docker">The Flisk way, Docker</h2>
+<p>In Docker mode Flisk writes <code>.autogenerated/.env.frontend.autogenerated</code> for each frontend and Compose passes it to the container. <code>VITE_API_URL</code> (and <code>NEXT_PUBLIC_API_URL</code> for Next.js) is the backend's gateway route, <code>http://api.&lt;project&gt;.localhost/api/&lt;backend name without -api&gt;</code>, or the backend's <code>apiPath</code> if it sets one, with the port added when the gateway is not on 80. Each backend, <code>mcp</code> or <code>agent</code> resource listed in the frontend's <code>dependsOn</code> also gets a <code>VITE_&lt;NAME&gt;_API_URL</code> line.</p>
+<p>The file is generated, so do not edit it. After you change <code>dependsOn</code>, <code>backendName</code> or <code>apiPath</code>, run <code>flisk restart &lt;frontend&gt;</code>: the container reads the file when it starts and the value ends up in the browser bundle. If you are unsure what the frontend received, open that file. If a frontend has no backend at all, <code>VITE_API_URL</code> falls back to a route that serves Flisk's own API, not yours.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Missing prefix.</strong> <code>API_URL=...</code> in <code>.env</code> is invisible to client code. Rename it, or change <code>envPrefix</code> in the config.</li>
+<li><strong>Quotes and spaces.</strong> Keep values simple. <code>VITE_API_URL = "http://..."</code> with spaces around the equals sign is a common cause of an empty value.</li>
+<li><strong>Not a secret store.</strong> Everything with the prefix goes to every visitor. See <a href="/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/">secrets in Vite and Next.js public variables</a>.</li>
+<li><strong>Wrong directory.</strong> Vite reads <code>.env</code> next to <code>vite.config.ts</code>, not the monorepo root, unless you set <code>envDir</code>.</li>
+</ul>
+
+<h2 id="next-step">Next step</h2>
+<p>If a variable is set but the service still does not see it, follow <a href="/@odykyi/dev-env-troubleshooting/environment-variable-not-loaded/">environment variable not loaded in a local service</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is import.meta.env.VITE_API_URL undefined?</summary><p>The name probably lacks the VITE_ prefix, the .env file is not next to vite.config.ts, or the dev server was started before you added it. Fix the name or location and restart the dev server.</p></details><details><summary>Can I change a VITE_ variable without rebuilding?</summary><p>In development, restart the dev server. In a production build the value is fixed in the output, so build again or load a runtime config file instead.</p></details><details><summary>What overrides what in Vite env files?</summary><p>A variable set in the shell wins. Then mode-specific local files, mode-specific files, .env.local and finally .env.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Frontend dev servers and APIs</span></div>
+<div class="rgrid"><a href="/@odykyi/frontend-dev-servers/vite-proxy-api-requests-to-backend/"><span class="lbl">Guide</span><b>How to proxy API requests in the Vite dev server</b><span>The Vite dev server can forward some URLs to your backend, so the browser only ever talks to one origin. Here is the config, the options that matter, and the traps.</span></a><a href="/@odykyi/frontend-dev-servers/secrets-in-vite-and-next-public-env-vars/"><span class="lbl">Guide</span><b>Why secrets must never go in VITE_ or NEXT_PUBLIC_ variables</b><span>The prefix is not a label for &#39;frontend config&#39;. It is the switch that publishes the value to every visitor. Here is how to tell what is safe and what to do with the rest.</span></a><a href="/@odykyi/frontend-dev-servers/open-vite-dev-server-on-your-phone/"><span class="lbl">Guide</span><b>How to open your Vite dev server on your phone</b><span>The page loads on the laptop and times out on the phone. Four things stand in the way: the bind address, the address you type, the API URL and the firewall.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/local-routing-and-https/"><span class="lbl">Topic 15</span><b>Local URLs, routing and HTTPS</b><span>Reverse proxies, *.localhost names, local HTTPS certificates and routing several services behind one gateway on a laptop.</span></a><a href="/@odykyi/env-and-secrets-local/"><span class="lbl">Topic 16</span><b>Env vars and secrets in local dev</b><span>Keep env files, secrets and per-developer overrides under control in local development without committing values.</span></a><a href="/@odykyi/dockerfiles-for-dev/"><span class="lbl">Topic 17</span><b>Dockerfiles for development</b><span>Write Dockerfiles that build fast and reload well in development: layer caching, multi-stage builds, bind mounts and non-root users.</span></a><a href="/@odykyi/docker-on-mac-performance/"><span class="lbl">Topic 18</span><b>Docker on Mac: speed and resources</b><span>Make containers fast on macOS: file sharing, VM memory and CPU, Apple Silicon images, Colima and keeping disk usage in check.</span></a><a href="/@odykyi/windows-and-wsl-dev/"><span class="lbl">Topic 19</span><b>Windows and WSL local development</b><span>Run multi-service apps on Windows: WSL 2, Docker, file paths, line endings, ports and native processes.</span></a><a href="/@odykyi/monorepo-tooling/"><span class="lbl">Topic 20</span><b>Monorepos with several services</b><span>pnpm workspaces, Turborepo, Nx and plain folders: how to structure a repo with many services and run the right ones locally.</span></a><a href="/@odykyi/local-llm-models/"><span class="lbl">Topic 21</span><b>Local LLMs for development</b><span>Run models on your laptop with Ollama and similar tools, point apps and agents at them, and mock models in tests.</span></a><a href="/@odykyi/agent-frameworks-local/"><span class="lbl">Topic 22</span><b>Agent frameworks on your laptop</b><span>Run agents built with popular frameworks locally next to tools, memory and a database, and compare how each handles state.</span></a><a href="/@odykyi/rag-and-vector-db-local/"><span class="lbl">Topic 23</span><b>RAG and vector databases locally</b><span>pgvector, Qdrant, Chroma and friends on a laptop: ingest documents, test retrieval and keep embeddings across restarts.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
