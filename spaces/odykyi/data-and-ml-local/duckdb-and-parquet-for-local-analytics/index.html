@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DuckDB and Parquet: local analytics without a server</title>
+<meta name="description" content="Query CSV and Parquet files with SQL using DuckDB, no server to run. See how to convert files, partition data and when a real database is the better choice.">
+<meta name="keywords" content="duckdb parquet local, duckdb query csv sql, convert csv to parquet duckdb, duckdb python, local analytics without server">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="DuckDB and Parquet: local analytics without a server">
+<meta property="og:description" content="Query CSV and Parquet files with SQL using DuckDB, no server to run. See how to convert files, partition data and when a real database is the better choice.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"DuckDB and Parquet: local analytics without a server","description":"Query CSV and Parquet files with SQL using DuckDB, no server to run. See how to convert files, partition data and when a real database is the better choice.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/","keywords":"duckdb parquet local, duckdb query csv sql, convert csv to parquet duckdb, duckdb python, local analytics without server","wordCount":705,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"DuckDB and Parquet: local analytics without a server","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need to install a server to use DuckDB?","acceptedAnswer":{"@type":"Answer","text":"No. DuckDB runs inside your process. Install the package and open a file or an in-memory database."}},{"@type":"Question","name":"Why convert CSV to Parquet?","acceptedAnswer":{"@type":"Answer","text":"Parquet stores typed columns in compressed form, so queries read less data and skip parsing. A converted file is usually much smaller and faster to query."}},{"@type":"Question","name":"Can two processes write to one DuckDB file?","acceptedAnswer":{"@type":"Answer","text":"No. One process can write at a time. Use Parquet files or a server database when several writers are needed."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>DuckDB and Parquet: local analytics without a server</h1><p class="dek">For files on your disk, an embedded database beats a server. DuckDB reads Parquet directly, runs in your Python process and costs no setup.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#query-files-where-they-are">Query files where they are</a></li><li><a href="#convert-csv-to-parquet-once">Convert CSV to Parquet once</a></li><li><a href="#join-files-with-your-running-database">Join files with your running database</a></li><li><a href="#where-this-fits-in-a-flisk-project">Where this fits in a Flisk project</a></li><li><a href="#use-it-from-a-script-or-a-test">Use it from a script or a test</a></li><li><a href="#pitfalls-and-limits">Pitfalls and limits</a></li></ol></nav></aside>
+<article><p>DuckDB is an embedded analytical database: install a package, open a file or an in-memory database, and run SQL over CSV and Parquet files directly. There is no server, no port and no container. For a dataset that fits on your laptop, up to tens of gigabytes of files, it is often faster to set up and to run than a database service.</p>
+
+<h2 id="query-files-where-they-are">Query files where they are</h2>
+<pre><code>pip install duckdb</code></pre>
+<pre><code>import duckdb
+
+duckdb.sql('''
+    SELECT user_id, count(*) AS events, sum(amount) AS total
+    FROM read_csv('events.csv')
+    GROUP BY user_id
+    ORDER BY total DESC
+    LIMIT 10
+''').show()</code></pre>
+<p>The same works from the command line client, or in a notebook, and <code>read_parquet('data/*.parquet')</code> accepts a glob over many files. DuckDB reads only the columns the query uses and, for Parquet, can skip row groups using the file's statistics, so selecting two columns out of fifty reads a fraction of the bytes.</p>
+
+<h2 id="convert-csv-to-parquet-once">Convert CSV to Parquet once</h2>
+<p>CSV is text: every query parses it again, and it has no types. Convert once and query the result:</p>
+<pre><code>COPY (SELECT * FROM read_csv('events.csv'))
+TO 'events.parquet' (FORMAT parquet, COMPRESSION zstd);</code></pre>
+<p>Check the inferred types before you rely on them: <code>DESCRIBE SELECT * FROM read_csv('events.csv')</code> shows each column. If a column of IDs becomes a number and loses leading zeros, force it with <code>read_csv('events.csv', types={'zip': 'VARCHAR'})</code>. For data that grows, write it partitioned by a column you filter on:</p>
+<pre><code>COPY events TO 'lake/events' (FORMAT parquet, PARTITION_BY (day));</code></pre>
+<p>That creates one folder per day, so a query with <code>WHERE day = '2026-11-01'</code> opens one folder.</p>
+
+<h2 id="join-files-with-your-running-database">Join files with your running database</h2>
+<p>DuckDB can attach a Postgres database and join it with files, without copying data first:</p>
+<pre><code>INSTALL postgres; LOAD postgres;
+ATTACH 'host=127.0.0.1 port=5432 dbname=app user=app password=secret' AS pg (TYPE postgres, READ_ONLY);
+
+SELECT o.id, e.total
+FROM pg.public.orders o
+JOIN read_parquet('events.parquet') e ON e.order_id = o.id;</code></pre>
+<p>Use the published port of your local database for this, see <a href="/@odykyi/local-database-guide/connect-to-a-local-database-from-your-machine/">connecting to a local database from your machine</a>. Attach it as <code>READ_ONLY</code> so an exploratory query cannot change anything.</p>
+
+<h2 id="where-this-fits-in-a-flisk-project">Where this fits in a Flisk project</h2>
+<p>DuckDB is a library, so there is nothing for Flisk to run. It lives in the notebook, script or dashboard that uses it, and those can be services in your stack. A Python service using it only needs <code>duckdb</code> in its dependencies and the data folder mounted. If you want a shared, always-on analytics store that several services query, that is a server, and <a href="/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/">ClickHouse</a> is the next step.</p>
+
+<h2 id="use-it-from-a-script-or-a-test">Use it from a script or a test</h2>
+<p>Because DuckDB runs in your process, it is also handy in tests and one-off scripts. A test can create an in-memory database, load a small fixture file and assert on the result of a query, with nothing to start and nothing to clean up:</p>
+<pre><code>import duckdb
+
+con = duckdb.connect()  # in memory
+con.execute("CREATE TABLE t AS SELECT * FROM read_parquet('tests/fixtures/events.parquet')")
+assert con.execute("SELECT count(*) FROM t").fetchone()[0] == 1000
+df = con.execute("SELECT name, count(*) c FROM t GROUP BY name").df()</code></pre>
+<p>The <code>.df()</code> call returns a pandas DataFrame, so you can move between SQL and Python in one cell. To keep results between runs, open a file instead: <code>duckdb.connect('analysis.duckdb')</code>. That file is a build artifact like any other. Add it to <code>.gitignore</code> and rebuild it from the source files when you need it.</p>
+
+<h2 id="pitfalls-and-limits">Pitfalls and limits</h2>
+<ul>
+<li><strong>One writer.</strong> A DuckDB database file allows one process to write at a time. Several processes can read a file only when none of them writes. For shared access use Parquet files plus in-memory connections, or a server database.</li>
+<li><strong>Memory limit.</strong> Large sorts and joins spill to disk, but set <code>SET memory_limit='4GB'</code> if it competes with other containers.</li>
+<li><strong>Parquet is not editable.</strong> You write new files rather than update rows. Treat a Parquet folder as an append-only log.</li>
+<li><strong>Not a transactional store.</strong> Use Postgres for application data and DuckDB for analysis of copies of it.</li>
+<li><strong>Big files in Git.</strong> Keep data files out of the repository. A small sample is fine, anything large is not.</li>
+</ul>
+<p>To explore these queries interactively, use a notebook, and keep it readable in diffs with <a href="/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/">keeping Jupyter notebooks clean in Git</a>. For a notebook next to your database, see <a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/">JupyterLab next to your local database</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need to install a server to use DuckDB?</summary><p>No. DuckDB runs inside your process. Install the package and open a file or an in-memory database.</p></details><details><summary>Why convert CSV to Parquet?</summary><p>Parquet stores typed columns in compressed form, so queries read less data and skip parsing. A converted file is usually much smaller and faster to query.</p></details><details><summary>Can two processes write to one DuckDB file?</summary><p>No. One process can write at a time. Use Parquet files or a server database when several writers are needed.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/clickhouse-for-local-analytics/"><span class="lbl">Guide</span><b>How to run ClickHouse locally for analytics development</b><span>ClickHouse is a column store for aggregating many rows fast. Running one locally is easy. Picking the sort key and keeping the data takes a little more care.</span></a><a href="/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/"><span class="lbl">Guide</span><b>How to keep Jupyter notebooks clean in Git</b><span>A notebook is JSON with your outputs inside. Without care, every run rewrites the file, diffs are unreadable and a data preview can reach the repository.</span></a><a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/"><span class="lbl">Guide</span><b>How to run JupyterLab next to your app&#39;s local database</b><span>Notebooks are the quickest way to look at your own data. The setup mistakes are an open server, lost notebooks and a database address that only works from your host.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

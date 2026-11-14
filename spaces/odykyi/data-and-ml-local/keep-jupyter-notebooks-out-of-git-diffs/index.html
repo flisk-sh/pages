@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep Jupyter notebooks clean in Git</title>
+<meta name="description" content="Stop notebook outputs and execution counts from flooding Git diffs. Strip outputs with nbstripout, or pair notebooks with plain Python files using jupytext.">
+<meta name="keywords" content="jupyter notebook git diff, nbstripout, jupytext pair notebook, clean notebook outputs git, jupyter notebook version control">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep Jupyter notebooks clean in Git">
+<meta property="og:description" content="Stop notebook outputs and execution counts from flooding Git diffs. Strip outputs with nbstripout, or pair notebooks with plain Python files using jupytext.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep Jupyter notebooks clean in Git","description":"Stop notebook outputs and execution counts from flooding Git diffs. Strip outputs with nbstripout, or pair notebooks with plain Python files using jupytext.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/","keywords":"jupyter notebook git diff, nbstripout, jupytext pair notebook, clean notebook outputs git, jupyter notebook version control","wordCount":600,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to keep Jupyter notebooks clean in Git","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does nbstripout delete the outputs in my working notebook?","acceptedAnswer":{"@type":"Answer","text":"No. It removes them only from what is committed. Your local file keeps its outputs."}},{"@type":"Question","name":"Why does nbstripout --install not apply for my teammates?","acceptedAnswer":{"@type":"Answer","text":"The filter is stored in each clone's local Git config. Every clone must run the install command, or you can use a shared pre-commit hook."}},{"@type":"Question","name":"What is the jupytext percent format?","acceptedAnswer":{"@type":"Answer","text":"A plain Python file where lines starting with # %% mark cell boundaries. It diffs and lints like normal code."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to keep Jupyter notebooks clean in Git</h1><p class="dek">A notebook is JSON with your outputs inside. Without care, every run rewrites the file, diffs are unreadable and a data preview can reach the repository.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#option-1-strip-outputs-with-nbstripout">Option 1: strip outputs with nbstripout</a></li><li><a href="#option-2-pair-the-notebook-with-a-python-file">Option 2: pair the notebook with a Python file</a></li><li><a href="#which-one-to-pick">Which one to pick</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>A <code>.ipynb</code> file stores code, outputs, images and execution counts in one JSON document, so a rerun changes hundreds of lines nobody wrote. There are two fixes. Strip outputs before they are committed with <code>nbstripout</code>, or keep the notebook as a plain Python file with <code>jupytext</code> and treat the <code>.ipynb</code> as a local artifact. Both can be set up in a few minutes, and neither depends on your editor.</p>
+
+<h2 id="option-1-strip-outputs-with-nbstripout">Option 1: strip outputs with nbstripout</h2>
+<p><code>nbstripout</code> is a Git filter. It removes outputs and execution counts when you commit, and leaves your working copy untouched, so you still see results locally.</p>
+<pre><code>pip install nbstripout
+nbstripout --install</code></pre>
+<p>This writes a filter into the repository's <code>.git/config</code> and an entry into <code>.git/info/attributes</code>. Those two places are not shared, so every clone needs the install command. To make the rule travel with the repository, commit a <code>.gitattributes</code> file:</p>
+<pre><code>*.ipynb filter=nbstripout
+*.ipynb diff=ipynb</code></pre>
+<p>and run <code>nbstripout --install</code> once per clone (put it in your setup script). Without the filter definition in the clone, the attributes file does nothing, and outputs get committed silently. Check that it works by committing a notebook you just ran and reading <code>git diff --cached</code>: you should see only your edits to code and markdown cells.</p>
+<p>The second route is a <code>pre-commit</code> hook, which a team can share in a committed config file:</p>
+<pre><code>repos:
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout</code></pre>
+<p>Pin <code>rev</code> to a release you have checked. After <code>pre-commit install</code> the hook strips outputs before each commit and fails the commit if it changed something, so you stage the clean file and commit again.</p>
+
+<h2 id="option-2-pair-the-notebook-with-a-python-file">Option 2: pair the notebook with a Python file</h2>
+<p><code>jupytext</code> keeps a text version of the notebook next to it, and the text file is what you review:</p>
+<pre><code>pip install jupytext
+jupytext --set-formats ipynb,py:percent analysis.ipynb</code></pre>
+<p>The <code>py:percent</code> format marks cells with <code># %%</code> lines, so the file is valid Python, diffs line by line and can be linted. When you save the notebook in Jupyter, both files update, and editing the <code>.py</code> file updates the notebook on reload. Then add <code>*.ipynb</code> to <code>.gitignore</code> and commit only the <code>.py</code> files. The cost is that notebooks with outputs are no longer in the repository, so nobody can read your results without running the code. If you want to share rendered results, publish them separately, for example as an exported HTML file.</p>
+
+<h2 id="which-one-to-pick">Which one to pick</h2>
+<table>
+<thead><tr><th>Situation</th><th>Use</th></tr></thead>
+<tbody>
+<tr><td>Notebooks are teaching material, readers want to see the shape of the code</td><td>nbstripout</td></tr>
+<tr><td>Notebooks are real code you review and test</td><td>jupytext</td></tr>
+<tr><td>Outputs are the deliverable, such as a report</td><td>Keep outputs and review them as a rendered file, not as a diff</td></tr>
+</tbody>
+</table>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Data already in history.</strong> A preview of customer rows that was committed once stays in the history after you add a filter. Rewrite the history or rotate what leaked. A filter only stops new commits.</li>
+<li><strong>Secrets in cells.</strong> Stripping outputs does not remove a token you pasted into a code cell. Read keys from environment variables, as in <a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/">JupyterLab next to your local database</a>.</li>
+<li><strong>Merge conflicts.</strong> Two people editing one notebook still conflict in JSON. With jupytext they conflict in readable Python, which is far easier to resolve.</li>
+<li><strong>Metadata churn.</strong> Kernel names and Python versions in notebook metadata change between machines. Configure the tool to keep or drop metadata and apply it consistently.</li>
+</ul>
+<p>Once the notebooks are clean, record experiment numbers in a tracker instead of in cell outputs, see <a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/">running an MLflow tracking server locally</a>. For analysis that has outgrown a notebook, see <a href="/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/">DuckDB and Parquet</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does nbstripout delete the outputs in my working notebook?</summary><p>No. It removes them only from what is committed. Your local file keeps its outputs.</p></details><details><summary>Why does nbstripout --install not apply for my teammates?</summary><p>The filter is stored in each clone&#39;s local Git config. Every clone must run the install command, or you can use a shared pre-commit hook.</p></details><details><summary>What is the jupytext percent format?</summary><p>A plain Python file where lines starting with # %% mark cell boundaries. It diffs and lints like normal code.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/"><span class="lbl">Guide</span><b>How to run JupyterLab next to your app&#39;s local database</b><span>Notebooks are the quickest way to look at your own data. The setup mistakes are an open server, lost notebooks and a database address that only works from your host.</span></a><a href="/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/"><span class="lbl">Guide</span><b>DuckDB and Parquet: local analytics without a server</b><span>For files on your disk, an embedded database beats a server. DuckDB reads Parquet directly, runs in your Python process and costs no setup.</span></a><a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"><span class="lbl">Guide</span><b>How to run an MLflow tracking server locally for experiments</b><span>Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

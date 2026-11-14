@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to store MLflow artifacts in MinIO on your laptop</title>
+<meta name="description" content="Send MLflow model files and plots to a local S3-compatible MinIO bucket, with the tracking server on the same Docker network. Settings, bucket and checks.">
+<meta name="keywords" content="mlflow minio local, mlflow s3 artifact store local, mlflow artifacts minio docker, mlflow artifact root s3, local s3 for mlflow">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to store MLflow artifacts in MinIO on your laptop">
+<meta property="og:description" content="Send MLflow model files and plots to a local S3-compatible MinIO bucket, with the tracking server on the same Docker network. Settings, bucket and checks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to store MLflow artifacts in MinIO on your laptop","description":"Send MLflow model files and plots to a local S3-compatible MinIO bucket, with the tracking server on the same Docker network. Settings, bucket and checks.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/","keywords":"mlflow minio local, mlflow s3 artifact store local, mlflow artifacts minio docker, mlflow artifact root s3, local s3 for mlflow","wordCount":646,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to store MLflow artifacts in MinIO on your laptop","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/mlflow-artifacts-in-minio-locally/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does the training script need S3 credentials?","acceptedAnswer":{"@type":"Answer","text":"Not when the tracking server is started with serve-artifacts. The client uploads artifacts to the server over HTTP, and the server writes to the bucket with its own credentials."}},{"@type":"Question","name":"Does MinIO create the bucket for MLflow?","acceptedAnswer":{"@type":"Answer","text":"No. MinIO does not create buckets automatically. You create the bucket first, or use a start script that creates it, as the Flisk MLflow preset does."}},{"@type":"Question","name":"Do old runs move to the new artifact store?","acceptedAnswer":{"@type":"Answer","text":"No. Each run keeps the artifact location it was created with. Only new runs use the new destination."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to store MLflow artifacts in MinIO on your laptop</h1><p class="dek">By default, MLflow artifacts sit in the same volume as its database. Moving them to an S3-compatible store looks like production and keeps the tracking volume small.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-bother-with-an-s3-store-locally">Why bother with an S3 store locally</a></li><li><a href="#the-plain-way">The plain way</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#check-that-artifacts-really-land-in-the-bucket">Check that artifacts really land in the bucket</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To keep MLflow artifacts in MinIO, run MinIO as an S3-compatible server, create a bucket, give the MLflow server the S3 endpoint and credentials through environment variables, and start it with an artifacts destination such as <code>s3://mlflow</code>. Clients that log runs only talk to the tracking server, which stores the files in the bucket for them. The common failure is a missing endpoint variable, so the server quietly looks for real AWS.</p>
+
+<h2 id="why-bother-with-an-s3-store-locally">Why bother with an S3 store locally</h2>
+<p>Run metadata (parameters, metrics) is small. Artifacts are not: model weights, plots, datasets. Keeping them in the tracking volume works, but it hides one thing you will meet in production: code that reads and writes S3 URIs, with an endpoint, a key and a bucket. Running that locally against MinIO catches the configuration mistakes early, at no cost.</p>
+
+<h2 id="the-plain-way">The plain way</h2>
+<p>You need three things. MinIO with a bucket, environment variables for the S3 client library (<code>boto3</code>), and the server flags:</p>
+<pre><code>export MLFLOW_S3_ENDPOINT_URL=http://127.0.0.1:9000
+export AWS_ACCESS_KEY_ID=minioadmin
+export AWS_SECRET_ACCESS_KEY=minioadmin
+
+mlflow server --host 127.0.0.1 --port 5000 \
+  --backend-store-uri sqlite:///mlflow.db \
+  --artifacts-destination s3://mlflow \
+  --serve-artifacts</code></pre>
+<p>The bucket must exist first: MinIO does not create buckets on demand. <code>pip install boto3</code> is required in the server's environment, because MLflow uses it for <code>s3://</code> paths. With <code>--serve-artifacts</code> the client never needs S3 credentials. Only the tracking server does.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Flisk has presets for both pieces. Create them in one stack:</p>
+<pre><code>flisk resource store --type database --framework minio --stack ml --yes
+flisk resource tracking --type database --framework mlflow --stack ml --yes</code></pre>
+<p>Then tell the tracking server to depend on the store. Open <code>tracking/service.json</code> and add:</p>
+<pre><code>"dependsOn": ["store"]</code></pre>
+<p>That is the whole configuration. The MinIO resource declares <code>provides</code> with <code>MINIO_ENDPOINT</code>, <code>AWS_ENDPOINT_URL_S3</code> (both <code>http://store:9000</code>), <code>AWS_ACCESS_KEY_ID</code> and <code>AWS_SECRET_ACCESS_KEY</code>. A service that lists it in <code>dependsOn</code> receives them, and the MLflow preset's start script checks for <code>AWS_ENDPOINT_URL_S3</code>:</p>
+<ul>
+<li>if it is set, the script installs <code>boto3</code> (about 4 seconds on every start), waits until MinIO answers, creates the bucket <code>mlflow</code> if it is missing, and starts the server with <code>--artifacts-destination s3://mlflow</code>;</li>
+<li>if it is not set, artifacts stay in the data volume at <code>/data/artifacts</code>.</li>
+</ul>
+<p>So the dependency is the switch. Remove <code>store</code> from <code>dependsOn</code> and you are back to local files.</p>
+<pre><code>flisk config verify
+flisk up ml
+flisk status</code></pre>
+<p>The MinIO console is published on <code>127.0.0.1:9001</code> only, with the development login <code>minioadmin</code> / <code>minioadmin</code>. These values are for local use: the S3 port is reachable on the stack's Docker network, not from outside.</p>
+
+<h2 id="check-that-artifacts-really-land-in-the-bucket">Check that artifacts really land in the bucket</h2>
+<p>Log a small file from a script on your host, with the tracking URI set to the published port:</p>
+<pre><code>import mlflow
+
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
+mlflow.set_experiment("s3-check")
+with mlflow.start_run():
+    with open("hello.txt", "w") as f:
+        f.write("hello")
+    mlflow.log_artifact("hello.txt")</code></pre>
+<p>Open the MinIO console, go to the <code>mlflow</code> bucket and look for an object under the run. If the bucket is empty and the artifact is in the tracking volume instead, the dependency is missing or the tracking server started before it was added: run <code>flisk restart tracking</code>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Missing endpoint.</strong> Without the endpoint variable, boto3 talks to AWS and fails on credentials. Always set <code>MLFLOW_S3_ENDPOINT_URL</code> (plain MLflow) or depend on the MinIO resource (Flisk).</li>
+<li><strong>Old artifacts do not move.</strong> Runs logged before the change keep their original artifact location. Switching the destination affects new runs.</li>
+<li><strong>The MinIO image.</strong> The upstream <code>minio/minio</code> image is no longer published, so the Flisk preset uses a community fork pinned to a release, with the same S3 API. Pass <code>--image</code> to use another build.</li>
+<li><strong>Do not reuse these credentials.</strong> They are fixed development values. Never copy them to a shared environment.</li>
+</ul>
+<p>For the first part of the setup, see <a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/">running an MLflow tracking server locally</a>. If you want the stored model to be served as an API, continue with <a href="/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/">serving a scikit-learn model with FastAPI</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does the training script need S3 credentials?</summary><p>Not when the tracking server is started with serve-artifacts. The client uploads artifacts to the server over HTTP, and the server writes to the bucket with its own credentials.</p></details><details><summary>Does MinIO create the bucket for MLflow?</summary><p>No. MinIO does not create buckets automatically. You create the bucket first, or use a start script that creates it, as the Flisk MLflow preset does.</p></details><details><summary>Do old runs move to the new artifact store?</summary><p>No. Each run keeps the artifact location it was created with. Only new runs use the new destination.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"><span class="lbl">Guide</span><b>How to run an MLflow tracking server locally for experiments</b><span>Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</span></a><a href="/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/"><span class="lbl">Guide</span><b>How to serve a scikit-learn model with FastAPI locally</b><span>A model behind an HTTP endpoint is just a web service that loads a file. The details that bite are when you load it, which versions you pin and how callers know it is ready.</span></a><a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/"><span class="lbl">Guide</span><b>How to run model training as a one-shot job in a local stack</b><span>Training is not a server. It runs, writes a result and stops. Treating it as a job keeps it from restarting forever and lets the API wait for the model.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

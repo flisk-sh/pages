@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to serve a scikit-learn model with FastAPI locally</title>
+<meta name="description" content="Load a trained scikit-learn model once at startup, expose a predict endpoint with FastAPI, add health and ready checks and run it beside your app locally.">
+<meta name="keywords" content="serve scikit-learn model fastapi, fastapi model inference local, fastapi load model on startup, joblib model api, scikit-learn model rest api">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to serve a scikit-learn model with FastAPI locally">
+<meta property="og:description" content="Load a trained scikit-learn model once at startup, expose a predict endpoint with FastAPI, add health and ready checks and run it beside your app locally.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to serve a scikit-learn model with FastAPI locally","description":"Load a trained scikit-learn model once at startup, expose a predict endpoint with FastAPI, add health and ready checks and run it beside your app locally.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/","keywords":"serve scikit-learn model fastapi, fastapi model inference local, fastapi load model on startup, joblib model api, scikit-learn model rest api","wordCount":687,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to serve a scikit-learn model with FastAPI locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/serve-a-scikit-learn-model-with-fastapi/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I load the model inside the endpoint?","acceptedAnswer":{"@type":"Answer","text":"No. Load it once at startup and keep it in memory. Loading per request reads the file every time and makes each call slow."}},{"@type":"Question","name":"Why use a plain def instead of async def for predict?","acceptedAnswer":{"@type":"Answer","text":"scikit-learn calls block the thread. FastAPI runs plain functions in a thread pool, so a slow prediction does not block other requests."}},{"@type":"Question","name":"Is it safe to load any joblib file?","acceptedAnswer":{"@type":"Answer","text":"No. A joblib file is a pickle and can run code when loaded. Only load files you created or trust, with the same library versions."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to serve a scikit-learn model with FastAPI locally</h1><p class="dek">A model behind an HTTP endpoint is just a web service that loads a file. The details that bite are when you load it, which versions you pin and how callers know it is ready.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-model-file-and-the-pins">The model file and the pins</a></li><li><a href="#the-api">The API</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To serve a scikit-learn model with FastAPI, load the saved model once when the app starts (with a lifespan function), keep it in memory, and write a <code>POST /predict</code> endpoint that validates the input and calls <code>predict</code>. Do not load the file inside the endpoint: it would be read from disk on every request. Add a <code>/ready</code> route that fails until the model is loaded, so other services know when to call you.</p>
+
+<h2 id="the-model-file-and-the-pins">The model file and the pins</h2>
+<p>A scikit-learn model saved with <code>joblib</code> is a pickle. Two consequences. First, load it only with the same scikit-learn version that saved it, otherwise you get warnings or wrong results. Pin the version in both the training and the serving environment. Second, never load a pickle from a source you do not trust: loading one can run code.</p>
+<p>A small script makes a model for the example:</p>
+<pre><code>import joblib
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LogisticRegression
+
+X, y = load_iris(return_X_y=True)
+model = LogisticRegression(max_iter=200).fit(X, y)
+joblib.dump(model, "model.joblib")</code></pre>
+
+<h2 id="the-api">The API</h2>
+<pre><code>from contextlib import asynccontextmanager
+from pathlib import Path
+
+import joblib
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+MODEL_PATH = Path(__file__).parent / "model.joblib"
+state: dict = {}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    state["model"] = joblib.load(MODEL_PATH)
+    yield
+    state.clear()
+
+
+app = FastAPI(title="scorer", lifespan=lifespan)
+
+
+class Features(BaseModel):
+    values: list[float]
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/ready")
+def ready():
+    if "model" not in state:
+        raise HTTPException(status_code=503, detail="model not loaded")
+    return {"status": "ready"}
+
+
+@app.post("/predict")
+def predict(features: Features):
+    model = state["model"]
+    if len(features.values) != model.n_features_in_:
+        raise HTTPException(status_code=422, detail="wrong number of features")
+    proba = model.predict_proba([features.values])[0]
+    return {"label": int(proba.argmax()), "probability": float(proba.max())}</code></pre>
+<p>The route is a plain <code>def</code>, not <code>async def</code>: scikit-learn calls are blocking, and FastAPI runs a plain function in a thread pool, so one slow prediction does not freeze the event loop. Checking the feature count gives a clear 422 instead of a stack trace from deep inside the library. If the file is missing or broken, startup fails and you see the error at once, which is what you want in development.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Scaffold a Python backend in a stack:</p>
+<pre><code>flisk resource scorer --type backend --language python --stack ml --yes</code></pre>
+<p>This creates <code>services/ml/scorer</code> with <code>src/main.py</code> (a FastAPI app with a <code>/health</code> route), a <code>pyproject.toml</code> with pinned <code>fastapi</code> and <code>uvicorn</code>, a test and a <code>service.json</code> whose dev command runs <code>uvicorn</code> with <code>--reload</code>. Do three things:</p>
+<ol>
+<li>Add <code>"scikit-learn==..."</code> and <code>"joblib==..."</code> to <code>dependencies</code> in <code>pyproject.toml</code>, with the versions you trained with.</li>
+<li>Replace the body of <code>src/main.py</code> with the code above and put <code>model.joblib</code> next to it. The generated <code>pyproject.toml</code> says that only dependencies are installed into the image and the source is synced for live reload, and <code>service.json</code> watches <code>src/**/*</code>.</li>
+<li>Keep <code>"healthCheckPath": "/health"</code> in <code>service.json</code>.</li>
+</ol>
+<pre><code>flisk config verify
+flisk up ml
+flisk status
+flisk logs --service scorer --tail 50</code></pre>
+<p><code>flisk status</code> prints the URL of the service. A request looks like this, with your real address:</p>
+<pre><code>curl -s -X POST "$SCORER_URL/predict" \
+  -H "content-type: application/json" \
+  -d '{"values": [5.1, 3.5, 1.4, 0.2]}'</code></pre>
+<p>If you do not want Docker for this service, <code>--local</code> scaffolds the same app as a local process: add <code>--local</code> to the <code>flisk resource</code> command, run <code>pip install -e ".[dev]"</code> in the service folder, and <code>flisk up</code> starts it with a <code>command</code> in <code>service.json</code> instead of a container. That is also the route when you want the model to use your Mac's GPU, because a container on macOS cannot reach it. A project cannot mix local processes and containers yet.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Large models.</strong> A model of hundreds of megabytes should not be committed to Git or synced on every edit. Download it at startup from a model registry instead, see <a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/">running training as a one-shot job</a> for a registry flow.</li>
+<li><strong>Several workers.</strong> Each uvicorn worker loads its own copy. Two workers double the memory.</li>
+<li><strong>Input drift.</strong> Validate the number and the order of features. A model happily predicts on a shuffled input.</li>
+</ul>
+<p>For the surrounding project layout, see <a href="/@odykyi/stack-recipes/fastapi-and-react-locally/">running a FastAPI backend and React frontend locally</a>, and for a dashboard on top of this API see <a href="/@odykyi/data-and-ml-local/streamlit-dashboard-next-to-your-api/">a Streamlit dashboard next to your API</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I load the model inside the endpoint?</summary><p>No. Load it once at startup and keep it in memory. Loading per request reads the file every time and makes each call slow.</p></details><details><summary>Why use a plain def instead of async def for predict?</summary><p>scikit-learn calls block the thread. FastAPI runs plain functions in a thread pool, so a slow prediction does not block other requests.</p></details><details><summary>Is it safe to load any joblib file?</summary><p>No. A joblib file is a pickle and can run code when loaded. Only load files you created or trust, with the same library versions.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/run-model-training-as-a-one-shot-job/"><span class="lbl">Guide</span><b>How to run model training as a one-shot job in a local stack</b><span>Training is not a server. It runs, writes a result and stops. Treating it as a job keeps it from restarting forever and lets the API wait for the model.</span></a><a href="/@odykyi/data-and-ml-local/streamlit-dashboard-next-to-your-api/"><span class="lbl">Guide</span><b>How to run a Streamlit dashboard next to your local API</b><span>Streamlit turns a Python script into a web page. Next to an API it makes a quick internal dashboard, if you get the bind address and the API address right.</span></a><a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"><span class="lbl">Guide</span><b>How to run an MLflow tracking server locally for experiments</b><span>Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

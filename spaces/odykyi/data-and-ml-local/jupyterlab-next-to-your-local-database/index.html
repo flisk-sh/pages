@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run JupyterLab next to your app&#39;s local database</title>
+<meta name="description" content="Start JupyterLab in a container beside your local Postgres and API, keep notebooks in your repo, protect it with a token and read data with DATABASE_URL.">
+<meta name="keywords" content="jupyterlab docker local database, jupyter notebook postgres local, run jupyterlab in docker compose, jupyter token docker, jupyter notebook next to app">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run JupyterLab next to your app&#39;s local database">
+<meta property="og:description" content="Start JupyterLab in a container beside your local Postgres and API, keep notebooks in your repo, protect it with a token and read data with DATABASE_URL.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run JupyterLab next to your app's local database","description":"Start JupyterLab in a container beside your local Postgres and API, keep notebooks in your repo, protect it with a token and read data with DATABASE_URL.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/","keywords":"jupyterlab docker local database, jupyter notebook postgres local, run jupyterlab in docker compose, jupyter token docker, jupyter notebook next to app","wordCount":772,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Data and ML tools locally","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/"},{"@type":"ListItem","position":3,"name":"How to run JupyterLab next to your app's local database","item":"https://pages.flisk.si/@odykyi/data-and-ml-local/jupyterlab-next-to-your-local-database/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why can't my notebook container connect to localhost:5432?","acceptedAnswer":{"@type":"Answer","text":"Inside a container, localhost is the container itself. Use the database service name on the Docker network, which is what a DATABASE_URL passed to the container contains."}},{"@type":"Question","name":"Where are my notebooks saved in Docker?","acceptedAnswer":{"@type":"Answer","text":"Only in the folders you mount from the host. Mount a host folder at the image's work directory, otherwise the files are deleted when the container is recreated."}},{"@type":"Question","name":"How do I stop the token changing on every start?","acceptedAnswer":{"@type":"Answer","text":"Set the JUPYTER_TOKEN environment variable yourself instead of letting Jupyter generate a random one."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/data-and-ml-local/">Data and ML tools locally</a></div>
+<section class="hero"><div><div class="lbl">Data and ML tools locally</div><h1>How to run JupyterLab next to your app&#39;s local database</h1><p class="dek">Notebooks are the quickest way to look at your own data. The setup mistakes are an open server, lost notebooks and a database address that only works from your host.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-just-run-jupyter-on-the-host">Why not just run jupyter on the host</a></li><li><a href="#the-plain-docker-way">The plain Docker way</a></li><li><a href="#the-flisk-way">The Flisk way</a></li><li><a href="#read-data-from-the-database">Read data from the database</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run JupyterLab as one more service in your local stack: a container from the Jupyter Docker Stacks image, a bind mount so notebooks live in your repository, a token you choose, and the database address passed in as an environment variable. Then the notebook reaches the same Postgres your API uses, by its container name, and nothing is exposed beyond your own machine.</p>
+
+<h2 id="why-not-just-run-jupyter-on-the-host">Why not just run jupyter on the host</h2>
+<p>You can: <code>pip install jupyterlab</code> and <code>jupyter lab</code> start a server on <code>127.0.0.1:8888</code> and print a URL with a token. For a quick look at a CSV that is the right answer. It gets awkward when the data is in a database that runs in a container. You then need the published port, a connection string that differs from the one your services use, and a Python environment that matches the project. A notebook in the stack shares the services' network and environment, so <code>DATABASE_URL</code> means the same thing everywhere.</p>
+
+<h2 id="the-plain-docker-way">The plain Docker way</h2>
+<p>The Jupyter Docker Stacks publish images such as <code>quay.io/jupyter/scipy-notebook</code>. A minimal run:</p>
+<pre><code>docker run --rm -p 127.0.0.1:8888:8888 \
+  -e JUPYTER_TOKEN=change-me \
+  -v "$PWD/notebooks:/home/jovyan/work" \
+  quay.io/jupyter/scipy-notebook:latest</code></pre>
+<p>Three details matter. Publish on <code>127.0.0.1</code>, not on all interfaces, because a notebook server runs arbitrary code. Set the token yourself, so the URL does not change on every start. And mount a folder at <code>/home/jovyan/work</code>, because everything else in the container is thrown away when it is recreated. Pin a dated tag from the image's tag list instead of <code>latest</code> once it works, so a rebuild next month does not change your Python.</p>
+
+<h2 id="the-flisk-way">The Flisk way</h2>
+<p>Create a bring-your-own resource for the image, then edit its <code>service.json</code>:</p>
+<pre><code>flisk resource lab --type bring-your-own --image quay.io/jupyter/scipy-notebook:latest --stack ml --yes</code></pre>
+<pre><code>{
+  "appName": "lab",
+  "appType": "bring-your-own",
+  "stack": "ml",
+  "port": 8888,
+  "image": "quay.io/jupyter/scipy-notebook:latest",
+  "webUi": true,
+  "healthCheckPath": "/api",
+  "dependsOn": ["postgres"],
+  "secrets": { "required": ["JUPYTER_TOKEN"] },
+  "volumes": [
+    { "source": "./notebooks", "target": "/home/jovyan/work" }
+  ]
+}</code></pre>
+<p>What each field does:</p>
+<ul>
+<li><code>port</code> is the port the container listens on. The CLI flag <code>--port</code> only accepts 4000 to 5999 for this type, so set 8888 in the file.</li>
+<li><code>webUi: true</code> routes the app on its own host name, <code>lab.&lt;project&gt;.localhost</code>, with no path prefix. Without it a bring-your-own resource is an API under <code>/api/&lt;name&gt;</code>, and JupyterLab, which serves pages from <code>/</code>, would not work under that prefix. <code>flisk status</code> prints the real URL.</li>
+<li><code>healthCheckPath</code> is <code>/api</code>, which Jupyter answers without a login and which the official images use for their own health check.</li>
+<li><code>dependsOn: ["postgres"]</code> gives the container <code>DATABASE_URL</code>. Flisk adds it only when <code>dependsOn</code> names <code>postgres</code> or a <code>database</code> resource, so a plain container does not get a database address by accident.</li>
+<li><code>secrets.required</code> reads <code>JUPYTER_TOKEN</code> from the project's git-ignored <code>.env</code>. Put <code>JUPYTER_TOKEN=some-long-random-value</code> there and never in <code>service.json</code>.</li>
+<li><code>volumes</code> with a <code>./</code> path is a bind mount relative to the service folder, so notebooks are plain files in your repository.</li>
+</ul>
+<pre><code>flisk config verify
+flisk up ml
+flisk status</code></pre>
+<p>Open the printed URL and log in with the token. This resource is a container, so the project needs Docker. If you only need a notebook against a database on your host, plain <code>jupyter lab</code> is simpler.</p>
+
+<h2 id="read-data-from-the-database">Read data from the database</h2>
+<p>In a notebook cell, take the address from the environment, as your services do:</p>
+<pre><code>import os
+import pandas as pd
+from sqlalchemy import create_engine
+
+engine = create_engine(os.environ["DATABASE_URL"])
+df = pd.read_sql("select id, created_at from orders limit 100", engine)
+df.head()</code></pre>
+<p>The image may not include the Postgres driver. Install it in a small Dockerfile based on the image (<code>RUN pip install psycopg[binary]</code>) and use <code>dockerfile</code> in <code>service.json</code> instead of <code>image</code>. A <code>pip install</code> typed into a notebook works, but it is lost when the container is recreated. For a read-only look, create a database role that can only <code>select</code>, so a mistaken cell cannot change your data. See <a href="/@odykyi/local-database-guide/connect-to-a-local-database-from-your-machine/">connecting to a local database from your machine</a> for the host side.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Files owned by another user.</strong> The image runs as user <code>jovyan</code> (uid 1000). On Linux, a notebooks folder owned by a different uid can be read-only inside the container. Change the folder's owner or permissions.</li>
+<li><strong>Outputs in Git.</strong> A notebook stores its outputs, so a data preview can end up in a commit. Read <a href="/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/">keeping Jupyter notebooks clean in Git</a> before you commit the first one.</li>
+<li><strong>Do not share the port.</strong> A notebook is a remote shell with a login. Leave it on loopback.</li>
+</ul>
+<p>When an experiment in a notebook is worth keeping, log it to a tracking server, see <a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/">running MLflow locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why can&#39;t my notebook container connect to localhost:5432?</summary><p>Inside a container, localhost is the container itself. Use the database service name on the Docker network, which is what a DATABASE_URL passed to the container contains.</p></details><details><summary>Where are my notebooks saved in Docker?</summary><p>Only in the folders you mount from the host. Mount a host folder at the image&#39;s work directory, otherwise the files are deleted when the container is recreated.</p></details><details><summary>How do I stop the token changing on every start?</summary><p>Set the JUPYTER_TOKEN environment variable yourself instead of letting Jupyter generate a random one.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Data and ML tools locally</span></div>
+<div class="rgrid"><a href="/@odykyi/data-and-ml-local/keep-jupyter-notebooks-out-of-git-diffs/"><span class="lbl">Guide</span><b>How to keep Jupyter notebooks clean in Git</b><span>A notebook is JSON with your outputs inside. Without care, every run rewrites the file, diffs are unreadable and a data preview can reach the repository.</span></a><a href="/@odykyi/data-and-ml-local/run-mlflow-tracking-server-locally/"><span class="lbl">Guide</span><b>How to run an MLflow tracking server locally for experiments</b><span>Experiment tracking is only useful if the server is there when you run the training code. Here is how to keep one running next to your app, with its data on a volume.</span></a><a href="/@odykyi/data-and-ml-local/duckdb-and-parquet-for-local-analytics/"><span class="lbl">Guide</span><b>DuckDB and Parquet: local analytics without a server</b><span>For files on your disk, an embedded database beats a server. DuckDB reads Parquet directly, runs in your Python process and costs no setup.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/dev-loop-tools-compared/"><span class="lbl">Topic 38</span><b>Local dev tools compared</b><span>Compose, Tilt, Skaffold, DevSpace, Garden, devcontainers and Flisk: what each one is for and how to pick.</span></a><a href="/@odykyi/laptop-resources/"><span class="lbl">Topic 39</span><b>Keep your laptop fast while developing</b><span>RAM, CPU, disk and battery when you run many services: measure what uses them and cut it down.</span></a><a href="/@odykyi/api-design-local/"><span class="lbl">Topic 40</span><b>Design and test APIs locally</b><span>OpenAPI specs, mock servers, contract tests and versioning while you build APIs that other services call.</span></a><a href="/@odykyi/microservices-local-dev/"><span class="lbl">Topic 01</span><b>Run microservices on your laptop</b><span>How to run a frontend, APIs, databases and workers together on one machine, start only what you need, and stop fighting ports.</span></a><a href="/@odykyi/docker-compose-guide/"><span class="lbl">Topic 02</span><b>Docker Compose for local development</b><span>Practical answers for Compose in local development: ports, hot reload, healthchecks, volumes, and when to move past it.</span></a><a href="/@odykyi/local-database-guide/"><span class="lbl">Topic 03</span><b>Databases in local development</b><span>Postgres, Redis, migrations, seeds and resets on a laptop, with the commands to connect, inspect and start over.</span></a><a href="/@odykyi/ai-agents-local/"><span class="lbl">Topic 04</span><b>Running AI agents locally</b><span>How to run AI agents next to their tools, database and queue on your laptop, keep sessions across restarts, and inspect them.</span></a><a href="/@odykyi/mcp-local-dev/"><span class="lbl">Topic 05</span><b>MCP servers and coding assistants</b><span>Build and test MCP servers locally, connect Claude Code, Cursor and Codex, and give your assistant a safe way to run the stack.</span></a><a href="/@odykyi/stack-recipes/"><span class="lbl">Topic 06</span><b>Language and framework recipes</b><span>Step-by-step local setups for common stacks: FastAPI and React, Express and Vite, Next.js and Postgres, Go, Rust, Bun and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
