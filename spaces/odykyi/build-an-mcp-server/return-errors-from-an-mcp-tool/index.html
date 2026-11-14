@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to return errors from an MCP tool (isError explained)</title>
+<meta name="description" content="Learn when an MCP tool should return isError true and when a JSON-RPC error is used, how to write messages a model can act on, and how to check both locally.">
+<meta name="keywords" content="mcp iserror, mcp tool error handling, mcp json-rpc error, mcp tool throws exception">
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/build-an-mcp-server/return-errors-from-an-mcp-tool/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to return errors from an MCP tool (isError explained)">
+<meta property="og:description" content="Learn when an MCP tool should return isError true and when a JSON-RPC error is used, how to write messages a model can act on, and how to check both locally.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/build-an-mcp-server/return-errors-from-an-mcp-tool/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to return errors from an MCP tool (isError explained)","description":"Learn when an MCP tool should return isError true and when a JSON-RPC error is used, how to write messages a model can act on, and how to check both locally.","datePublished":"2026-11-14","dateModified":"2026-11-14","inLanguage":"en","url":"https://pages.flisk.si/@odykyi/build-an-mcp-server/return-errors-from-an-mcp-tool/","mainEntityOfPage":"https://pages.flisk.si/@odykyi/build-an-mcp-server/return-errors-from-an-mcp-tool/","keywords":"mcp iserror, mcp tool error handling, mcp json-rpc error, mcp tool throws exception","wordCount":750,"author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"about":{"@type":"SoftwareApplication","name":"Flisk","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","url":"https://github.com/flisk-sh/flisk"}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Flisk guides","item":"https://pages.flisk.si/@odykyi/"},{"@type":"ListItem","position":2,"name":"Build your own MCP server","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/"},{"@type":"ListItem","position":3,"name":"How to return errors from an MCP tool (isError explained)","item":"https://pages.flisk.si/@odykyi/build-an-mcp-server/return-errors-from-an-mcp-tool/"}]},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does isError true mean in an MCP tool result?","acceptedAnswer":{"@type":"Answer","text":"It marks the result as a tool failure while the JSON-RPC call itself succeeded. The content is passed to the model, which can read the message and try again."}},{"@type":"Question","name":"When should an MCP server return a JSON-RPC error instead?","acceptedAnswer":{"@type":"Answer","text":"When the request is wrong at the protocol level, such as an unknown tool or method, or a malformed message. Failures inside a tool belong in an isError result."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/microservices-local-dev/">Microservices</a><a href="/@odykyi/ai-agents-local/">AI agents</a><a href="/@odykyi/local-database-guide/">Databases</a><a href="/@odykyi/dev-env-troubleshooting/">Troubleshooting</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/build-an-mcp-server/">Build your own MCP server</a></div>
+<section class="hero"><div><div class="lbl">Build your own MCP server</div><h1>How to return errors from an MCP tool (isError explained)</h1><p class="dek">A failed tool call should teach the model what to do next. That depends on choosing the right kind of error.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-14</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-two-kinds-of-error">The two kinds of error</a></li><li><a href="#write-the-message-for-the-model">Write the message for the model</a></li><li><a href="#in-typescript">In TypeScript</a></li><li><a href="#in-python">In Python</a></li><li><a href="#check-how-your-server-fails">Check how your server fails</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>MCP has two kinds of failure. A tool that runs and fails should return a normal result with <code>isError: true</code> and a message the model can read. A request that is broken at the protocol level, such as an unknown tool or a malformed message, produces a JSON-RPC error. Use the first for anything the model can fix by trying again differently, because the model never sees a protocol error as conversation text.</p>
+<h2 id="the-two-kinds-of-error">The two kinds of error</h2>
+<p><strong>Protocol errors</strong> are JSON-RPC error responses with a numeric code, for example <code>-32601</code> for an unknown method or <code>-32602</code> for invalid parameters. They mean the request itself was wrong. Clients generally treat them as a failure of the connection or of the call, not as content for the model to reason about.</p>
+<p><strong>Tool execution errors</strong> are successful JSON-RPC responses whose result has <code>isError: true</code> and the explanation in <code>content</code>. The specification describes this form for failures inside a tool, such as an API returning 404 or a business rule being violated. Clients pass this content to the model, which can then retry with different arguments or explain the problem to the user.</p>
+<pre><code>{
+  "jsonrpc": "2.0",
+  "id": 7,
+  "result": {
+    "isError": true,
+    "content": [
+      { "type": "text", "text": "No order with id 8812. Order ids look like ORD-1234. Use search_orders to find one." }
+    ]
+  }
+}</code></pre>
+<h2 id="write-the-message-for-the-model">Write the message for the model</h2>
+<p>A good error text states what went wrong, what a valid input looks like, and what to try next. Compare "Error" with the message above. The second one lets the model fix its own mistake in the next call without bothering the user. Keep it short, and leave out stack traces, file paths, SQL and secrets.</p>
+<h2 id="in-typescript">In TypeScript</h2>
+<p>Return the error result yourself for failures you expect. If the handler throws, the SDK catches the exception and reports it as a tool error rather than crashing, but the text it sends is the exception message, so do not rely on that for anything you care about wording.</p>
+<pre><code>server.registerTool(
+  'get_order',
+  { description: 'Get one order by id', inputSchema: { id: z.string() } },
+  async ({ id }) =&gt; {
+    const order = await db.getOrder(id);
+    if (!order) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `No order with id ${id}. Use search_orders to find ids.` }],
+      };
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(order) }] };
+  }
+);</code></pre>
+<h2 id="in-python">In Python</h2>
+<p>In FastMCP, raising an exception inside a tool function produces an error result for the client. The exception message becomes the text, so raise with a message written for the model.</p>
+<pre><code>@mcp.tool()
+def get_order(id: str) -&gt; dict:
+    """Get one order by id."""
+    order = db.get_order(id)
+    if order is None:
+        raise ValueError(f"No order with id {id}. Use search_orders to find ids.")
+    return order</code></pre>
+<p>Lower-level server code in the Python SDK can build the result itself, but check your SDK version's documentation for the exact shape. The pattern is the same: failure goes in the result, marked as an error.</p>
+<h2 id="check-how-your-server-fails">Check how your server fails</h2>
+<p>Do not assume. Call the tool with an input that should fail, and read the raw result. With the HTTP transport you can do it with <code>curl</code>, as in the <a href="/@odykyi/mcp-local-dev/streamable-http-mcp-endpoint/">Streamable HTTP endpoint guide</a>. If the server is a Flisk resource, <code>flisk mcp check &lt;resource&gt; --call</code> does a simpler version of this for you. It calls every tool once with generated sample arguments and marks a tool as failed when the call returns <code>isError: true</code>, has no content, or gets a protocol error. Its sample arguments are valid ones, so it tests the happy path only: you still need your own bad-input checks. The same command also confirms that an unknown method returns <code>-32601</code> and that a body that is not JSON gets HTTP 400.</p>
+<h2 id="pitfalls">Pitfalls</h2>
+<ul>
+<li><strong>Returning success with an error message in the text.</strong> The model sees "Error: not found" and may treat it as data. Set <code>isError</code> so the client knows.</li>
+<li><strong>Retry loops.</strong> If an error message always suggests the same failing call, a model can repeat it. Say what to change.</li>
+<li><strong>Leaking internals.</strong> An exception message from a database driver can include table names or credentials. Catch it and write your own text.</li>
+<li><strong>Using errors for empty results.</strong> A search with no matches is a successful call with an empty list, not an error.</li>
+</ul>
+<p>With errors handled, you can test failure paths automatically. <a href="/@odykyi/build-an-mcp-server/write-automated-tests-for-an-mcp-server/">Writing automated tests for an MCP server</a> shows an in-memory client that makes this cheap.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does isError true mean in an MCP tool result?</summary><p>It marks the result as a tool failure while the JSON-RPC call itself succeeded. The content is passed to the model, which can read the message and try again.</p></details><details><summary>When should an MCP server return a JSON-RPC error instead?</summary><p>When the request is wrong at the protocol level, such as an unknown tool or method, or a malformed message. Failures inside a tool belong in an isError result.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on your laptop</div><h3>One command starts a working multi-service app.</h3><p>Flisk is an open-source (MIT) CLI that runs your services, databases, queues and agents locally from one <code>service.json</code> per service.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Star on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Build your own MCP server</span></div>
+<div class="rgrid"><a href="/@odykyi/build-an-mcp-server/validate-mcp-tool-arguments/"><span class="lbl">Guide</span><b>How to validate MCP tool arguments with Zod or Pydantic</b><span>A model can send the wrong type, a missing field or a huge limit. Put the rules in the schema and keep the data-dependent checks in the tool.</span></a><a href="/@odykyi/build-an-mcp-server/write-automated-tests-for-an-mcp-server/"><span class="lbl">Guide</span><b>How to write automated tests for an MCP server</b><span>A server that only works when an assistant happens to call it is hard to trust. Three kinds of tests keep it honest.</span></a><a href="/@odykyi/build-an-mcp-server/design-mcp-tool-names-and-descriptions/"><span class="lbl">Guide</span><b>How to design MCP tools an AI model can call correctly</b><span>A model chooses tools by reading text. The name, description and schema are the entire interface, so design them with the same care as a public API.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">40 topics</span></div><div class="rgrid"><a href="/@odykyi/search-and-storage-local/"><span class="lbl">Topic 25</span><b>Search, files and object storage locally</b><span>Run search engines, S3-compatible storage and file services on a laptop for development and tests.</span></a><a href="/@odykyi/auth-local-dev/"><span class="lbl">Topic 26</span><b>Authentication in local development</b><span>OAuth callbacks, sessions, JWTs and identity providers on localhost, without breaking cookies or redirects.</span></a><a href="/@odykyi/payments-and-webhooks/"><span class="lbl">Topic 27</span><b>Payments and webhooks locally</b><span>Test payment flows, webhook signatures, retries and idempotency on your laptop before anything touches production.</span></a><a href="/@odykyi/email-and-notifications-local/"><span class="lbl">Topic 28</span><b>Email and notifications in local dev</b><span>Catch outgoing email, preview templates and test notifications locally without sending anything to real people.</span></a><a href="/@odykyi/observability-local/"><span class="lbl">Topic 29</span><b>Logs, traces and metrics locally</b><span>See what a multi-service app does on your laptop: structured logs, OpenTelemetry traces, metrics and dashboards.</span></a><a href="/@odykyi/ci-for-multi-service-apps/"><span class="lbl">Topic 30</span><b>CI for multi-service apps</b><span>Run the whole stack in CI: service containers, health waits, caching, test splits and keeping CI close to local.</span></a><a href="/@odykyi/laptop-to-production/"><span class="lbl">Topic 31</span><b>From laptop to production</b><span>Take an app that runs locally to a host: what changes, what to keep the same, and how to avoid surprises on the first deploy.</span></a><a href="/@odykyi/saas-architecture-local/"><span class="lbl">Topic 32</span><b>Build a SaaS app locally</b><span>The parts most SaaS apps need, from auth and billing to a database, jobs and email, and how to run them together while you build.</span></a><a href="/@odykyi/ecommerce-backend-local/"><span class="lbl">Topic 33</span><b>E-commerce backends locally</b><span>Orders, inventory, carts and payments as services on one laptop, with realistic data and the flows you need to test.</span></a></div>
+<footer><span>Flisk guides. Written for developers running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
