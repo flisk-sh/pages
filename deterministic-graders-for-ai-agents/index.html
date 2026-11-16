@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Deterministic graders for AI agents: check the work, not the words</title>
+<meta name="description" content="Grade agents with code: database state, files, tool-call logs, schemas and regex. Faster, cheaper and more stable than asking another model.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-evals-and-testing/deterministic-graders-for-ai-agents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Deterministic graders for AI agents: check the work, not the words">
+<meta property="og:description" content="Grade agents with code: database state, files, tool-call logs, schemas and regex. Faster, cheaper and more stable than asking another model.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-evals-and-testing/deterministic-graders-for-ai-agents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Deterministic graders for AI agents: check the work, not the words","description":"Grade agents with code: database state, files, tool-call logs, schemas and regex. Faster, cheaper and more stable than asking another model.","url":"https://pages.flisk.si/@odykyi/agent-evals-and-testing/deterministic-graders-for-ai-agents/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Testing and evaluating AI agents","url":"https://pages.flisk.si/@odykyi/agent-evals-and-testing/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What if the right answer has many valid forms?","acceptedAnswer":{"@type":"Answer","text":"Grade the effect rather than the text. Check the state change or the key fact, and allow any phrasing around it."}},{"@type":"Question","name":"Are deterministic graders enough on their own?","acceptedAnswer":{"@type":"Answer","text":"For many agents, yes. Use a model grader only for qualities like tone or clarity, and keep a human-checked sample to verify it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-evals-and-testing/">Testing and evaluating AI agents</a></div>
+<section class="hero"><div><div class="lbl">Testing and evaluating AI agents</div><h1>Deterministic graders for AI agents: check the work, not the words</h1><p class="dek">Grade agents with code: database state, files, tool-call logs, schemas and regex. Faster, cheaper and more stable than asking another model.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#grade-the-state-not-the-story">Grade the state, not the story</a></li><li><a href="#grade-the-tool-calls">Grade the tool calls</a></li><li><a href="#validate-output-shape">Validate output shape</a></li><li><a href="#use-text-checks-carefully">Use text checks carefully</a></li><li><a href="#combine-graders-into-one-score">Combine graders into one score</a></li></ol></nav></aside>
+<article><p>The best grader for an agent is a function that inspects what the agent did and returns pass or fail. Check final state (database rows, files on disk), the sequence of tool calls, output schemas and a few key phrases. These checks are free to run, repeatable and cannot be talked into a pass.</p>
+
+<h2 id="grade-the-state-not-the-story">Grade the state, not the story</h2>
+<p>An agent can say "done, I created the record" and be wrong. Look at the system the agent was meant to change. After a run, query the database or read the files, then assert on them.</p><pre><code>def grade_refund(db, case):
+    row = db.execute(
+        "SELECT status FROM orders WHERE id = ?", (case["order_id"],)
+    ).fetchone()
+    return row is not None and row[0] == "refunded"</code></pre><p>This also catches the reverse mistake: an agent that changed something it should not have. Add a check that unrelated rows are untouched.</p>
+
+<h2 id="grade-the-tool-calls">Grade the tool calls</h2>
+<p>Record every tool call with its arguments during the run. Then assert on that list. See <a href="/@odykyi/agent-evals-and-testing/how-to-test-agent-tool-calls-and-trajectories/">testing tool calls and trajectories</a> for deeper patterns.</p><pre><code>def called(trace, name, **args):
+    return any(
+        c["tool"] == name and all(c["args"].get(k) == v for k, v in args.items())
+        for c in trace
+    )
+
+assert called(trace, "refund_order", order_id="4821")
+assert not called(trace, "delete_customer")</code></pre>
+
+<h2 id="validate-output-shape">Validate output shape</h2>
+<p>When an agent returns JSON, validate it against a schema. A JSON Schema library gives you a clear error list. Check required fields, types and allowed values. A well-formed answer with the wrong enum value is a real failure that no human would spot while skimming.</p>
+
+<h2 id="use-text-checks-carefully">Use text checks carefully</h2>
+<p>Regex and substring checks are fine for facts that must appear: an order number, a date, a URL. They are brittle for wording. Normalize case and whitespace, and check for the fact, not the sentence. If you find yourself writing a long regex to catch "polite refusal", that is a sign you need a model-based grader for that one case.</p>
+
+<h2 id="combine-graders-into-one-score">Combine graders into one score</h2>
+<p>Give each case a list of checks and report the fraction that passed, plus a hard fail if any critical check fails. Keep the scoring code in the repo, versioned with the cases. Then the number means the same thing next month. A score that code computes can be used as a CI gate, as shown in <a href="/@odykyi/agent-evals-and-testing/run-agent-regression-tests-in-github-actions/">running agent regression tests in GitHub Actions</a>. When you do need a judge for a fuzzy check, apply the cautions in <a href="/@odykyi/agent-evals-and-testing/llm-as-judge-pitfalls-and-how-to-avoid-them/">LLM-as-judge pitfalls</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What if the right answer has many valid forms?</summary><p>Grade the effect rather than the text. Check the state change or the key fact, and allow any phrasing around it.</p></details><details><summary>Are deterministic graders enough on their own?</summary><p>For many agents, yes. Use a model grader only for qualities like tone or clarity, and keep a human-checked sample to verify it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Let a model propose changes, and a deterministic score decide.</h3><p>GEL is Flisk's approach and tooling for CI guards, evals and nightly loops. Read how it works, then adapt the idea to your own repo.</p></div><div class="btns"><a class="btn primary" href="https://gel.flisk.si">Explore GEL</a><a class="btn" href="https://github.com/flisk-sh/gel">GEL on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Testing and evaluating AI agents</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-evals-and-testing/build-a-golden-dataset-for-agent-evals-from-logs/"><span class="lbl">Guide</span><b>Build a golden dataset for agent evals from your logs</b><span>Collect real agent conversations, remove personal data, label the outcome and freeze a versioned test set that you can run on every change.</span></a><a href="/@odykyi/agent-evals-and-testing/run-agent-regression-tests-in-github-actions/"><span class="lbl">Guide</span><b>How to run agent regression tests in GitHub Actions</b><span>Run a fast eval suite on every pull request, cache what you can, keep API costs bounded, and fail the build when the score drops below your baseline.</span></a><a href="/@odykyi/agent-evals-and-testing/how-to-test-agent-tool-calls-and-trajectories/"><span class="lbl">Guide</span><b>How to test agent tool calls and trajectories</b><span>Record every tool call, then assert on which tools ran, in what order, with what arguments, and how many steps it took. Catch wrong paths that still produce a fine answer.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
