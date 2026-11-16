@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Assign Owners to Repos and Workflows</title>
+<meta name="description" content="A red workflow nobody owns stays red. Use CODEOWNERS, repository topics and a small registry file so every failure has a team name next to it.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-assign-ownership-for-repos-and-workflows/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Assign Owners to Repos and Workflows">
+<meta property="og:description" content="A red workflow nobody owns stays red. Use CODEOWNERS, repository topics and a small registry file so every failure has a team name next to it.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-assign-ownership-for-repos-and-workflows/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Assign Owners to Repos and Workflows","description":"A red workflow nobody owns stays red. Use CODEOWNERS, repository topics and a small registry file so every failure has a team name next to it.","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-assign-ownership-for-repos-and-workflows/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Org-Wide CI Visibility","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is CODEOWNERS enough?","acceptedAnswer":{"@type":"Answer","text":"It works for review routing, but its syntax is awkward to query across repos. A central registry or topics are easier to report on."}},{"@type":"Question","name":"Who owns shared workflows?","acceptedAnswer":{"@type":"Answer","text":"The team that maintains the reusable workflow repository. Callers still own their own failing runs."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/org-wide-ci-visibility/">Org-Wide CI Visibility</a></div>
+<section class="hero"><div><div class="lbl">Org-Wide CI Visibility</div><h1>How to Assign Owners to Repos and Workflows</h1><p class="dek">A red workflow nobody owns stays red. Use CODEOWNERS, repository topics and a small registry file so every failure has a team name next to it.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#owners-are-teams-not-people">Owners are teams, not people</a></li><li><a href="#three-places-to-record-it">Three places to record it</a></li><li><a href="#a-minimal-registry">A minimal registry</a></li><li><a href="#read-topics-from-the-cli">Read topics from the CLI</a></li><li><a href="#decide-what-happens-to-orphans">Decide what happens to orphans</a></li><li><a href="#keeping-ownership-current">Keeping ownership current</a></li></ol></nav></aside>
+<article><p>Give every repository one owning team in a single place and look it up when you report a failure. Visibility without ownership produces dashboards everyone reads and nobody acts on.</p>
+
+<h2 id="owners-are-teams-not-people">Owners are teams, not people</h2>
+<p>People leave and change teams. Name a team with a group mailbox or channel instead. If a repository has no owner, that is itself a finding worth listing, and an honest one to show in your weekly review.</p>
+
+<h2 id="three-places-to-record-it">Three places to record it</h2>
+<ul><li><strong>CODEOWNERS:</strong> the catch-all line <code>* @your-org/team-name</code> names a default owning team for the whole repository and routes reviews.</li><li><strong>Repository topics:</strong> a topic such as <code>team-payments</code> is searchable from the org page and the API.</li><li><strong>A registry file:</strong> one YAML file in a central repo mapping repository to team, plus a channel for alerts.</li></ul><p>Pick one as the source of truth and generate the others if you need them.</p>
+
+<h2 id="a-minimal-registry">A minimal registry</h2>
+<pre><code># owners.yaml
+repos:
+  payments-api:
+    team: payments
+    channel: '#payments-ci'
+  web-app:
+    team: frontend
+    channel: '#frontend-ci'</code></pre><p>The report script reads this file and appends the team to each red or flaky workflow. Unlisted repos are printed under an "unowned" heading.</p>
+
+<h2 id="read-topics-from-the-cli">Read topics from the CLI</h2>
+<pre><code>gh repo list your-org --limit 300 --json name,repositoryTopics \
+  --jq '.[] | "\(.name)\t\([.repositoryTopics[]?.name] | join(","))"'</code></pre><p>Combine this with the red list from <a href='/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/'>listing red workflows</a> so each line carries its owner.</p>
+
+<h2 id="decide-what-happens-to-orphans">Decide what happens to orphans</h2>
+<p>Set a rule: a repository with no owner and no activity for a period is archived; one with activity gets an owner assigned in the weekly review. See <a href='/@odykyi/org-wide-ci-visibility/how-to-run-a-weekly-ci-review/'>running a weekly CI review</a> for the meeting that enforces it.</p>
+
+<h2 id="keeping-ownership-current">Keeping ownership current</h2>
+<p>Ownership data rots when teams reorganise. Add a check that fails when a repository is missing from the registry, or lists a team that no longer exists. Run it weekly and post the output to the same channel as the CI report, so stale owners are visible without anyone having to look.</p><p>Make the registry cheap to update. A pull request that changes one line should be enough, and the team that takes a repository over should be the one to change it. Do not centralise approval; the point is to keep the file true, not to control it.</p><p>When a team is renamed or dissolved, search CODEOWNERS files across the org for the old name. <code>gh search code</code> can find them, though search results can be incomplete on large orgs, so confirm with a local clone for important repos. Treat a failing CI report for an unowned repository as the signal to fix the registry, not the build. Ownership first, then repair.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is CODEOWNERS enough?</summary><p>It works for review routing, but its syntax is awkward to query across repos. A central registry or topics are easier to report on.</p></details><details><summary>Who owns shared workflows?</summary><p>The team that maintains the reusable workflow repository. Callers still own their own failing runs.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>See your whole org&#39;s CI on one page.</h3><p>Cilytics is a public CI health dashboard for GitHub. No account needed. Add <code>?repo=owner/name</code> to scan any public repository.</p></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://pages.flisk.si">Publish a CI report</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Org-Wide CI Visibility</span></div>
+<div class="rgrid"><a href="/@odykyi/org-wide-ci-visibility/how-to-run-a-weekly-ci-review/"><span class="lbl">Guide</span><b>How to Run a Weekly CI Review That Actually Works</b><span>A 20-minute agenda, three lists to bring and a few rules that keep the review focused on owners and next steps instead of becoming a complaint session.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-ignore-stale-repos-in-ci-dashboards/"><span class="lbl">Guide</span><b>How to Ignore Stale Repos in a CI Dashboard</b><span>Archived and inactive repositories add noise to CI numbers. Filter them by last push date and archive status with one command and report what you left out.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-build-a-ci-dashboard-with-github-actions/"><span class="lbl">Guide</span><b>How to Build a CI Dashboard With GitHub Actions and a Static Page</b><span>Run a scheduled workflow that collects run data, writes a JSON file and publishes a small page your whole team can open.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

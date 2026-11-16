@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Find Flaky Workflows Across Many Repositories</title>
+<meta name="description" content="Count how often a workflow flips between pass and fail on the default branch and rank the worst, with a script you can run today.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-find-flaky-workflows-across-repos/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Find Flaky Workflows Across Many Repositories">
+<meta property="og:description" content="Count how often a workflow flips between pass and fail on the default branch and rank the worst, with a script you can run today.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-find-flaky-workflows-across-repos/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Find Flaky Workflows Across Many Repositories","description":"Count how often a workflow flips between pass and fail on the default branch and rank the worst, with a script you can run today.","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-find-flaky-workflows-across-repos/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Org-Wide CI Visibility","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many runs do I need?","acceptedAnswer":{"@type":"Answer","text":"At least a few dozen. With too few runs a normal fix looks like a flip and a flaky workflow looks stable."}},{"@type":"Question","name":"Does rerun count as a flip?","acceptedAnswer":{"@type":"Answer","text":"A pass after a rerun of the same commit is the clearest sign of flakiness, and it also appears as a transition when you order results by time."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/org-wide-ci-visibility/">Org-Wide CI Visibility</a></div>
+<section class="hero"><div><div class="lbl">Org-Wide CI Visibility</div><h1>How to Find Flaky Workflows Across Many Repositories</h1><p class="dek">Count how often a workflow flips between pass and fail on the default branch and rank the worst, with a script you can run today.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-count-flips">Why count flips</a></li><li><a href="#the-script">The script</a></li><li><a href="#confirm-with-reruns">Confirm with reruns</a></li><li><a href="#rank-by-cost">Rank by cost</a></li><li><a href="#or-use-a-dashboard">Or use a dashboard</a></li><li><a href="#acting-on-the-list">Acting on the list</a></li></ol></nav></aside>
+<article><p>A flaky workflow flips between pass and fail without a code fix in between. Count the flips in each workflow's recent default-branch runs, and any workflow with three or more flips in its last 100 runs is a good first candidate.</p>
+
+<h2 id="why-count-flips">Why count flips</h2>
+<p>A simple failure rate cannot tell a broken workflow from a flaky one. A workflow that has failed ten times in a row is broken. One that passes, fails, passes, fails is flaky. Counting transitions between pass and fail, in time order, separates them.</p>
+
+<h2 id="the-script">The script</h2>
+<pre><code>gh run list -R your-org/your-repo --branch main --limit 100 \
+  --json workflowName,conclusion,createdAt \
+  | jq -r '
+    map(select(.conclusion=="success" or .conclusion=="failure"))
+    | group_by(.workflowName)[]
+    | sort_by(.createdAt)
+    | {w: .[0].workflowName, c: map(.conclusion)}
+    | .flips = ([range(1; .c|length) | select(.c[.] != .c[.-1])] | length)
+    | select(.flips &gt;= 3)
+    | "\(.w)\t\(.flips)"'</code></pre><p>The threshold of three flips in 100 runs is a reasonable starting point. Lower it if your repos run rarely.</p>
+
+<h2 id="confirm-with-reruns">Confirm with reruns</h2>
+<p>A flip can be a real fix followed by a real new bug. To confirm flakiness, look for the same commit with different outcomes. If a run failed and a rerun of the same commit passed, that is flaky by definition.</p><pre><code>gh run list -R your-org/your-repo --json headSha,conclusion,workflowName,attempt \
+  --limit 100</code></pre><p>Group by <code>headSha</code> and workflow and look for mixed results.</p>
+
+<h2 id="rank-by-cost">Rank by cost</h2>
+<p>Fix first the flaky workflows that run most often and block the most people. A flaky check on every pull request outranks a flaky nightly job. Quarantine a flaky test with a tag so it stops blocking while someone fixes it, and give the quarantine an owner and a deadline. The causes and fixes are in <a href='/@odykyi/flaky-tests-and-ci/'>flaky tests and CI</a>.</p>
+
+<h2 id="or-use-a-dashboard">Or use a dashboard</h2>
+<p><a href='https://cilytics.flisk.si'>Cilytics</a> flags a workflow as flaky when it flipped between pass and fail at least 3 times in the last 100 default-branch runs, and lists them for the whole org or a public repo via <code>?repo=owner/name</code>. As with any hourly snapshot of 100 runs, rarely run workflows may not show enough history to be flagged.</p>
+
+<h2 id="acting-on-the-list">Acting on the list</h2>
+<p>Take the top three and assign each to an owner with a date. For each, read the failing logs from three failed runs and look for the common cause. The usual suspects are timing assumptions, tests that depend on order, shared state between tests, external network calls, and runners that run out of memory or disk.</p><p>Fixes fall into a few buckets. Remove the dependency on time or network by using fakes. Isolate state so tests can run in any order. Add a retry only at the level of a known-unreliable operation, never around the whole job, because blanket retries hide real regressions and make runs slower. If you cannot fix it quickly, quarantine the test: move it to a non-required job that still runs and reports.</p><p>After the fix, watch the flip count for a week. The number should go to zero. If it does not, you fixed a symptom. Keep a short log of what you found, because the same causes tend to repeat across repos, and the log becomes your checklist.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many runs do I need?</summary><p>At least a few dozen. With too few runs a normal fix looks like a flip and a flaky workflow looks stable.</p></details><details><summary>Does rerun count as a flip?</summary><p>A pass after a rerun of the same commit is the clearest sign of flakiness, and it also appears as a transition when you order results by time.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>See your whole org&#39;s CI on one page.</h3><p>Cilytics is a public CI health dashboard for GitHub. No account needed. Add <code>?repo=owner/name</code> to scan any public repository.</p></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://pages.flisk.si">Publish a CI report</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Org-Wide CI Visibility</span></div>
+<div class="rgrid"><a href="/@odykyi/org-wide-ci-visibility/how-to-find-slow-github-actions-workflows/"><span class="lbl">Guide</span><b>How to Find Slow GitHub Actions Workflows (Median and p90)</b><span>Compute median and p90 run time per workflow from the GitHub API, rank by total wait, and learn why p90 matters more than the average for developers.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-compute-pass-rate-per-repo-with-the-github-api/"><span class="lbl">Guide</span><b>How to Compute CI Pass Rate Per Repo With the GitHub API</b><span>What counts as a pass, which runs to exclude and a script that gives each repository a pass rate over its last 100 runs.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-assign-ownership-for-repos-and-workflows/"><span class="lbl">Guide</span><b>How to Assign Owners to Repos and Workflows</b><span>A red workflow nobody owns stays red. Use CODEOWNERS, repository topics and a small registry file so every failure has a team name next to it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

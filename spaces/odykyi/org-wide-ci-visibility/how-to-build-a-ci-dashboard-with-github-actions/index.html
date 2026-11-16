@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Build a CI Dashboard With GitHub Actions and a Static Page</title>
+<meta name="description" content="Run a scheduled workflow that collects run data, writes a JSON file and publishes a small page your whole team can open.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-build-a-ci-dashboard-with-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Build a CI Dashboard With GitHub Actions and a Static Page">
+<meta property="og:description" content="Run a scheduled workflow that collects run data, writes a JSON file and publishes a small page your whole team can open.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-build-a-ci-dashboard-with-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Build a CI Dashboard With GitHub Actions and a Static Page","description":"Run a scheduled workflow that collects run data, writes a JSON file and publishes a small page your whole team can open.","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-build-a-ci-dashboard-with-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Org-Wide CI Visibility","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How often should the workflow run?","acceptedAnswer":{"@type":"Answer","text":"Hourly is plenty for trends. Scheduled workflows can be delayed by GitHub under load, so do not depend on exact times."}},{"@type":"Question","name":"Can the default GITHUB_TOKEN read other repos?","acceptedAnswer":{"@type":"Answer","text":"Not private ones. Use a fine-grained token or app installation with read access to Actions on the repositories you need."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/org-wide-ci-visibility/">Org-Wide CI Visibility</a></div>
+<section class="hero"><div><div class="lbl">Org-Wide CI Visibility</div><h1>How to Build a CI Dashboard With GitHub Actions and a Static Page</h1><p class="dek">Run a scheduled workflow that collects run data, writes a JSON file and publishes a small page your whole team can open.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-pieces">The pieces</a></li><li><a href="#the-scheduled-workflow">The scheduled workflow</a></li><li><a href="#publish-the-page">Publish the page</a></li><li><a href="#keep-the-page-honest">Keep the page honest</a></li><li><a href="#when-not-to-build-it">When not to build it</a></li><li><a href="#storing-history">Storing history</a></li></ol></nav></aside>
+<article><p>Use a scheduled workflow to collect run data with the GitHub CLI, write it to a JSON file and a simple HTML page, and publish the result. It needs no server, and a nightly or hourly schedule is enough.</p>
+
+<h2 id="the-pieces">The pieces</h2>
+<ul><li>A collector script using <code>gh</code> and <code>jq</code>.</li><li>A scheduled workflow that runs it.</li><li>A static page that reads the JSON and draws tables.</li><li>A place to publish it.</li></ul><p>The scripts from <a href='/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/'>listing red workflows</a> and <a href='/@odykyi/org-wide-ci-visibility/how-to-find-slow-github-actions-workflows/'>finding slow workflows</a> are the building blocks.</p>
+
+<h2 id="the-scheduled-workflow">The scheduled workflow</h2>
+<pre><code>name: ci-report
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ secrets.ORG_READ_TOKEN }}
+        run: bash scripts/collect.sh &gt; report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: report.json</code></pre><p>The default workflow token only sees its own repository, so you need a token with read access to Actions across the org. Store it as a secret and give it the minimum scope.</p>
+
+<h2 id="publish-the-page">Publish the page</h2>
+<p>GitHub Pages can serve the output from the same repository. For a quick public link to a generated HTML or Markdown report, you can also use <a href='https://pages.flisk.si'>Pages</a> from Flisk, which publishes a page to a free public link with <code>npx -y @flisk-sh/pages publish page.html --wait</code>. Pages are public, so do not publish private repository names or data that way.</p>
+
+<h2 id="keep-the-page-honest">Keep the page honest</h2>
+<ul><li>Show the time of the last update at the top.</li><li>State the window, such as the last 100 default-branch runs.</li><li>List what was excluded, like archived or inactive repos.</li><li>Link each red workflow to its latest run.</li></ul><p>These four lines prevent most arguments about whether a number is right.</p>
+
+<h2 id="when-not-to-build-it">When not to build it</h2>
+<p>If a public view of public repositories is enough, a ready-made dashboard saves the maintenance. If you need private repos, custom metrics or alerts, building your own is justified. See <a href='/@odykyi/org-wide-ci-visibility/cilytics-vs-building-your-own-ci-dashboard/'>Cilytics vs building your own</a>.</p>
+
+<h2 id="storing-history">Storing history</h2>
+<p>The API only gives you the most recent runs, so a dashboard built on it forgets older data. If you want to see a trend over months, store each snapshot. The simplest way is to commit the JSON to a data branch on every run, with the date in the file name. A branch of small JSON files is cheap and easy to diff.</p><pre><code>git config user.name ci-report
+git config user.email ci-report@users.noreply.github.com
+git add data/$(date -u +%F).json
+git commit -m 'ci snapshot' &amp;&amp; git push origin HEAD:data</code></pre><p>The page can then read the last 30 snapshots and draw the pass-rate trend. Keep the format stable and add a version field so old files stay readable when you add columns.</p><p>Give the job a concurrency group so two overlapping runs do not both push, and handle the case where there is nothing new to commit. Both are easy to forget and easy to fix, but both will page you at the worst time if you do not.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How often should the workflow run?</summary><p>Hourly is plenty for trends. Scheduled workflows can be delayed by GitHub under load, so do not depend on exact times.</p></details><details><summary>Can the default GITHUB_TOKEN read other repos?</summary><p>Not private ones. Use a fine-grained token or app installation with read access to Actions on the repositories you need.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>See your whole org&#39;s CI on one page.</h3><p>Cilytics is a public CI health dashboard for GitHub. No account needed. Add <code>?repo=owner/name</code> to scan any public repository.</p></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://pages.flisk.si">Publish a CI report</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Org-Wide CI Visibility</span></div>
+<div class="rgrid"><a href="/@odykyi/org-wide-ci-visibility/cilytics-vs-building-your-own-ci-dashboard/"><span class="lbl">Guide</span><b>Cilytics vs Building Your Own CI Dashboard: How to Choose</b><span>An honest comparison of a free public CI dashboard and a custom one, with the limits of each and the cases where building your own is the right call.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-see-ci-health-across-all-repos-in-an-org/"><span class="lbl">Guide</span><b>How to See CI Health Across All Repos in a GitHub Org</b><span>Three ways to get one view of every repository&#39;s CI: scripts with the GitHub CLI, a scheduled report, or a ready-made dashboard.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/"><span class="lbl">Guide</span><b>How to List Failing (Red) Workflows With the gh CLI</b><span>A short script that finds every workflow whose latest default-branch run failed, across one repo or a whole organisation.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
