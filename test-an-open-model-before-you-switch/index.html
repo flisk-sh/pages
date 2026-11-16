@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test an open model against your current one before switching</title>
+<meta name="description" content="Build a small test set from real prompts, run both models, and compare with checks that do not depend on a model grading itself. A practical process with code.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/self-hosting-open-models/test-an-open-model-before-you-switch/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test an open model against your current one before switching">
+<meta property="og:description" content="Build a small test set from real prompts, run both models, and compare with checks that do not depend on a model grading itself. A practical process with code.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/self-hosting-open-models/test-an-open-model-before-you-switch/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test an open model against your current one before switching","description":"Build a small test set from real prompts, run both models, and compare with checks that do not depend on a model grading itself. A practical process with code.","url":"https://pages.flisk.si/@odykyi/self-hosting-open-models/test-an-open-model-before-you-switch/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Open models and self-hosted inference","url":"https://pages.flisk.si/@odykyi/self-hosting-open-models/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many test cases do I need?","acceptedAnswer":{"@type":"Answer","text":"Thirty to a hundred real cases is enough to show large differences. More cases help you see smaller ones."}},{"@type":"Question","name":"Why set temperature to 0?","acceptedAnswer":{"@type":"Answer","text":"It makes outputs as repeatable as the server allows, which helps comparisons. Some servers still vary slightly, so run important cases more than once."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/self-hosting-open-models/">Open models and self-hosted inference</a></div>
+<section class="hero"><div><div class="lbl">Open models and self-hosted inference</div><h1>How to test an open model against your current one before switching</h1><p class="dek">Build a small test set from real prompts, run both models, and compare with checks that do not depend on a model grading itself. A practical process with code.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#build-the-test-set">Build the test set</a></li><li><a href="#run-both-models-with-the-same-client">Run both models with the same client</a></li><li><a href="#score-without-a-judge-model-where-possible">Score without a judge model where possible</a></li><li><a href="#compare-more-than-accuracy">Compare more than accuracy</a></li><li><a href="#roll-out-safely">Roll out safely</a></li></ol></nav></aside>
+<article><p>Collect 30 to 100 real prompts, run them through both models, and score the answers with deterministic checks where you can and human review where you cannot. Switch only if the new model passes on your tasks, at a latency and cost you accept.</p>
+
+<h2 id="build-the-test-set">Build the test set</h2>
+<p>Take real inputs from your logs or your own use, with personal data removed. Cover the common cases, the hard cases and a few that should be refused. Store each as a line in a file:</p><pre><code>{"id": "inv-01", "prompt": "Extract the total from: ...", "expect": "142.50"}
+{"id": "inv-02", "prompt": "Extract the total from: ...", "expect": "89.00"}</code></pre><p>Keep the set in version control next to your prompts. It becomes the regression suite for every future change, and it is the most valuable artifact in this whole exercise.</p>
+
+<h2 id="run-both-models-with-the-same-client">Run both models with the same client</h2>
+<p>If both serve an OpenAI-compatible API (<a href="/@odykyi/self-hosting-open-models/serve-an-open-model-with-an-openai-compatible-api/">how to serve one</a>), one script covers both:</p><pre><code>import json, time
+from openai import OpenAI
+
+models = {
+  "current": (OpenAI(), "&lt;current-model&gt;"),
+  "candidate": (OpenAI(base_url="http://localhost:11434/v1", api_key="x"), "llama3.2"),
+}
+rows = [json.loads(l) for l in open("cases.jsonl")]
+for name, (client, model) in models.items():
+    ok, secs = 0, 0.0
+    for c in rows:
+        t = time.time()
+        out = client.chat.completions.create(
+            model=model, temperature=0,
+            messages=[{"role": "user", "content": c["prompt"]}],
+        ).choices[0].message.content
+        secs += time.time() - t
+        ok += c["expect"] in out
+    print(name, f"{ok}/{len(rows)} passed, {secs/len(rows):.2f}s avg")</code></pre>
+
+<h2 id="score-without-a-judge-model-where-possible">Score without a judge model where possible</h2>
+<p>Exact match, contains, valid JSON against a schema, code that compiles and passes tests: these are cheap and repeatable. For open-ended answers, read a sample yourself. Using one model to grade another can work as a screen but has its own biases. See <a href="/@odykyi/agent-evals-and-testing/">testing and evaluating AI agents</a>.</p><p>When two models tie on accuracy, look at the failures. A model that fails by saying "I do not know" is safer than one that fails by inventing an answer, even if the pass rates match.</p>
+
+<h2 id="compare-more-than-accuracy">Compare more than accuracy</h2>
+<ul><li><strong>Latency</strong> at your real prompt sizes and concurrency.</li><li><strong>Cost</strong>, including idle GPU time.</li><li><strong>Failure modes:</strong> how often is output malformed, cut off, or off-topic?</li><li><strong>Tool use and JSON</strong> if you depend on them.</li></ul>
+
+<h2 id="roll-out-safely">Roll out safely</h2>
+<p>Send a small share of traffic to the new model first, keep the old one as a fallback, and watch the metrics (<a href="/@odykyi/self-hosting-open-models/monitor-a-self-hosted-llm/">monitoring</a>). Rerun the test set whenever you change the model, quantization or prompt, and add each production failure as a new case.</p><p>Record the results of each run in a small table with the date, model, quantization, prompt version and score. After a few runs you can see which changes helped and which only felt like they did.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many test cases do I need?</summary><p>Thirty to a hundred real cases is enough to show large differences. More cases help you see smaller ones.</p></details><details><summary>Why set temperature to 0?</summary><p>It makes outputs as repeatable as the server allows, which helps comparisons. Some servers still vary slightly, so run important cases more than once.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try a hosted open model</div><h3>Call an open model through an API before you buy a GPU.</h3><p>Flisk Inference is a free open-beta model API with Flisk Wolf, a coding-focused open model. Sign in with GitHub. There is a daily request limit and it is beta.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Flisk Inference</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Open models and self-hosted inference</span></div>
+<div class="rgrid"><a href="/@odykyi/self-hosting-open-models/run-an-open-model-locally-with-ollama/"><span class="lbl">Guide</span><b>How to run an open LLM locally with Ollama</b><span>Install Ollama, pull a model, chat with it and call it from code. The shortest path to a local language model, with the commands and the limits.</span></a><a href="/@odykyi/self-hosting-open-models/ollama-vs-vllm-vs-llama-cpp/"><span class="lbl">Guide</span><b>Ollama vs vLLM vs llama.cpp: which should you use?</b><span>Three popular ways to serve open models. What each is built for, how they differ on hardware, concurrency and setup, and a simple rule for choosing.</span></a><a href="/@odykyi/self-hosting-open-models/how-much-vram-do-you-need-for-an-llm/"><span class="lbl">Guide</span><b>How much VRAM do you need to run an LLM?</b><span>A rule of thumb for estimating the memory a model needs from its parameter count and quantization, plus the extra for context, and what to do when it does not fit.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
