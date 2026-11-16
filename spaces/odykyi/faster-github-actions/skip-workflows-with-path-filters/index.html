@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Actions Path Filters: Skip Workflows When Files Did Not Change</title>
+<meta name="description" content="Use paths and paths-ignore to avoid running tests on docs-only changes, and avoid the required-checks trap that leaves pull requests waiting forever.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/faster-github-actions/skip-workflows-with-path-filters/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GitHub Actions Path Filters: Skip Workflows When Files Did Not Change">
+<meta property="og:description" content="Use paths and paths-ignore to avoid running tests on docs-only changes, and avoid the required-checks trap that leaves pull requests waiting forever.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/faster-github-actions/skip-workflows-with-path-filters/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GitHub Actions Path Filters: Skip Workflows When Files Did Not Change","description":"Use paths and paths-ignore to avoid running tests on docs-only changes, and avoid the required-checks trap that leaves pull requests waiting forever.","url":"https://pages.flisk.si/@odykyi/faster-github-actions/skip-workflows-with-path-filters/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Faster GitHub Actions","url":"https://pages.flisk.si/@odykyi/faster-github-actions/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do path filters work for tags?","acceptedAnswer":{"@type":"Answer","text":"No. Path filters are ignored when a workflow runs on a tag push, so use branches for filtered triggers."}},{"@type":"Question","name":"Why is my pull request stuck waiting for a check?","acceptedAnswer":{"@type":"Answer","text":"A required check was skipped by a path filter, so it never reported. Use a gate job as the only required check."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/faster-github-actions/">Faster GitHub Actions</a></div>
+<section class="hero"><div><div class="lbl">Faster GitHub Actions</div><h1>GitHub Actions Path Filters: Skip Workflows When Files Did Not Change</h1><p class="dek">Use paths and paths-ignore to avoid running tests on docs-only changes, and avoid the required-checks trap that leaves pull requests waiting forever.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#basic-usage">Basic usage</a></li><li><a href="#the-required-checks-trap">The required checks trap</a></li><li><a href="#filter-at-the-job-level">Filter at the job level</a></li><li><a href="#a-gate-job-for-required-checks">A gate job for required checks</a></li><li><a href="#test-the-filters">Test the filters</a></li><li><a href="#be-careful-what-you-skip">Be careful what you skip</a></li></ol></nav></aside>
+<article><p>Use <code>paths</code> or <code>paths-ignore</code> under the <code>push</code> and <code>pull_request</code> triggers so a workflow runs only when relevant files change. The catch: a skipped workflow does not report a status, which can block merges if that check is required.</p>
+
+<h2 id="basic-usage">Basic usage</h2>
+<pre><code>on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ci.yml'
+
+# or the opposite
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'</code></pre><p>Always include the workflow file itself in <code>paths</code>, so a change to the pipeline triggers a test of the pipeline.</p>
+
+<h2 id="the-required-checks-trap">The required checks trap</h2>
+<p>If a workflow is skipped by a path filter, its checks stay in a pending state. If that check is marked as required in branch protection, the pull request cannot merge. This is the most common problem with path filters.</p><p>Two workable fixes. First, do not put the path filter on the trigger. Instead, run the workflow always, and decide inside it which jobs to run. Second, add a small always-running gate job that is the only required check.</p>
+
+<h2 id="filter-at-the-job-level">Filter at the job level</h2>
+<p>The <code>dorny/paths-filter</code> action outputs whether files matched, and jobs can use that in <code>if</code>.</p><pre><code>jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.f.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            src:
+              - 'src/**'
+  test:
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo run tests</code></pre><p>Pin third-party actions to a commit SHA if your security policy requires it.</p>
+
+<h2 id="a-gate-job-for-required-checks">A gate job for required checks</h2>
+<pre><code>  ci-ok:
+    if: always()
+    needs: [test, lint]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo '${{ toJSON(needs.*.result) }}' | grep -Eq 'failure|cancelled' &amp;&amp; exit 1 || exit 0</code></pre><p>Mark only <code>ci-ok</code> as required. A skipped dependency counts as a pass, a failed or cancelled one fails the gate. This pattern also helps in a <a href="/@odykyi/monorepo-ci/">monorepo</a>.</p>
+
+<h2 id="test-the-filters">Test the filters</h2>
+<p>Path patterns use glob rules, and mistakes are common. A pattern like <code>src/*</code> matches files directly in <code>src</code>, while <code>src/**</code> matches all nested files. Open a pull request that changes only a docs file and confirm the workflow is skipped. Then change a source file and confirm it runs. Do both before you rely on the filter. Also remember that a filter is evaluated per event, so a pull request that touches many files will run if any file matches.</p>
+
+<h2 id="be-careful-what-you-skip">Be careful what you skip</h2>
+<p>Skipping is only safe if you are sure what depends on what. A change to a shared config, a lockfile or a script can affect everything. List those paths explicitly. When unsure, run the workflow and use a cache instead, as in <a href="/@odykyi/faster-github-actions/cache-dependencies-in-github-actions/">caching dependencies</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do path filters work for tags?</summary><p>No. Path filters are ignored when a workflow runs on a tag push, so use branches for filtered triggers.</p></details><details><summary>Why is my pull request stuck waiting for a check?</summary><p>A required check was skipped by a path filter, so it never reported. Use a gate job as the only required check.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Measure before you tune</div><h3>See which workflows are slow before you change anything.</h3><p>Cilytics is a public CI health dashboard for GitHub. It shows median and p90 run time per workflow, for an org or any public repo. It reads default-branch runs only, from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Faster GitHub Actions</span></div>
+<div class="rgrid"><a href="/@odykyi/faster-github-actions/matrix-builds-and-test-sharding/"><span class="lbl">Guide</span><b>GitHub Actions Matrix Builds and Test Sharding Explained</b><span>Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.</span></a><a href="/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/"><span class="lbl">Guide</span><b>How to Cache Docker Builds in GitHub Actions with Buildx</b><span>Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.</span></a><a href="/@odykyi/faster-github-actions/shallow-checkout-and-smaller-clones/"><span class="lbl">Guide</span><b>Faster Checkout in GitHub Actions: Shallow Clones and Sparse Checkout</b><span>actions/checkout fetches only one commit by default. Learn when to fetch more, how to use sparse checkout for big repos, and how to skip large files and submodules.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

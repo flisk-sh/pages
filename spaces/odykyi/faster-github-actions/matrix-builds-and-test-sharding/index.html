@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitHub Actions Matrix Builds and Test Sharding Explained</title>
+<meta name="description" content="Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/faster-github-actions/matrix-builds-and-test-sharding/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GitHub Actions Matrix Builds and Test Sharding Explained">
+<meta property="og:description" content="Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/faster-github-actions/matrix-builds-and-test-sharding/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GitHub Actions Matrix Builds and Test Sharding Explained","description":"Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.","url":"https://pages.flisk.si/@odykyi/faster-github-actions/matrix-builds-and-test-sharding/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Faster GitHub Actions","url":"https://pages.flisk.si/@odykyi/faster-github-actions/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does a matrix cost more?","acceptedAnswer":{"@type":"Answer","text":"Usually yes in total minutes, because each job repeats setup. It saves wall-clock time, not compute time."}},{"@type":"Question","name":"Should fail-fast be on?","acceptedAnswer":{"@type":"Answer","text":"Leave it on to save minutes when any failure is enough to stop. Turn it off when you want to see every failing combination."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/faster-github-actions/">Faster GitHub Actions</a></div>
+<section class="hero"><div><div class="lbl">Faster GitHub Actions</div><h1>GitHub Actions Matrix Builds and Test Sharding Explained</h1><p class="dek">Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-version-and-os-matrix">A version and OS matrix</a></li><li><a href="#sharding-one-slow-suite">Sharding one slow suite</a></li><li><a href="#where-matrices-cost-you">Where matrices cost you</a></li><li><a href="#trim-the-matrix">Trim the matrix</a></li><li><a href="#balance-the-shards">Balance the shards</a></li><li><a href="#merge-results-for-required-checks">Merge results for required checks</a></li></ol></nav></aside>
+<article><p>A matrix runs the same job several times with different values, in parallel. Use it to test versions and operating systems, and to split a slow suite into shards. It cuts wall-clock time, but it does not cut total compute: every job repeats the setup.</p>
+
+<h2 id="a-version-and-os-matrix">A version and OS matrix</h2>
+<pre><code>jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [18, 20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci &amp;&amp; npm test</code></pre><p>This creates six jobs. With <code>fail-fast: false</code>, one failure does not cancel the others, which helps you see the pattern. Use the default <code>true</code> if you want to save minutes on a failing build.</p>
+
+<h2 id="sharding-one-slow-suite">Sharding one slow suite</h2>
+<p>If a single suite takes 20 minutes, split it into parts that run at once. Many runners support this. Playwright has <code>--shard</code>, Jest has <code>--shard</code>, and pytest has plugins such as pytest-split.</p><pre><code>strategy:
+  matrix:
+    shard: [1, 2, 3, 4]
+steps:
+  - run: npx playwright test --shard=${{ matrix.shard }}/4</code></pre><p>Four shards give roughly a quarter of the test time if shards are balanced, plus the setup time for each job.</p>
+
+<h2 id="where-matrices-cost-you">Where matrices cost you</h2>
+<p>Each matrix job checks out code, installs dependencies and starts services. If setup takes 2 minutes and tests take 4, eight shards will not give 8 times faster. Past a certain count, you add cost for no gain. Try 2, 4, 8 shards and measure the longest shard, because the slowest one decides the finish time.</p>
+
+<h2 id="trim-the-matrix">Trim the matrix</h2>
+<ul><li>Test the full matrix on the default branch and a small one on pull requests.</li><li>Use <code>include</code> and <code>exclude</code> to drop useless combinations.</li><li>Use <code>max-parallel</code> if you share a limited number of concurrent runners.</li></ul><pre><code>matrix:
+  os: [ubuntu-latest]
+  node: [20]
+  include:
+    - os: windows-latest
+      node: 20</code></pre>
+
+<h2 id="balance-the-shards">Balance the shards</h2>
+<p>Splitting by file count gives uneven shards when test files differ in size. Some tools can split by recorded timing so each shard gets a similar amount of work. If your runner does not support that, shuffle files with a fixed seed, or move the slowest files into their own shard by hand. Look at the duration of each shard after a few runs. If the slowest is twice the fastest, rebalance. The finish time is set by the slowest shard, so an uneven split wastes the extra jobs.</p>
+
+<h2 id="merge-results-for-required-checks">Merge results for required checks</h2>
+<p>Matrix jobs create many check names. Add one final job that <code>needs</code> the whole matrix and make that the required check, as shown in <a href="/@odykyi/faster-github-actions/skip-workflows-with-path-filters/">path filters and the gate job</a>. For splitting work across several dependent jobs, see <a href="/@odykyi/faster-github-actions/split-slow-jobs-and-use-needs/">splitting slow jobs</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does a matrix cost more?</summary><p>Usually yes in total minutes, because each job repeats setup. It saves wall-clock time, not compute time.</p></details><details><summary>Should fail-fast be on?</summary><p>Leave it on to save minutes when any failure is enough to stop. Turn it off when you want to see every failing combination.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Measure before you tune</div><h3>See which workflows are slow before you change anything.</h3><p>Cilytics is a public CI health dashboard for GitHub. It shows median and p90 run time per workflow, for an org or any public repo. It reads default-branch runs only, from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Faster GitHub Actions</span></div>
+<div class="rgrid"><a href="/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/"><span class="lbl">Guide</span><b>How to Cache Docker Builds in GitHub Actions with Buildx</b><span>Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.</span></a><a href="/@odykyi/faster-github-actions/shallow-checkout-and-smaller-clones/"><span class="lbl">Guide</span><b>Faster Checkout in GitHub Actions: Shallow Clones and Sparse Checkout</b><span>actions/checkout fetches only one commit by default. Learn when to fetch more, how to use sparse checkout for big repos, and how to skip large files and submodules.</span></a><a href="/@odykyi/faster-github-actions/larger-runners-vs-self-hosted-runners/"><span class="lbl">Guide</span><b>Larger Runners vs Self-Hosted Runners: When Is Each Worth It?</b><span>Compare GitHub-hosted, larger hosted and self-hosted runners on speed, cost, security and upkeep, with a plain rule for when to leave the default runner.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
