@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to document an API so LLMs can use it</title>
+<meta name="description" content="Give a model what it needs to call your API correctly: an OpenAPI file, one real request and response per endpoint, error shapes and stated limits.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-document-an-api-for-llms/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to document an API so LLMs can use it">
+<meta property="og:description" content="Give a model what it needs to call your API correctly: an OpenAPI file, one real request and response per endpoint, error shapes and stated limits.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-document-an-api-for-llms/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to document an API so LLMs can use it","description":"Give a model what it needs to call your API correctly: an OpenAPI file, one real request and response per endpoint, error shapes and stated limits.","url":"https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-document-an-api-for-llms/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Docs and READMEs for humans and agents","url":"https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is OpenAPI enough on its own?","acceptedAnswer":{"@type":"Answer","text":"It is a strong base, but add real examples and error guidance. Descriptions and samples are what help a model choose correct values."}},{"@type":"Question","name":"Should I include my API keys in examples?","acceptedAnswer":{"@type":"Answer","text":"Never. Use a placeholder such as an environment variable and explain how to get a key."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docs-and-readmes-for-agents/">Docs and READMEs for humans and agents</a></div>
+<section class="hero"><div><div class="lbl">Docs and READMEs for humans and agents</div><h1>How to document an API so LLMs can use it</h1><p class="dek">Give a model what it needs to call your API correctly: an OpenAPI file, one real request and response per endpoint, error shapes and stated limits.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#start-with-an-openapi-file">Start with an OpenAPI file</a></li><li><a href="#one-complete-example-per-endpoint">One complete example per endpoint</a></li><li><a href="#document-errors-as-carefully-as-success">Document errors as carefully as success</a></li><li><a href="#state-limits-and-rules-in-text">State limits and rules in text</a></li><li><a href="#naming-and-consistency">Naming and consistency</a></li><li><a href="#serve-it-in-a-model-friendly-form">Serve it in a model-friendly form</a></li></ol></nav></aside>
+<article><p>Publish a machine-readable spec such as an OpenAPI file, and back it with one complete, working example per endpoint. A model that sees real requests and responses calls an API far more reliably than one that reads descriptive prose.</p>
+
+<h2 id="start-with-an-openapi-file">Start with an OpenAPI file</h2>
+<p>An OpenAPI document is structured, widely supported and easy for tools to turn into client code or tool definitions. Keep it in the repository, version it with the code and link to it from the README. Write real descriptions on each operation and each parameter. An empty description gives a model nothing to work with.</p><pre><code>paths:
+  /orders/{id}:
+    get:
+      summary: Get one order by id
+      description: Returns 404 if the order does not exist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }</code></pre>
+
+<h2 id="one-complete-example-per-endpoint">One complete example per endpoint</h2>
+<p>Show the full request including headers, and the full response. Use a curl line that a reader can run.</p><pre><code>curl -sS https://api.example.com/orders/ord_123 \
+  -H "Authorization: Bearer $API_KEY"</code></pre><pre><code>{
+  "id": "ord_123",
+  "status": "paid",
+  "total_cents": 4200
+}</code></pre><p>Use realistic values and say what units they are in. "total_cents" with an integer is clearer than "total" with 42.00.</p>
+
+<h2 id="document-errors-as-carefully-as-success">Document errors as carefully as success</h2>
+<p>Agents spend much of their time recovering from errors. For each endpoint list the status codes it can return, the error body shape and what to do next.</p><table><thead><tr><th>Status</th><th>Meaning</th><th>What to do</th></tr></thead><tbody><tr><td>401</td><td>Missing or bad key</td><td>Check the Authorization header</td></tr><tr><td>404</td><td>No such order</td><td>Do not retry</td></tr><tr><td>429</td><td>Rate limited</td><td>Wait for the Retry-After seconds, then retry</td></tr></tbody></table>
+
+<h2 id="state-limits-and-rules-in-text">State limits and rules in text</h2>
+<ul><li>Rate limits, in requests per time window, if you have them.</li><li>Pagination: how to ask for the next page and when to stop.</li><li>Idempotency: which calls are safe to repeat.</li><li>Required order of calls, for example create before confirm.</li></ul><p>These are the facts a model otherwise guesses. Put them next to the endpoint they affect, not on a separate page.</p>
+
+<h2 id="naming-and-consistency">Naming and consistency</h2>
+<p>Models generalise from patterns. If one endpoint uses <code>customer_id</code> and another uses <code>customerId</code>, expect mistakes. Pick one naming style for fields, one date format (ISO 8601 is a safe default) and one way to express money, and use them everywhere.</p><p>Say plainly when a field can be null or missing. "Optional" and "nullable" are different, and models confuse them when the docs do not.</p><ul><li>List allowed values for every enum field.</li><li>Give the maximum length of strings that have one.</li><li>Mark deprecated fields and name their replacement.</li></ul>
+
+<h2 id="serve-it-in-a-model-friendly-form">Serve it in a model-friendly form</h2>
+<p>Publish the docs as plain Markdown pages as well as HTML, and list them in an <a href="/@odykyi/docs-and-readmes-for-agents/llms-txt-explained-how-to-add-one/">llms.txt file</a>. If you expose the API to agents through tools, the same descriptions become the tool descriptions, so write them once and well. See <a href="/@odykyi/docs-and-readmes-for-agents/how-to-write-docs-for-an-mcp-server/">How to write docs for an MCP server</a> for that case.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is OpenAPI enough on its own?</summary><p>It is a strong base, but add real examples and error guidance. Descriptions and samples are what help a model choose correct values.</p></details><details><summary>Should I include my API keys in examples?</summary><p>Never. Use a placeholder such as an environment variable and explain how to get a key.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your README</div><h3>Find out which sections your README is missing.</h3><p>README Score gives a GitHub README a score out of 100 with the sections found and missing. It uses fixed rules and no AI, so the same README gets the same score. Free to try.</p><pre><code>npx -y @flisk-sh/pages publish README.md --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://readme.flisk.si">Score a README</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docs and READMEs for humans and agents</span></div>
+<div class="rgrid"><a href="/@odykyi/docs-and-readmes-for-agents/how-to-keep-docs-from-going-stale/"><span class="lbl">Guide</span><b>How to keep README and docs from going stale: test them in CI</b><span>Stale docs mislead people and agents. Use CI to run the commands in your docs, check links and fail the build when a documented step no longer works.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/how-to-write-docs-for-an-mcp-server/"><span class="lbl">Guide</span><b>How to write docs for an MCP server</b><span>Document an MCP server for two readers: the developer who installs it and the model that picks its tools. Covers install, config, tool descriptions and auth.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/how-to-publish-docs-as-markdown-and-share-a-link/"><span class="lbl">Guide</span><b>How to publish docs as Markdown and share a link</b><span>Markdown is the format both people and agents read best. Learn how to serve docs as .md next to HTML, share a quick page for review and check what you publish.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
