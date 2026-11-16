@@ -20,6 +20,7 @@ import {
 	llmsTxt,
 	robotsTxt,
 	securityTxt,
+	sitemapIndexXml,
 	sitemapXml,
 	webManifest,
 } from "./seo";
@@ -161,6 +162,52 @@ export function createApp(options: AppOptions = {}) {
 		}),
 	);
 
+	const xml = (body: string) =>
+		new Response(body, {
+			headers: { "content-type": "application/xml; charset=utf-8" },
+		});
+	// /sitemap.xml is an index: the site's own pages, then one sitemap per publisher at /@handle/sitemap.xml.
+	app.get("/sitemap.xml", (c) =>
+		xml(
+			sitemapIndexXml(
+				baseOf(c),
+				[
+					"sitemap-site.xml",
+					...[...handles.keys()].sort().map((h) => `@${h}/sitemap.xml`),
+				],
+				lastmod,
+			),
+		),
+	);
+	app.get("/sitemap-site.xml", (c) =>
+		xml(
+			sitemapXml(baseOf(c), [
+				{ path: "", lastmod },
+				{ path: "about", lastmod },
+				...[...handles].map(([h, list]) => ({
+					path: `@${h}/`,
+					lastmod: list[0].updated.slice(0, 10),
+				})),
+			]),
+		),
+	);
+	app.get("/:at{@[a-z0-9-]+}/sitemap.xml", (c) => {
+		const h = c.req.param("at").slice(1);
+		const list = handles.get(h);
+		if (!list) return c.html(notFoundPage(baseOf(c)), 404);
+		return xml(
+			sitemapXml(baseOf(c), [
+				{ path: `@${h}/`, lastmod: list[0].updated.slice(0, 10) },
+				...list.flatMap((s) => [
+					{ path: spacePath(s), lastmod: s.updated.slice(0, 10) },
+					...subPages(s).map((p) => ({
+						path: spacePath(s) + p,
+						lastmod: s.updated.slice(0, 10),
+					})),
+				]),
+			]),
+		);
+	});
 	// A publisher's spaces, and the spaces themselves
 	app.get("/:at{@[a-z0-9-]+}", (c) => c.redirect(`${c.req.path}/`, 301));
 	app.get("/:at{@[a-z0-9-]+}/", (c) => {
@@ -200,30 +247,6 @@ export function createApp(options: AppOptions = {}) {
 
 	// For search, link previews and AI answers
 	app.get("/robots.txt", (c) => c.text(robotsTxt(baseOf(c))));
-	app.get("/sitemap.xml", (c) =>
-		c.body(
-			sitemapXml(baseOf(c), [
-				{ path: "", lastmod },
-				{ path: "about", lastmod },
-				...[...handles].map(([h, list]) => ({
-					path: `@${h}/`,
-					lastmod: list[0].updated.slice(0, 10),
-				})),
-				...spaces.map((s) => ({
-					path: spacePath(s),
-					lastmod: s.updated.slice(0, 10),
-				})),
-				...spaces.flatMap((s) =>
-					subPages(s).map((p) => ({
-						path: spacePath(s) + p,
-						lastmod: s.updated.slice(0, 10),
-					})),
-				),
-			]),
-			200,
-			{ "content-type": "application/xml; charset=utf-8" },
-		),
-	);
 	app.get("/llms.txt", (c) =>
 		c.text(
 			llmsTxt(baseOf(c), [
