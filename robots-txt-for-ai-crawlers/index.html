@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>robots.txt for AI crawlers: GPTBot, ClaudeBot, PerplexityBot</title>
+<meta name="description" content="Which AI user agents exist, how to allow or block each in robots.txt, and the difference between training bots and bots that fetch pages for answers.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/get-found-by-ai-search/robots-txt-for-ai-crawlers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="robots.txt for AI crawlers: GPTBot, ClaudeBot, PerplexityBot">
+<meta property="og:description" content="Which AI user agents exist, how to allow or block each in robots.txt, and the difference between training bots and bots that fetch pages for answers.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/get-found-by-ai-search/robots-txt-for-ai-crawlers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"robots.txt for AI crawlers: GPTBot, ClaudeBot, PerplexityBot","description":"Which AI user agents exist, how to allow or block each in robots.txt, and the difference between training bots and bots that fetch pages for answers.","url":"https://pages.flisk.si/@odykyi/get-found-by-ai-search/robots-txt-for-ai-crawlers/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Get found by AI search","url":"https://pages.flisk.si/@odykyi/get-found-by-ai-search/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I block GPTBot?","acceptedAnswer":{"@type":"Answer","text":"It depends on your policy. Blocking stops training use by that bot but not search or on-demand fetches, which use other names."}},{"@type":"Question","name":"Will blocking AI bots hurt my Google ranking?","acceptedAnswer":{"@type":"Answer","text":"Blocking AI-specific bots does not affect Googlebot. Do not block Googlebot itself unless you want to leave Google search."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/get-found-by-ai-search/">Get found by AI search</a></div>
+<section class="hero"><div><div class="lbl">Get found by AI search</div><h1>robots.txt for AI crawlers: GPTBot, ClaudeBot, PerplexityBot</h1><p class="dek">Which AI user agents exist, how to allow or block each in robots.txt, and the difference between training bots and bots that fetch pages for answers.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#know-the-three-kinds-of-bot">Know the three kinds of bot</a></li><li><a href="#allow-everything-the-simple-default">Allow everything (the simple default)</a></li><li><a href="#allow-answers-block-training">Allow answers, block training</a></li><li><a href="#robots-txt-is-a-request-not-a-lock">robots.txt is a request, not a lock</a></li><li><a href="#test-your-file">Test your file</a></li><li><a href="#a-review-habit">A review habit</a></li></ol></nav></aside>
+<article><p>Control AI crawlers with one User-agent block per bot in robots.txt. To be cited in AI answers, allow the search and user-triggered bots. To keep content out of model training, block the training bots. Check each vendor's documentation for the current list of names.</p>
+
+<h2 id="know-the-three-kinds-of-bot">Know the three kinds of bot</h2>
+<ul><li><strong>Training crawlers</strong> collect pages to train models. Examples are GPTBot (OpenAI) and ClaudeBot (Anthropic).</li><li><strong>Search crawlers</strong> index pages so a product can show them in answers. Examples are OAI-SearchBot (OpenAI) and PerplexityBot.</li><li><strong>User-triggered fetchers</strong> load a page when a person asks the assistant about it. Examples are ChatGPT-User and Perplexity-User.</li></ul><p>Google uses Googlebot for search and a separate control token, Google-Extended, to let sites opt out of some AI uses. Vendors add and rename bots, so confirm names on their official pages before you rely on them.</p>
+
+<h2 id="allow-everything-the-simple-default">Allow everything (the simple default)</h2>
+<pre><code>User-agent: *
+Allow: /
+
+Sitemap: https://example.com/sitemap.xml</code></pre><p>If you have no Disallow rules for these bots, they can crawl. Many sites need no change here. The usual problem is a rule you forgot about.</p>
+
+<h2 id="allow-answers-block-training">Allow answers, block training</h2>
+<pre><code>User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /</code></pre><p>This keeps your content out of training crawls from those bots while leaving search and on-demand fetches open. It is a policy choice, not a technical one. The trade-off is that blocking a training crawler may reduce how well a model knows your product by name.</p>
+
+<h2 id="robots-txt-is-a-request-not-a-lock">robots.txt is a request, not a lock</h2>
+<p>Well-behaved bots follow it. Others do not. For content you truly must protect, use authentication, not robots.txt. Also remember that a firewall or CDN bot rule can block a bot even when robots.txt allows it, so test with curl as in <a href='/@odykyi/get-found-by-ai-search/how-to-get-cited-by-chatgpt-and-perplexity/'>the citation checklist</a>.</p>
+
+<h2 id="test-your-file">Test your file</h2>
+<pre><code>curl -s https://example.com/robots.txt</code></pre><p>Check that it returns <code>200</code> and plain text, not an HTML page, and that no earlier group such as <code>User-agent: *</code> with <code>Disallow: /</code> overrides your intent. A bot follows the most specific group that matches its name. Run <a href='https://citable.flisk.si'>Citable</a> afterwards to see what AI search can reach.</p>
+
+<h2 id="a-review-habit">A review habit</h2>
+<p>Put robots.txt in version control and review changes like code. A one-line edit can hide a whole site. After each change, fetch the live file and run one curl per bot you care about. Keep a comment above each group saying why it exists, so the next person does not delete a rule or add a blanket block without knowing the reason. Revisit the list of bot names every few months, since vendors add new crawlers and retire old ones.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I block GPTBot?</summary><p>It depends on your policy. Blocking stops training use by that bot but not search or on-demand fetches, which use other names.</p></details><details><summary>Will blocking AI bots hurt my Google ranking?</summary><p>Blocking AI-specific bots does not affect Googlebot. Do not block Googlebot itself unless you want to leave Google search.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your site</div><h3>See whether AI search can find, read and cite your site.</h3><p>Citable checks whether AI search and chatbots can reach and cite a website. For a GitHub project, README Score gives the README a score out of 100 with a fix for each gap.</p></div><div class="btns"><a class="btn primary" href="https://citable.flisk.si">Open Citable</a><a class="btn" href="https://readme.flisk.si">Open README Score</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Get found by AI search</span></div>
+<div class="rgrid"><a href="/@odykyi/get-found-by-ai-search/llms-txt-what-it-is-and-how-to-write-it/"><span class="lbl">Guide</span><b>llms.txt: what it is and how to write one</b><span>A proposed plain-text file that points language models to your best pages. Learn the format, what to put in it, and why it is cheap to add but not a ranking switch.</span></a><a href="/@odykyi/get-found-by-ai-search/does-ai-search-see-javascript-rendered-sites/"><span class="lbl">Guide</span><b>Can AI crawlers read JavaScript-rendered sites?</b><span>Many AI crawlers fetch HTML and do not run your scripts. How to test what they see, and how to fix a single-page app with server rendering or prerendering.</span></a><a href="/@odykyi/get-found-by-ai-search/structured-data-json-ld-for-ai-search/"><span class="lbl">Guide</span><b>Structured data and JSON-LD for AI search and rich results</b><span>Add schema.org JSON-LD to describe your product, articles and FAQs in a machine-readable way, with copy-paste examples and the mistakes that invalidate them.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
