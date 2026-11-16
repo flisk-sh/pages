@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to call Workers AI from a Worker</title>
+<meta name="description" content="Add the AI binding, run a text model from your handler, return the result and keep usage under control, plus when a different model API makes more sense.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-call-workers-ai-from-a-worker/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to call Workers AI from a Worker">
+<meta property="og:description" content="Add the AI binding, run a text model from your handler, return the result and keep usage under control, plus when a different model API makes more sense.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-call-workers-ai-from-a-worker/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to call Workers AI from a Worker","description":"Add the AI binding, run a text model from your handler, return the result and keep usage under control, plus when a different model API makes more sense.","url":"https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-call-workers-ai-from-a-worker/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Cloudflare Workers for small apps","url":"https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need an API key for Workers AI?","acceptedAnswer":{"@type":"Answer","text":"Not inside a Worker. The binding authorises calls through your account. For calls from outside a Worker you use the REST API with a token."}},{"@type":"Question","name":"Is Workers AI free?","acceptedAnswer":{"@type":"Answer","text":"There is a free allowance with limits, and paid usage beyond it. Check the current pricing page."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/cloudflare-workers-for-small-apps/">Cloudflare Workers for small apps</a></div>
+<section class="hero"><div><div class="lbl">Cloudflare Workers for small apps</div><h1>How to call Workers AI from a Worker</h1><p class="dek">Add the AI binding, run a text model from your handler, return the result and keep usage under control, plus when a different model API makes more sense.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#add-the-binding">Add the binding</a></li><li><a href="#run-a-text-model">Run a text model</a></li><li><a href="#stream-the-answer">Stream the answer</a></li><li><a href="#guard-it">Guard it</a></li><li><a href="#test-the-call-locally">Test the call locally</a></li><li><a href="#when-to-use-something-else">When to use something else</a></li></ol></nav></aside>
+<article><p>Add an <code>[ai]</code> binding to <code>wrangler.toml</code>, then call <code>env.AI.run(model, input)</code> from your handler. No API key is needed in your code because the binding is tied to your account.</p>
+
+<h2 id="add-the-binding">Add the binding</h2>
+<pre><code>[ai]
+binding = "AI"</code></pre><p>Then deploy or run <code>wrangler dev</code>. The AI binding calls Cloudflare's network even in local dev, so you must be logged in.</p>
+
+<h2 id="run-a-text-model">Run a text model</h2>
+<pre><code>export default {
+  async fetch(request, env) {
+    const { question } = await request.json();
+    const out = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages: [
+        { role: "system", content: "Answer in two sentences." },
+        { role: "user", content: question },
+      ],
+    });
+    return Response.json({ answer: out.response });
+  },
+};</code></pre><p>The model catalogue changes. Look up current model names in the Workers AI docs rather than trusting an old example, including this one.</p>
+
+<h2 id="stream-the-answer">Stream the answer</h2>
+<p>For chat, pass <code>stream: true</code> and return the stream so users see text arrive.</p><pre><code>const stream = await env.AI.run(model, { messages, stream: true });
+return new Response(stream, {
+  headers: { "content-type": "text/event-stream" },
+});</code></pre>
+
+<h2 id="guard-it">Guard it</h2>
+<ul><li>Limit input length and require a login or a token. An open AI endpoint is an open invoice.</li><li>Rate limit per user or IP, for example with a KV counter or D1 table.</li><li>Validate model output before using it. If you ask for JSON, parse it and handle failure, see <a href="/@odykyi/structured-outputs-and-prompts/">structured outputs</a>.</li></ul>
+
+<h2 id="test-the-call-locally">Test the call locally</h2>
+<pre><code>npx wrangler dev
+curl -s -X POST http://localhost:8787 \
+  -H "content-type: application/json" \
+  -d '{"question":"What is a Worker?"}'</code></pre><p>If you get an authentication error, run <code>npx wrangler login</code> again. If the model name is rejected, check the catalogue. Keep prompts in a constant at the top of the file so you can change and review them like code, see <a href="/@odykyi/structured-outputs-and-prompts/">prompts and structured outputs</a>.</p><p>Log token or request counts per user, so you can see who is driving usage. A simple D1 table with user, day and count is enough to enforce a daily cap in code before the model call.</p>
+
+<h2 id="when-to-use-something-else">When to use something else</h2>
+<p>Workers AI offers a set of open models with simple billing on your Cloudflare account. If you need a specific model or a bigger one, call another API with <code>fetch</code> and keep its key in a secret. For a free coding-focused model API, Flisk <a href="https://inference.flisk.si">Inference</a> is in open beta with a daily request limit and GitHub sign-in. It is a beta service, so do not build anything critical on it yet.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need an API key for Workers AI?</summary><p>Not inside a Worker. The binding authorises calls through your account. For calls from outside a Worker you use the REST API with a token.</p></details><details><summary>Is Workers AI free?</summary><p>There is a free allowance with limits, and paid usage beyond it. Check the current pricing page.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run the same stack locally first.</h3><p>Flisk runs services, databases and queues on your laptop from one service.json each. It is a development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk CLI docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Source on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Cloudflare Workers for small apps</span></div>
+<div class="rgrid"><a href="/@odykyi/cloudflare-workers-for-small-apps/cloudflare-workers-free-plan-limits/"><span class="lbl">Guide</span><b>Cloudflare Workers free plan limits explained</b><span>What the free plan caps, how to read the limits, and the habits that keep a small app inside them, plus what changes when you outgrow it.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-use-hono-on-cloudflare-workers/"><span class="lbl">Guide</span><b>How to use Hono on Cloudflare Workers</b><span>Add routing, middleware and JSON handling to a Worker with Hono, a small web framework, instead of hand-written URL checks.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-store-secrets-in-a-cloudflare-worker/"><span class="lbl">Guide</span><b>How to store secrets in a Cloudflare Worker</b><span>Keep API keys out of your code and repo: wrangler secret put for production, .dev.vars for local, and what not to put in plain vars.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
