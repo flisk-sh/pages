@@ -1,0 +1,15 @@
+name: GEL
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: gel-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  gel:
+    permissions: { contents: read, checks: read, pull-requests: read }
+    uses: flisk-sh/gel/.github/workflows/gel.yml@v1
+    with: { gel_ref: v1 }
