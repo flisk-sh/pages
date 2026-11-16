@@ -51,5 +51,13 @@ const app = {
   },
 };
 
+<<<<<<< HEAD
 // Every response of this Worker (only /mcp* is routed to it) carries the baseline security headers.
 export default { fetch: async (...args) => withSecurityHeaders(await app.fetch(...args)) };
+=======
+export default {
+  async fetch(request, env = {}, ctx) {
+    return withSecurityHeaders(await app.fetch(request, env, ctx));
+  },
+};
+>>>>>>> origin/main
