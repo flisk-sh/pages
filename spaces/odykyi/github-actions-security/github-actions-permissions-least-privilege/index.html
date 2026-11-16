@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GITHUB_TOKEN Permissions: Set Least Privilege</title>
+<meta name="description" content="How the GITHUB_TOKEN works, why to set permissions explicitly at the top of every workflow, and which scopes each common job needs.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/github-actions-security/github-actions-permissions-least-privilege/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="GITHUB_TOKEN Permissions: Set Least Privilege">
+<meta property="og:description" content="How the GITHUB_TOKEN works, why to set permissions explicitly at the top of every workflow, and which scopes each common job needs.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/github-actions-security/github-actions-permissions-least-privilege/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"GITHUB_TOKEN Permissions: Set Least Privilege","description":"How the GITHUB_TOKEN works, why to set permissions explicitly at the top of every workflow, and which scopes each common job needs.","url":"https://pages.flisk.si/@odykyi/github-actions-security/github-actions-permissions-least-privilege/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"GitHub Actions Security","url":"https://pages.flisk.si/@odykyi/github-actions-security/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What happens if I do not set permissions at all?","acceptedAnswer":{"@type":"Answer","text":"The token gets the repository or organisation default, which can be read-write on older repositories. Declaring permissions in the file makes the result independent of that setting."}},{"@type":"Question","name":"Why does my job fail with 'Resource not accessible by integration'?","acceptedAnswer":{"@type":"Answer","text":"The token lacks a scope for the API call. Add the specific scope to that job, for example pull-requests: write, rather than switching to write-all."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/github-actions-security/">GitHub Actions Security</a></div>
+<section class="hero"><div><div class="lbl">GitHub Actions Security</div><h1>GITHUB_TOKEN Permissions: Set Least Privilege</h1><p class="dek">How the GITHUB_TOKEN works, why to set permissions explicitly at the top of every workflow, and which scopes each common job needs.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-token-is">What the token is</a></li><li><a href="#set-a-safe-default-first">Set a safe default first</a></li><li><a href="#raise-permissions-per-job">Raise permissions per job</a></li><li><a href="#check-what-a-run-actually-got">Check what a run actually got</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#a-review-routine-that-scales">A review routine that scales</a></li></ol></nav></aside>
+<article><p>Add a top-level <code>permissions:</code> block to every workflow and grant only <code>contents: read</code>, then raise individual jobs when they need more. The <code>GITHUB_TOKEN</code> is created for each run, and its default scope depends on repository settings that may be broader than you want.</p>
+
+<h2 id="what-the-token-is">What the token is</h2>
+<p>Each workflow run gets a short-lived token that lets steps call the GitHub API as the Actions bot. It expires when the job ends. The risk is not its lifetime but its scope: a compromised step that holds a write-capable token can push code, edit releases or open pull requests during the run.</p>
+
+<h2 id="set-a-safe-default-first">Set a safe default first</h2>
+<p>In repository or organisation settings under Actions, set the default workflow permissions to read-only. Then declare permissions in the file anyway, so the workflow is correct no matter where it is copied.</p><pre><code>name: ci
+on: [pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci &amp;&amp; npm test</code></pre><p>Once you declare any permission, every scope you do not list is set to none.</p>
+
+<h2 id="raise-permissions-per-job">Raise permissions per job</h2>
+<p>Put extra scopes on the one job that needs them, not at the top.</p><pre><code>jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - run: echo publish</code></pre><p>Common needs: <code>pull-requests: write</code> to comment on a pull request, <code>packages: write</code> to push to GitHub Packages, <code>id-token: write</code> for OIDC to a cloud, <code>contents: write</code> to create a release or push a tag.</p>
+
+<h2 id="check-what-a-run-actually-got">Check what a run actually got</h2>
+<p>Open any job log and expand 'Set up job', then 'GITHUB_TOKEN Permissions'. It lists every scope the token received. Make this part of reviewing a new workflow. Note that for pull requests from forks the token is read-only no matter what you declare, which is covered in <a href='/@odykyi/pull-request-target-vs-pull-request/'>pull_request_target vs pull_request</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul><li><code>permissions: write-all</code> is a red flag in review. Replace it with the named scopes.</li><li>A token with <code>contents: write</code> can push to unprotected branches. Branch protection and rulesets are your second layer.</li><li>Do not store a personal access token in a secret just to get around a permission error. A PAT usually has far more reach than the scoped token, and it does not expire at the end of the run.</li><li>Reusable workflows can only keep or reduce the permissions of the caller, never raise them.</li></ul>
+
+<h2 id="a-review-routine-that-scales">A review routine that scales</h2>
+<p>Add one line to your pull request template: 'Does this workflow declare permissions?'. When a workflow needs a new scope, ask why in the review and write the reason in a YAML comment next to the line. Over time the comments become a map of who can do what. For organisations, search every repository for workflows that lack a <code>permissions:</code> key and fix those first, since they inherit whatever the default is. A failing job with a clear error is a cheap price for knowing exactly what each job is allowed to touch.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What happens if I do not set permissions at all?</summary><p>The token gets the repository or organisation default, which can be read-write on older repositories. Declaring permissions in the file makes the result independent of that setting.</p></details><details><summary>Why does my job fail with &#39;Resource not accessible by integration&#39;?</summary><p>The token lacks a scope for the API call. Add the specific scope to that job, for example pull-requests: write, rather than switching to write-all.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Guard your CI</div><h3>Let a deterministic score decide, not a hopeful review.</h3><p>GEL is Flisk's approach to CI guards, evals and nightly loops, where a model proposes and a deterministic score decides. It is a good fit for checks that run on every pull request.</p><pre><code>git clone https://github.com/flisk-sh/gel</code></pre></div><div class="btns"><a class="btn primary" href="https://gel.flisk.si">Open GEL</a><a class="btn" href="https://github.com/flisk-sh/gel">GEL on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">GitHub Actions Security</span></div>
+<div class="rgrid"><a href="/@odykyi/github-actions-security/pull-request-target-vs-pull-request/"><span class="lbl">Guide</span><b>pull_request_target vs pull_request: Which to Use</b><span>The two triggers look alike but run in very different security contexts. Learn what each can access and the one pattern that makes pull_request_target dangerous.</span></a><a href="/@odykyi/github-actions-security/github-actions-script-injection/"><span class="lbl">Guide</span><b>How to Prevent Script Injection in GitHub Actions</b><span>Expressions like github.event.pull_request.title are pasted into shell scripts before they run. Learn how that becomes code execution and how to fix it with environment variables.</span></a><a href="/@odykyi/github-actions-security/github-actions-secrets-best-practices/"><span class="lbl">Guide</span><b>GitHub Actions Secrets: Store and Scope Them Safely</b><span>Where to define secrets, how to scope them to environments, what log masking does not protect, and how to rotate quickly when one leaks.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
