@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flip Count: A Simple Metric for Flaky CI Workflows</title>
+<meta name="description" content="Count how often a workflow switches between pass and fail on the default branch to spot flakiness without reading test reports. Definition, script and limits.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/flip-count-as-a-flaky-signal/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Flip Count: A Simple Metric for Flaky CI Workflows">
+<meta property="og:description" content="Count how often a workflow switches between pass and fail on the default branch to spot flakiness without reading test reports. Definition, script and limits.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/flip-count-as-a-flaky-signal/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Flip Count: A Simple Metric for Flaky CI Workflows","description":"Count how often a workflow switches between pass and fail on the default branch to spot flakiness without reading test reports. Definition, script and limits.","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/flip-count-as-a-flaky-signal/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI Metrics That Matter","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is a flip always a flake?","acceptedAnswer":{"@type":"Answer","text":"No. A real regression followed by a fix also produces flips. Same-commit differences are the clearest evidence of a flake."}},{"@type":"Question","name":"How many runs do I need?","acceptedAnswer":{"@type":"Answer","text":"At least 30 to 50 for a rough signal. 100 is better, since rare flakes need enough runs to show up."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-metrics-that-matter/">CI Metrics That Matter</a></div>
+<section class="hero"><div><div class="lbl">CI Metrics That Matter</div><h1>Flip Count: A Simple Metric for Flaky CI Workflows</h1><p class="dek">Count how often a workflow switches between pass and fail on the default branch to spot flakiness without reading test reports. Definition, script and limits.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-flips-and-not-failures">Why flips and not failures</a></li><li><a href="#a-script">A script</a></li><li><a href="#pick-a-threshold">Pick a threshold</a></li><li><a href="#limits-of-the-metric">Limits of the metric</a></li><li><a href="#same-commit-flips">Same-commit flips</a></li><li><a href="#use-it-in-practice">Use it in practice</a></li></ol></nav></aside>
+<article><p>A flip is a change of result between two consecutive runs, pass to fail or fail to pass. Count flips per workflow over the last 100 default-branch runs. Many flips with few code changes mean the workflow is flaky.</p>
+
+<h2 id="why-flips-and-not-failures">Why flips and not failures</h2>
+<p>A workflow that fails 10 times in a row has one flip: it is broken, and that is a different problem. A workflow that alternates fail, pass, fail, pass has many flips: it is unstable. Pass rate cannot tell those two apart, but flip count can.</p>
+
+<h2 id="a-script">A script</h2>
+<pre><code>gh run list --workflow ci.yml --branch main --limit 100 \
+  --json conclusion,createdAt &gt; runs.json
+
+node -e '
+const r=require("./runs.json")
+  .filter(x=&gt;x.conclusion==="success"||x.conclusion==="failure")
+  .sort((a,b)=&gt;a.createdAt&lt;b.createdAt?-1:1);
+let f=0;
+for(let i=1;i&lt;r.length;i++) if(r[i].conclusion!==r[i-1].conclusion) f++;
+console.log("runs",r.length,"flips",f);
+'</code></pre><p>Skip cancelled and skipped runs, since they carry no pass or fail information.</p>
+
+<h2 id="pick-a-threshold">Pick a threshold</h2>
+<p>Cilytics uses a simple rule: a workflow is listed as flaky when it flipped between pass and fail at least 3 times in the last 100 runs. That is a reasonable starting point for your own script too. Tune it to your volume. A repo with 5 runs a week needs a longer window than one with 200.</p>
+
+<h2 id="limits-of-the-metric">Limits of the metric</h2>
+<ul><li>Real alternation can come from real changes: a bug lands, then a fix lands. That is two flips and not flakiness.</li><li>To tell them apart, check whether the commit changed. Two results on the same <code>headSha</code> are a stronger signal.</li><li>Workflow-level flips do not say which test is flaky. Use test reports for that, as in <a href="/@odykyi/flaky-tests-and-ci/find-flaky-tests-in-ci/">finding flaky tests in CI</a>.</li></ul>
+
+<h2 id="same-commit-flips">Same-commit flips</h2>
+<p>There is a stricter variant. Group runs by <code>headSha</code>. A commit that has both a success and a failure is a confirmed flake, because the code did not change. This needs reruns on the same commit, so it only catches flakes that were noticed and retried. Run both counts: the sequence flip count finds unstable workflows broadly, the same-commit count gives you proof for the issue you write. Together they take about twenty lines of script.</p>
+
+<h2 id="use-it-in-practice">Use it in practice</h2>
+<p>Review the top three workflows by flip count weekly. Open an issue for each, assign an owner and set a deadline, as in the <a href="/@odykyi/flaky-tests-and-ci/flaky-test-policy-for-teams/">team policy</a>. You can see flaky workflows for any public repo at <a href="https://cilytics.flisk.si">cilytics.flisk.si</a> with <code>?repo=owner/name</code>, using default-branch runs and an hourly snapshot.</p><p>Keep a baseline. Record the flip count for each workflow once a week. A workflow whose count rises from 1 to 6 over a month is getting worse, even if its pass rate still looks fine. A workflow whose count drops after a fix gives you evidence that the fix worked, which is useful when you explain the effort to the team.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is a flip always a flake?</summary><p>No. A real regression followed by a fix also produces flips. Same-commit differences are the clearest evidence of a flake.</p></details><details><summary>How many runs do I need?</summary><p>At least 30 to 50 for a rough signal. 100 is better, since rare flakes need enough runs to show up.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See the numbers</div><h3>Look at the CI metrics of any public GitHub repo, no account needed.</h3><p>Cilytics shows pass rate trend, red workflows, median and p90 run time, flaky and slow workflows for an org or a single public repo. It uses default-branch runs from the last 100 runs and an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI Metrics That Matter</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/mean-time-to-green/"><span class="lbl">Guide</span><b>Mean Time to Green: How Fast Do You Fix a Broken Main Branch?</b><span>Measure how long the default branch stays red after a failure, compute it from run history, and cut it with ownership, alerts and a revert-first rule.</span></a><a href="/@odykyi/ci-metrics-that-matter/ci-metrics-to-ignore/"><span class="lbl">Guide</span><b>CI Metrics to Ignore: Vanity Numbers That Mislead</b><span>Total runs, average duration, test count, coverage percent in isolation and billable minutes without context: why these mislead, and what to look at instead.</span></a><a href="/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/"><span class="lbl">Guide</span><b>How to Alert When Your Default Branch Goes Red</b><span>Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
