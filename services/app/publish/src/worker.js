@@ -33,6 +33,8 @@
 // MAX_PER_IP_HOUR, MAX_PER_IP_DAY, MAX_PER_HOUR, MAX_CI_PER_HOUR, MAX_CI_PER_DAY. Secret: GITHUB_TOKEN (fine-grained, flisk-sh/pages only,
 // Contents: read and write, which repository_dispatch needs).
 
+import { withSecurityHeaders } from "./security-headers.js";
+
 export const MAX_MARKDOWN_BYTES = 40_000;
 const ID = /^[a-z0-9]{10}$/;
 const TOKEN = /^[a-f0-9]{48}$/;
@@ -510,4 +512,6 @@ export async function handle(request, env, fetcher = fetch) {
 	return json({ error: "not found" }, 404, headers);
 }
 
-export default { fetch: (request, env) => handle(request, env) };
+// Every response carries the baseline security headers (see security-headers.js). publish.flisk.si serves only its own API, sign-in and
+// manage page: the pages visitors publish are static files on pages.flisk.si (GitHub Pages) and never pass through this Worker.
+export default { fetch: async (request, env) => withSecurityHeaders(await handle(request, env)) };

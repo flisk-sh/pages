@@ -3,6 +3,7 @@
 import { APPLE_TOUCH_PNG_BASE64, FAVICON_ICO_BASE64, ICON_512_PNG_BASE64, ICON_SVG } from "./icons.js";
 import { MAX_BODY_BYTES, overLimit } from "./limits.js";
 import { pagesMcpRoute } from "./mcp.js";
+import { withSecurityHeaders } from "./security-headers.js";
 
 const bytesOf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const json = (body, status = 200, headers = {}) =>
@@ -29,7 +30,7 @@ const STATIC = {
   "/about": ["text/plain; charset=utf-8", PAGE],
 };
 
-export default {
+const app = {
   async fetch(request, env = {}) {
     const { pathname } = new URL(request.url);
     if (pathname === "/mcp") {
@@ -49,3 +50,6 @@ export default {
     return json({ error: "not_found", hint: "The MCP server is at /mcp" }, 404);
   },
 };
+
+// Every response of this Worker (only /mcp* is routed to it) carries the baseline security headers.
+export default { fetch: async (...args) => withSecurityHeaders(await app.fetch(...args)) };
