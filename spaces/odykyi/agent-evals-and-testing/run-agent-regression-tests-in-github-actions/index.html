@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to run agent regression tests in GitHub Actions</title>
+<meta name="description" content="Run a fast eval suite on every pull request, cache what you can, keep API costs bounded, and fail the build when the score drops below your baseline.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-evals-and-testing/run-agent-regression-tests-in-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to run agent regression tests in GitHub Actions">
+<meta property="og:description" content="Run a fast eval suite on every pull request, cache what you can, keep API costs bounded, and fail the build when the score drops below your baseline.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-evals-and-testing/run-agent-regression-tests-in-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to run agent regression tests in GitHub Actions","description":"Run a fast eval suite on every pull request, cache what you can, keep API costs bounded, and fail the build when the score drops below your baseline.","url":"https://pages.flisk.si/@odykyi/agent-evals-and-testing/run-agent-regression-tests-in-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Testing and evaluating AI agents","url":"https://pages.flisk.si/@odykyi/agent-evals-and-testing/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should evals block merges?","acceptedAnswer":{"@type":"Answer","text":"Block on the cheap deterministic suite once it is stable. Keep noisier, model-graded suites as warnings or nightly reports until you trust them."}},{"@type":"Question","name":"How do I stop CI evals from costing too much?","acceptedAnswer":{"@type":"Answer","text":"Keep the PR suite small, use cheaper models for grading where checked, cap tokens per run and use a dedicated key with a spend limit."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-evals-and-testing/">Testing and evaluating AI agents</a></div>
+<section class="hero"><div><div class="lbl">Testing and evaluating AI agents</div><h1>How to run agent regression tests in GitHub Actions</h1><p class="dek">Run a fast eval suite on every pull request, cache what you can, keep API costs bounded, and fail the build when the score drops below your baseline.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#split-fast-and-slow-suites">Split fast and slow suites</a></li><li><a href="#a-minimal-workflow">A minimal workflow</a></li><li><a href="#the-gate-script">The gate script</a></li><li><a href="#keep-cost-and-secrets-under-control">Keep cost and secrets under control</a></li><li><a href="#see-results-over-time">See results over time</a></li></ol></nav></aside>
+<article><p>Add a workflow that runs your eval script on pull requests, writes a score to a JSON file, and exits non-zero if the score is below the stored baseline. Keep the PR suite small and cheap, and run the larger suite on a schedule. Treat a score drop like a failing unit test.</p>
+
+<h2 id="split-fast-and-slow-suites">Split fast and slow suites</h2>
+<p>Two suites cover most needs. The <strong>PR suite</strong> has 20 to 50 cases, mostly deterministic checks, and finishes in a few minutes. The <strong>nightly suite</strong> has the full set, real model calls and repeated runs. Running everything on every push is slow and costs money for little extra signal.</p>
+
+<h2 id="a-minimal-workflow">A minimal workflow</h2>
+<pre><code>name: agent-evals
+on:
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: python evals/run.py --suite pr --out score.json
+        env:
+          MODEL_API_KEY: ${{ secrets.MODEL_API_KEY }}
+      - run: python evals/gate.py score.json evals/baseline.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: eval-report, path: score.json }</code></pre><p>Upload the report even on failure, so a reviewer can read what broke. Secrets are not passed to workflows from forks by default, so fork PRs need a mock model path or a manual run.</p>
+
+<h2 id="the-gate-script">The gate script</h2>
+<p>Keep the pass rule in code, not in the workflow YAML.</p><pre><code>import json, sys
+score = json.load(open(sys.argv[1]))["pass_rate"]
+base = json.load(open(sys.argv[2]))["pass_rate"]
+TOLERANCE = 0.02   # allow small noise
+if score &lt; base - TOLERANCE:
+    print(f"FAIL: {score:.3f} below baseline {base:.3f}")
+    sys.exit(1)
+print(f"OK: {score:.3f} (baseline {base:.3f})")</code></pre><p>The tolerance matters because agents are not perfectly repeatable. See <a href="/@odykyi/agent-evals-and-testing/why-agent-evals-are-flaky-and-how-to-fix-it/">why agent evals are flaky</a> for how to set it from data.</p>
+
+<h2 id="keep-cost-and-secrets-under-control">Keep cost and secrets under control</h2>
+<ul><li>Set a hard cap on cases and tokens per run, and fail loudly when it is hit.</li><li>Use a small, cheap model for graders where it passes your human check.</li><li>Use a separate API key with a spend limit for CI.</li><li>Cache model responses for unchanged inputs where the test is about your code, not the model.</li></ul>
+
+<h2 id="see-results-over-time">See results over time</h2>
+<p>A single pass or fail hides trends. Store each run's score and chart it. Flisk's GEL project describes a pattern where a model proposes changes and a deterministic score decides whether to keep them, and its docs at <a href="https://gel.flisk.si">gel.flisk.si</a> are a useful reference for CI guards and nightly loops. For a live view of CI health across many repos, <a href="https://cilytics.flisk.si">Cilytics</a> shows hourly results for the flisk-sh GitHub organisation, as an example of what to build for your own. Related: <a href="/@odykyi/ci-guards-and-ai-code-review/">CI guards and AI code review</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should evals block merges?</summary><p>Block on the cheap deterministic suite once it is stable. Keep noisier, model-graded suites as warnings or nightly reports until you trust them.</p></details><details><summary>How do I stop CI evals from costing too much?</summary><p>Keep the PR suite small, use cheaper models for grading where checked, cap tokens per run and use a dedicated key with a spend limit.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Let a model propose changes, and a deterministic score decide.</h3><p>GEL is Flisk's approach and tooling for CI guards, evals and nightly loops. Read how it works, then adapt the idea to your own repo.</p></div><div class="btns"><a class="btn primary" href="https://gel.flisk.si">Explore GEL</a><a class="btn" href="https://github.com/flisk-sh/gel">GEL on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Testing and evaluating AI agents</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-evals-and-testing/how-to-test-agent-tool-calls-and-trajectories/"><span class="lbl">Guide</span><b>How to test agent tool calls and trajectories</b><span>Record every tool call, then assert on which tools ran, in what order, with what arguments, and how many steps it took. Catch wrong paths that still produce a fine answer.</span></a><a href="/@odykyi/agent-evals-and-testing/why-agent-evals-are-flaky-and-how-to-fix-it/"><span class="lbl">Guide</span><b>Why agent evals are flaky and how to fix it</b><span>The same agent passes a case today and fails tomorrow. Find the sources of noise, repeat runs, set a tolerance from data and stop chasing random failures.</span></a><a href="/@odykyi/agent-evals-and-testing/mocking-llm-and-tool-calls-in-agent-unit-tests/"><span class="lbl">Guide</span><b>Mocking the LLM and tool calls in agent unit tests</b><span>Test the code around your agent without calling a model: scripted responses, fake tools, recorded replies and a clear line between unit tests and evals.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
