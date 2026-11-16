@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Build a Simple CI Health Dashboard for GitHub Repos</title>
+<meta name="description" content="Collect run data on a schedule, compute pass rate, median, p90 and flips per workflow, publish a small report, or use a ready public dashboard. What each option can and cannot do.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/build-a-ci-health-dashboard/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Build a Simple CI Health Dashboard for GitHub Repos">
+<meta property="og:description" content="Collect run data on a schedule, compute pass rate, median, p90 and flips per workflow, publish a small report, or use a ready public dashboard. What each option can and cannot do.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/build-a-ci-health-dashboard/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Build a Simple CI Health Dashboard for GitHub Repos","description":"Collect run data on a schedule, compute pass rate, median, p90 and flips per workflow, publish a small report, or use a ready public dashboard. What each option can and cannot do.","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/build-a-ci-health-dashboard/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI Metrics That Matter","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How often should the collector run?","acceptedAnswer":{"@type":"Answer","text":"Once a day is enough for trends. Run it more often only if you plan to alert on it."}},{"@type":"Question","name":"Where do I store the history?","acceptedAnswer":{"@type":"Answer","text":"The step summary is easy but short-lived. For long history, commit a small JSON file or upload it as an artifact each run."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-metrics-that-matter/">CI Metrics That Matter</a></div>
+<section class="hero"><div><div class="lbl">CI Metrics That Matter</div><h1>How to Build a Simple CI Health Dashboard for GitHub Repos</h1><p class="dek">Collect run data on a schedule, compute pass rate, median, p90 and flips per workflow, publish a small report, or use a ready public dashboard. What each option can and cannot do.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-scheduled-collector">The scheduled collector</a></li><li><a href="#the-script">The script</a></li><li><a href="#publish-the-report">Publish the report</a></li><li><a href="#or-use-a-ready-dashboard">Or use a ready dashboard</a></li><li><a href="#keep-it-small">Keep it small</a></li></ol></nav></aside>
+<article><p>A basic CI health dashboard needs a scheduled job that pulls recent runs with the gh CLI, computes a few numbers per workflow, and writes a report. You can have a working version in under an hour, or skip it with a public dashboard for public repos.</p>
+
+<h2 id="the-scheduled-collector">The scheduled collector</h2>
+<pre><code>name: CI health
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/ci-health.mjs &gt;&gt; "$GITHUB_STEP_SUMMARY"
+        env:
+          GH_TOKEN: ${{ github.token }}</code></pre><p>The summary shows up on the run page as Markdown, so you get a free report page with history of runs.</p>
+
+<h2 id="the-script">The script</h2>
+<pre><code>// scripts/ci-health.mjs
+import { execSync } from 'node:child_process';
+const out = execSync('gh run list --branch main --limit 100 --json workflowName,conclusion,createdAt,startedAt,updatedAt', { encoding: 'utf8' });
+const runs = JSON.parse(out).filter(r =&gt; r.conclusion === 'success' || r.conclusion === 'failure');
+const by = {};
+for (const r of runs) (by[r.workflowName] ||= []).push(r);
+console.log('| workflow | runs | pass % | flips |\n|---|---|---|---|');
+for (const [name, rs] of Object.entries(by)) {
+  rs.sort((a, b) =&gt; a.createdAt &lt; b.createdAt ? -1 : 1);
+  const ok = rs.filter(r =&gt; r.conclusion === 'success').length;
+  let flips = 0;
+  for (let i = 1; i &lt; rs.length; i++) if (rs[i].conclusion !== rs[i-1].conclusion) flips++;
+  console.log('| ' + name + ' | ' + rs.length + ' | ' + (100 * ok / rs.length).toFixed(0) + ' | ' + flips + ' |');
+}</code></pre><p>Extend it with median and p90 from the earlier guide on <a href="/@odykyi/ci-metrics-that-matter/median-vs-p90-run-time/">run time</a>.</p>
+
+<h2 id="publish-the-report">Publish the report</h2>
+<p>If you want a shareable page, write the report as HTML or Markdown and publish it. <a href="https://pages.flisk.si">Pages</a> publishes a page or Markdown file to a free public link with <code>npx -y @flisk-sh/pages publish report.md --wait</code>. Remember the link is public, so do not publish data about private repos.</p>
+
+<h2 id="or-use-a-ready-dashboard">Or use a ready dashboard</h2>
+<p>For public repos you do not need to build anything. <a href="https://cilytics.flisk.si">Cilytics</a> is a public CI health dashboard, no account needed. It shows an org or one repo (<code>?repo=owner/name</code>) with a pass rate trend, red workflows, per-repo pass rate and median run time, flaky and slow workflows, an open-source hygiene score out of 100 and an AI-readiness view. Limits: default-branch runs only, last 100 runs, hourly snapshot, repos inactive for 90 days are left out. For private repos or per-test data, build your own.</p>
+
+<h2 id="keep-it-small">Keep it small</h2>
+<p>Start with five numbers from <a href="/@odykyi/ci-metrics-that-matter/which-ci-metrics-to-track/">the short list</a>, per workflow, with the sample size. Add a number only when someone asks a question it answers. For many repositories at once, read <a href="/@odykyi/org-wide-ci-visibility/">org-wide CI visibility</a>.</p><p>Test the script on a repo with a long history first, and compare its pass rate with what you see in the Actions tab for the same workflow. If they disagree, the usual cause is how cancelled and skipped runs are counted. Fix the definition once and note it at the top of the report.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How often should the collector run?</summary><p>Once a day is enough for trends. Run it more often only if you plan to alert on it.</p></details><details><summary>Where do I store the history?</summary><p>The step summary is easy but short-lived. For long history, commit a small JSON file or upload it as an artifact each run.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See the numbers</div><h3>Look at the CI metrics of any public GitHub repo, no account needed.</h3><p>Cilytics shows pass rate trend, red workflows, median and p90 run time, flaky and slow workflows for an org or a single public repo. It uses default-branch runs from the last 100 runs and an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI Metrics That Matter</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/which-ci-metrics-to-track/"><span class="lbl">Guide</span><b>Which CI Metrics Should You Track? Five That Matter</b><span>Pass rate, median and p90 run time, flip count, mean time to green and red default branch: the short list of CI metrics worth watching, and what each one tells you.</span></a><a href="/@odykyi/ci-metrics-that-matter/get-workflow-run-data-with-gh/"><span class="lbl">Guide</span><b>How to Get GitHub Actions Run Data with the gh CLI</b><span>Export workflow runs as JSON with gh run list and gh api, with the fields you need for pass rate and run time, and handle pagination and rate limits.</span></a><a href="/@odykyi/ci-metrics-that-matter/calculate-ci-pass-rate/"><span class="lbl">Guide</span><b>How to Calculate CI Pass Rate (and the Traps That Skew It)</b><span>A pass rate is successful runs divided by finished runs, but cancelled runs, retries and pull request noise change the answer. Here is a defensible definition and a script.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

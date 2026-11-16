@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Alert When Your Default Branch Goes Red</title>
+<meta name="description" content="Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Alert When Your Default Branch Goes Red">
+<meta property="og:description" content="Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Alert When Your Default Branch Goes Red","description":"Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI Metrics That Matter","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does workflow_run work for forks?","acceptedAnswer":{"@type":"Answer","text":"It runs in the context of the base repository. Be careful with code from fork pull requests, and keep this alert workflow limited to the default branch."}},{"@type":"Question","name":"Why did my alert workflow not run?","acceptedAnswer":{"@type":"Answer","text":"The workflows name must exactly match the watched workflow, and the alert workflow file must exist on the default branch."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-metrics-that-matter/">CI Metrics That Matter</a></div>
+<section class="hero"><div><div class="lbl">CI Metrics That Matter</div><h1>How to Alert When Your Default Branch Goes Red</h1><p class="dek">Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-workflow-run-alert">A workflow_run alert</a></li><li><a href="#avoid-duplicates">Avoid duplicates</a></li><li><a href="#send-to-chat">Send to chat</a></li><li><a href="#cut-the-noise">Cut the noise</a></li><li><a href="#test-the-alert">Test the alert</a></li><li><a href="#a-snapshot-view-as-backup">A snapshot view as backup</a></li></ol></nav></aside>
+<article><p>Use a second workflow with the <code>workflow_run</code> trigger that fires when your CI workflow completes on the default branch and the result is a failure, then post to a channel or open an issue. Keep the alert rare and specific, or people will mute it.</p>
+
+<h2 id="a-workflow-run-alert">A workflow_run alert</h2>
+<pre><code>name: Alert on red main
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+
+permissions:
+  issues: write
+
+jobs:
+  alert:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "CI is red on main" \
+            --body "Failed run: $URL"</code></pre><p>The <code>workflows</code> value must match the <code>name</code> of the workflow you watch. The <code>workflow_run</code> trigger runs from the default branch's copy of the workflow file.</p>
+
+<h2 id="avoid-duplicates">Avoid duplicates</h2>
+<p>Without care, ten failures open ten issues. Search for an open issue first and comment on it instead.</p><pre><code>gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+  --search 'CI is red on main in:title' --json number --jq '.[0].number'</code></pre><p>If a number comes back, add a comment with <code>gh issue comment</code>. If not, create the issue. Close it when the next run is green.</p>
+
+<h2 id="send-to-chat">Send to chat</h2>
+<p>For a chat message, post to a webhook URL stored as a repository secret.</p><pre><code>- run: |
+    curl -sS -X POST -H 'Content-Type: application/json' \
+      -d "{\"text\":\"CI red on main: $URL\"}" "$WEBHOOK_URL"
+  env:
+    WEBHOOK_URL: ${{ secrets.CHAT_WEBHOOK }}
+    URL: ${{ github.event.workflow_run.html_url }}</code></pre><p>Pass the run URL through an environment variable, as above, and not directly into the script text. Values like branch names and titles can be controlled by others. See <a href="/@odykyi/github-actions-security/">GitHub Actions security</a>.</p>
+
+<h2 id="cut-the-noise">Cut the noise</h2>
+<ul><li>Alert only on the default branch, not on pull requests.</li><li>Skip cancelled runs.</li><li>If a failure is likely a flake, wait for one automatic rerun before alerting.</li><li>Alert on repeated failure, such as two in a row, for known-flaky workflows while you fix them.</li></ul><p>Then track <a href="/@odykyi/ci-metrics-that-matter/mean-time-to-green/">mean time to green</a> to see if alerts lead to faster fixes.</p>
+
+<h2 id="test-the-alert">Test the alert</h2>
+<p>Do not wait for a real failure to find a typo. Create a branch with a deliberately failing test, merge it into a throwaway copy of the repo or use a test repository, and watch the alert fire. Check that the issue or message contains a link to the run and the commit, and that a second failure comments instead of creating a duplicate. Then check that a green run closes or updates the alert. A short test now saves a missed outage later.</p>
+
+<h2 id="a-snapshot-view-as-backup">A snapshot view as backup</h2>
+<p>An alert tells you when it breaks. A dashboard tells you what is red now. <a href="https://cilytics.flisk.si">Cilytics</a> lists red workflows, where the newest default-branch run failed, for an org or one public repo. It refreshes hourly, so treat it as an overview and not as the alert itself.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does workflow_run work for forks?</summary><p>It runs in the context of the base repository. Be careful with code from fork pull requests, and keep this alert workflow limited to the default branch.</p></details><details><summary>Why did my alert workflow not run?</summary><p>The workflows name must exactly match the watched workflow, and the alert workflow file must exist on the default branch.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See the numbers</div><h3>Look at the CI metrics of any public GitHub repo, no account needed.</h3><p>Cilytics shows pass rate trend, red workflows, median and p90 run time, flaky and slow workflows for an org or a single public repo. It uses default-branch runs from the last 100 runs and an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI Metrics That Matter</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/ci-cost-and-queue-time/"><span class="lbl">Guide</span><b>CI Queue Time vs Run Time vs Cost: What to Measure First</b><span>Separate waiting for a runner from running, and billed minutes from wall-clock time, so you optimize the right thing: speed, concurrency or cost.</span></a><a href="/@odykyi/ci-metrics-that-matter/build-a-ci-health-dashboard/"><span class="lbl">Guide</span><b>How to Build a Simple CI Health Dashboard for GitHub Repos</b><span>Collect run data on a schedule, compute pass rate, median, p90 and flips per workflow, publish a small report, or use a ready public dashboard. What each option can and cannot do.</span></a><a href="/@odykyi/ci-metrics-that-matter/which-ci-metrics-to-track/"><span class="lbl">Guide</span><b>Which CI Metrics Should You Track? Five That Matter</b><span>Pass rate, median and p90 run time, flip count, mean time to green and red default branch: the short list of CI metrics worth watching, and what each one tells you.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
