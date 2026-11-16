@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to deploy a static site to Cloudflare Pages</title>
+<meta name="description" content="Deploy a folder of static files to Cloudflare Pages with Wrangler, then connect Git for automatic builds and branch previews.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-deploy-a-static-site-to-cloudflare-pages/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to deploy a static site to Cloudflare Pages">
+<meta property="og:description" content="Deploy a folder of static files to Cloudflare Pages with Wrangler, then connect Git for automatic builds and branch previews.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-deploy-a-static-site-to-cloudflare-pages/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to deploy a static site to Cloudflare Pages","description":"Deploy a folder of static files to Cloudflare Pages with Wrangler, then connect Git for automatic builds and branch previews.","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-deploy-a-static-site-to-cloudflare-pages/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Publish pages and host small apps","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a credit card for Cloudflare Pages?","acceptedAnswer":{"@type":"Answer","text":"Cloudflare's free plan covers static Pages projects. Check their current pricing page for limits on builds and requests."}},{"@type":"Question","name":"How do I roll back a bad deploy?","acceptedAnswer":{"@type":"Answer","text":"In the dashboard open the project's deployments list and promote or roll back to an earlier deployment."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/publish-and-host-small-apps/">Publish pages and host small apps</a></div>
+<section class="hero"><div><div class="lbl">Publish pages and host small apps</div><h1>How to deploy a static site to Cloudflare Pages</h1><p class="dek">Deploy a folder of static files to Cloudflare Pages with Wrangler, then connect Git for automatic builds and branch previews.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#build-then-deploy">Build, then deploy</a></li><li><a href="#choose-the-production-branch">Choose the production branch</a></li><li><a href="#connect-git-instead">Connect Git instead</a></li><li><a href="#redirects-and-headers">Redirects and headers</a></li><li><a href="#automate-the-deploy-in-ci">Automate the deploy in CI</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Run <code>npx wrangler pages deploy ./dist --project-name my-site</code> from your project. Wrangler asks you to log in the first time, creates the Pages project if it does not exist, and prints a <code>pages.dev</code> URL.</p>
+
+<h2 id="build-then-deploy">Build, then deploy</h2>
+<p>Build your site into a folder first. For plain HTML the folder is just where your <code>index.html</code> is.</p><pre><code>npm run build
+npx wrangler login
+npx wrangler pages deploy ./dist --project-name my-site</code></pre><p>Each deploy gets its own unique URL, and the latest one on the production branch is served at <code>my-site.pages.dev</code>.</p>
+
+<h2 id="choose-the-production-branch">Choose the production branch</h2>
+<p>Wrangler treats deploys from your current Git branch as previews unless it matches the project's production branch. To push to production from the CLI, pass the branch explicitly.</p><pre><code>npx wrangler pages deploy ./dist --project-name my-site --branch main</code></pre>
+
+<h2 id="connect-git-instead">Connect Git instead</h2>
+<p>In the Cloudflare dashboard you can connect a GitHub repository and set a build command and output folder, for example <code>npm run build</code> and <code>dist</code>. Every push then builds automatically, and pull requests get preview URLs. Use the CLI for quick deploys and Git for ongoing work. Mixing both on one project works but is easy to confuse.</p>
+
+<h2 id="redirects-and-headers">Redirects and headers</h2>
+<p>Two plain-text files in the output folder control behaviour. A single-page app needs a rewrite so deep links load.</p><pre><code># _redirects
+/*  /index.html  200</code></pre><pre><code># _headers
+/*
+  X-Content-Type-Options: nosniff</code></pre>
+
+<h2 id="automate-the-deploy-in-ci">Automate the deploy in CI</h2>
+<p>Once the manual deploy works, run it from a workflow so every push to the main branch publishes. Store a Cloudflare API token limited to editing Pages as a repository secret, plus your account ID.</p><pre><code>- run: npx wrangler pages deploy dist --project-name my-site --branch main
+  env:
+    CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}</code></pre><p>Do not use your global API key for this. A scoped token limits the damage if it leaks.</p><p>Before the first deploy, run <code>ls dist</code> and look at what will be uploaded. Remove anything that is not meant to be public, such as notes, backups or <code>.env</code> files. Wrangler uploads what is in the folder, so the folder is your allowlist.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul><li>Deploying the project root instead of the build folder uploads source files, and may expose files you did not mean to publish.</li><li>Rewriting everything to <code>index.html</code> also catches missing assets and hides real 404s.</li><li>If you plan to add an API, read <a href="/@odykyi/cloudflare-workers-for-small-apps/">Workers for small apps</a> before you pick a layout.</li></ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a credit card for Cloudflare Pages?</summary><p>Cloudflare&#39;s free plan covers static Pages projects. Check their current pricing page for limits on builds and requests.</p></details><details><summary>How do I roll back a bad deploy?</summary><p>In the dashboard open the project&#39;s deployments list and promote or roll back to an earlier deployment.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Put one page online in a minute.</h3><p>Pages publishes an HTML or Markdown file to a free public link. It is public, so do not use it for anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://host.flisk.si">Host guide</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Publish pages and host small apps</span></div>
+<div class="rgrid"><a href="/@odykyi/publish-and-host-small-apps/how-to-add-a-custom-domain-to-a-static-site/"><span class="lbl">Guide</span><b>How to add a custom domain to a static site</b><span>Point a domain you own at a static host: subdomain or apex, the DNS records involved, HTTPS, and the mistakes that cause a certificate error.</span></a><a href="/@odykyi/publish-and-host-small-apps/what-not-to-publish-on-a-public-page/"><span class="lbl">Guide</span><b>What not to publish on a public page</b><span>A checklist of things that should never reach a public static site: secrets, personal data, internal URLs and source maps, with commands to find them before you deploy.</span></a><a href="/@odykyi/publish-and-host-small-apps/how-to-get-preview-urls-for-every-pull-request/"><span class="lbl">Guide</span><b>How to get preview URLs for every pull request</b><span>Give each pull request its own live URL so reviewers can click instead of checkout. Covers Cloudflare Pages previews and a manual Actions approach.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

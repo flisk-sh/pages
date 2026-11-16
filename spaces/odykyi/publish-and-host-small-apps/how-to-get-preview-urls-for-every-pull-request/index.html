@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to get preview URLs for every pull request</title>
+<meta name="description" content="Give each pull request its own live URL so reviewers can click instead of checkout. Covers Cloudflare Pages previews and a manual Actions approach.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-get-preview-urls-for-every-pull-request/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to get preview URLs for every pull request">
+<meta property="og:description" content="Give each pull request its own live URL so reviewers can click instead of checkout. Covers Cloudflare Pages previews and a manual Actions approach.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-get-preview-urls-for-every-pull-request/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to get preview URLs for every pull request","description":"Give each pull request its own live URL so reviewers can click instead of checkout. Covers Cloudflare Pages previews and a manual Actions approach.","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-get-preview-urls-for-every-pull-request/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Publish pages and host small apps","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does GitHub Pages support pull request previews?","acceptedAnswer":{"@type":"Answer","text":"Not built in. You can deploy each branch to a subfolder with a workflow, or use a host that provides previews."}},{"@type":"Question","name":"Are preview URLs private?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Treat them as public unless the host offers access control and you have enabled it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/publish-and-host-small-apps/">Publish pages and host small apps</a></div>
+<section class="hero"><div><div class="lbl">Publish pages and host small apps</div><h1>How to get preview URLs for every pull request</h1><p class="dek">Give each pull request its own live URL so reviewers can click instead of checkout. Covers Cloudflare Pages previews and a manual Actions approach.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-easy-way-use-a-host-with-previews">The easy way: use a host with previews</a></li><li><a href="#previews-from-the-cli">Previews from the CLI</a></li><li><a href="#pull-requests-from-forks">Pull requests from forks</a></li><li><a href="#keep-previews-out-of-search-results">Keep previews out of search results</a></li><li><a href="#what-reviewers-should-check-on-a-preview">What reviewers should check on a preview</a></li><li><a href="#clean-up">Clean up</a></li></ol></nav></aside>
+<article><p>Connect your repository to a host that builds previews, such as Cloudflare Pages or Netlify, and every pull request gets its own URL automatically. GitHub Pages has no built-in previews, so there you deploy to a per-branch folder yourself.</p>
+
+<h2 id="the-easy-way-use-a-host-with-previews">The easy way: use a host with previews</h2>
+<p>In Cloudflare Pages, connect the repo, set the build command and output folder, and save. Each branch and pull request is built and given a URL of the form <code>BRANCH.my-site.pages.dev</code>. The host usually comments on the pull request with the link. Netlify and Vercel behave the same way.</p>
+
+<h2 id="previews-from-the-cli">Previews from the CLI</h2>
+<p>If you build in your own CI, deploy from the workflow and pass the branch name. A non-production branch becomes a preview.</p><pre><code>name: preview
+on: pull_request
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci &amp;&amp; npm run build
+      - run: npx wrangler pages deploy dist --project-name my-site --branch ${{ github.head_ref }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}</code></pre><p>Create the API token with only the permission to edit Pages, and store both values as repository secrets.</p>
+
+<h2 id="pull-requests-from-forks">Pull requests from forks</h2>
+<p>Workflows triggered by forks do not receive your secrets, which is a deliberate protection. Do not work around it by switching to <code>pull_request_target</code> and checking out the fork's code with secrets available. That is a well-known way to leak credentials. Let maintainers deploy previews for forks on request.</p>
+
+<h2 id="keep-previews-out-of-search-results">Keep previews out of search results</h2>
+<p>Preview sites are public. Add a header so crawlers skip them, and never put real data in them.</p><pre><code># _headers
+https://*.my-site.pages.dev/*
+  X-Robots-Tag: noindex</code></pre><p>Check the host's docs for how its preview domain interacts with this rule.</p>
+
+<h2 id="what-reviewers-should-check-on-a-preview">What reviewers should check on a preview</h2>
+<p>A preview is only useful if reviewers know what to look for. Add a line to your pull request template: open the preview, check the changed page on a phone width, and click the links you touched. Link the preview in the description. Teach the team that a preview shows the built output, so a bug that only appears in the production build, like a wrong base path, will show up there and not in local dev. That is the main reason previews are worth setting up.</p>
+
+<h2 id="clean-up">Clean up</h2>
+<p>Hosts keep old deployments. Delete stale previews if they contain anything you later realise you should not have published. See <a href="/@odykyi/publish-and-host-small-apps/what-not-to-publish-on-a-public-page/">what not to publish</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does GitHub Pages support pull request previews?</summary><p>Not built in. You can deploy each branch to a subfolder with a workflow, or use a host that provides previews.</p></details><details><summary>Are preview URLs private?</summary><p>Usually not. Treat them as public unless the host offers access control and you have enabled it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Put one page online in a minute.</h3><p>Pages publishes an HTML or Markdown file to a free public link. It is public, so do not use it for anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://host.flisk.si">Host guide</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Publish pages and host small apps</span></div>
+<div class="rgrid"><a href="/@odykyi/publish-and-host-small-apps/how-to-publish-a-markdown-file-as-a-web-page/"><span class="lbl">Guide</span><b>How to publish a Markdown file as a web page</b><span>Turn a README or notes file into a shareable page: a one-command publisher, GitHub&#39;s own rendering, or a small build step that converts Markdown to HTML.</span></a><a href="/@odykyi/publish-and-host-small-apps/free-hosting-for-a-small-backend-what-to-expect/"><span class="lbl">Guide</span><b>Free hosting for a small backend: what to expect</b><span>Free tiers for APIs and bots come with sleeping processes, request caps and no persistent disk. Learn the trade-offs before you build on one.</span></a><a href="/@odykyi/publish-and-host-small-apps/how-to-check-a-page-before-you-publish-it/"><span class="lbl">Guide</span><b>How to check a page before you publish it</b><span>A short checklist for a page you are about to put online: title, description, links, mobile layout, accessibility basics and whether AI search can read it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

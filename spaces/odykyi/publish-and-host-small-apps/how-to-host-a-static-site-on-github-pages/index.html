@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to host a static site on GitHub Pages</title>
+<meta name="description" content="Publish a built static site from a GitHub repository using a Pages workflow, with the settings, the base-path trap and how to see a failed deploy.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-host-a-static-site-on-github-pages/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to host a static site on GitHub Pages">
+<meta property="og:description" content="Publish a built static site from a GitHub repository using a Pages workflow, with the settings, the base-path trap and how to see a failed deploy.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-host-a-static-site-on-github-pages/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to host a static site on GitHub Pages","description":"Publish a built static site from a GitHub repository using a Pages workflow, with the settings, the base-path trap and how to see a failed deploy.","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/how-to-host-a-static-site-on-github-pages/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Publish pages and host small apps","url":"https://pages.flisk.si/@odykyi/publish-and-host-small-apps/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is GitHub Pages free for private repositories?","acceptedAnswer":{"@type":"Answer","text":"Pages from private repositories needs a paid GitHub plan. Public repositories can use it on the free plan. Check GitHub's current plan page."}},{"@type":"Question","name":"Can GitHub Pages run a backend?","acceptedAnswer":{"@type":"Answer","text":"No. It serves static files only. For an API use a Worker or another service and call it from your page."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/publish-and-host-small-apps/">Publish pages and host small apps</a></div>
+<section class="hero"><div><div class="lbl">Publish pages and host small apps</div><h1>How to host a static site on GitHub Pages</h1><p class="dek">Publish a built static site from a GitHub repository using a Pages workflow, with the settings, the base-path trap and how to see a failed deploy.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#set-the-source">Set the source</a></li><li><a href="#the-workflow">The workflow</a></li><li><a href="#if-your-site-has-a-build-step">If your site has a build step</a></li><li><a href="#the-base-path-trap">The base path trap</a></li><li><a href="#check-it-from-the-command-line">Check it from the command line</a></li><li><a href="#debugging-a-failed-deploy">Debugging a failed deploy</a></li></ol></nav></aside>
+<article><p>In the repository settings, open Pages and set the source to GitHub Actions, then add a workflow that uploads your site folder as a Pages artifact and deploys it. Your site appears at <code>https://USER.github.io/REPO/</code> after the workflow finishes.</p>
+
+<h2 id="set-the-source">Set the source</h2>
+<p>In the repository go to Settings, then Pages, and choose <strong>GitHub Actions</strong> as the source. Without this the workflow below will build but never publish.</p>
+
+<h2 id="the-workflow">The workflow</h2>
+<p>Create <code>.github/workflows/pages.yml</code>. This version publishes the <code>site</code> folder as is. Replace the folder if you have a build step.</p><pre><code>name: pages
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4</code></pre><p>Check the Marketplace for the latest major versions of these actions when you copy this.</p>
+
+<h2 id="if-your-site-has-a-build-step">If your site has a build step</h2>
+<p>Add steps before the upload that install and build, then point <code>path</code> at the output folder, such as <code>dist</code>.</p><pre><code>      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci &amp;&amp; npm run build</code></pre>
+
+<h2 id="the-base-path-trap">The base path trap</h2>
+<p>A project site lives under <code>/REPO/</code>, not at the domain root. A link to <code>/style.css</code> then points at the wrong place and the page loads unstyled. Fix it with relative links, or set your framework's base option, for example <code>base: "/REPO/"</code> in Vite. A user site (a repo named <code>USER.github.io</code>) or a custom domain does not have this problem.</p>
+
+<h2 id="check-it-from-the-command-line">Check it from the command line</h2>
+<p>After the workflow finishes, confirm the site responds and returns the content you expect, rather than trusting a green tick.</p><pre><code>curl -sI https://USER.github.io/REPO/ | head -n 5
+curl -s https://USER.github.io/REPO/ | grep -i "&lt;title&gt;"</code></pre><p>A 404 means the artifact path or the Pages source setting is wrong. A 200 with old content usually means a cache, so try again in a minute or add a query string such as <code>?v=2</code> to bypass it while testing.</p><p>Keep the workflow file small and pinned to action versions you have tested. When an action releases a new major version, bump it in a pull request and check that the deploy still works before merging.</p>
+
+<h2 id="debugging-a-failed-deploy">Debugging a failed deploy</h2>
+<ul><li>Open the Actions tab and read the failed step. Most failures are a wrong <code>path</code> or missing permissions.</li><li>If the job is green but the site is a 404, confirm the source is set to GitHub Actions and that <code>index.html</code> is at the root of the artifact.</li><li>Changes can take a minute to appear. Hard refresh before assuming it failed.</li></ul><p>Next, point your own name at it with <a href="/@odykyi/publish-and-host-small-apps/how-to-add-a-custom-domain-to-a-static-site/">a custom domain</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is GitHub Pages free for private repositories?</summary><p>Pages from private repositories needs a paid GitHub plan. Public repositories can use it on the free plan. Check GitHub&#39;s current plan page.</p></details><details><summary>Can GitHub Pages run a backend?</summary><p>No. It serves static files only. For an API use a Worker or another service and call it from your page.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Put one page online in a minute.</h3><p>Pages publishes an HTML or Markdown file to a free public link. It is public, so do not use it for anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://host.flisk.si">Host guide</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Publish pages and host small apps</span></div>
+<div class="rgrid"><a href="/@odykyi/publish-and-host-small-apps/how-to-deploy-a-static-site-to-cloudflare-pages/"><span class="lbl">Guide</span><b>How to deploy a static site to Cloudflare Pages</b><span>Deploy a folder of static files to Cloudflare Pages with Wrangler, then connect Git for automatic builds and branch previews.</span></a><a href="/@odykyi/publish-and-host-small-apps/how-to-add-a-custom-domain-to-a-static-site/"><span class="lbl">Guide</span><b>How to add a custom domain to a static site</b><span>Point a domain you own at a static host: subdomain or apex, the DNS records involved, HTTPS, and the mistakes that cause a certificate error.</span></a><a href="/@odykyi/publish-and-host-small-apps/what-not-to-publish-on-a-public-page/"><span class="lbl">Guide</span><b>What not to publish on a public page</b><span>A checklist of things that should never reach a public static site: secrets, personal data, internal URLs and source maps, with commands to find them before you deploy.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
