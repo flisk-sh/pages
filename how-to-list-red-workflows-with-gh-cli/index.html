@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to List Failing (Red) Workflows With the gh CLI</title>
+<meta name="description" content="A short script that finds every workflow whose latest default-branch run failed, across one repo or a whole organisation.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to List Failing (Red) Workflows With the gh CLI">
+<meta property="og:description" content="A short script that finds every workflow whose latest default-branch run failed, across one repo or a whole organisation.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to List Failing (Red) Workflows With the gh CLI","description":"A short script that finds every workflow whose latest default-branch run failed, across one repo or a whole organisation.","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/how-to-list-red-workflows-with-gh-cli/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Org-Wide CI Visibility","url":"https://pages.flisk.si/@odykyi/org-wide-ci-visibility/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does a workflow show red after I fixed it?","acceptedAnswer":{"@type":"Answer","text":"If a dashboard is an hourly snapshot it lags. A script reading the API reflects the fix as soon as a new passing run exists."}},{"@type":"Question","name":"Should cancelled runs count as red?","acceptedAnswer":{"@type":"Answer","text":"Usually no. Cancellations are often caused by newer commits via concurrency settings, not by a failure."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/org-wide-ci-visibility/">Org-Wide CI Visibility</a></div>
+<section class="hero"><div><div class="lbl">Org-Wide CI Visibility</div><h1>How to List Failing (Red) Workflows With the gh CLI</h1><p class="dek">A short script that finds every workflow whose latest default-branch run failed, across one repo or a whole organisation.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#define-red-clearly">Define red clearly</a></li><li><a href="#one-repo">One repo</a></li><li><a href="#the-whole-org">The whole org</a></li><li><a href="#make-the-list-actionable">Make the list actionable</a></li><li><a href="#a-ready-made-red-list">A ready-made red list</a></li><li><a href="#edge-cases">Edge cases</a></li></ol></nav></aside>
+<article><p>A workflow is red when its newest run on the default branch failed. List the latest run per workflow with <code>gh run list</code>, keep the failures and you have a red list you can act on.</p>
+
+<h2 id="define-red-clearly">Define red clearly</h2>
+<p>Agree on one definition so the list means the same thing each week. A useful one: the newest completed run of the workflow on the default branch has a conclusion of failure. Ignore cancelled and skipped runs, and ignore pull request runs. Write the definition on the page that shows the list.</p>
+
+<h2 id="one-repo">One repo</h2>
+<pre><code>gh run list -R your-org/your-repo --branch main --limit 100 \
+  --json workflowName,conclusion,createdAt,url \
+  | jq -r 'group_by(.workflowName)[]
+    | sort_by(.createdAt) | last
+    | select(.conclusion=="failure")
+    | "\(.workflowName)\t\(.url)"'</code></pre><p>This groups runs by workflow, picks the newest of each and prints the failed ones with a link.</p>
+
+<h2 id="the-whole-org">The whole org</h2>
+<p>Loop over the repositories, skipping archived ones and anything inactive.</p><pre><code>gh repo list your-org --limit 300 --no-archived --json name --jq '.[].name' \
+| while read r; do
+  gh run list -R your-org/$r --branch main --limit 100 \
+    --json workflowName,conclusion,createdAt,url 2&gt;/dev/null \
+  | jq -r --arg r "$r" 'group_by(.workflowName)[]
+    | sort_by(.createdAt) | last
+    | select(.conclusion=="failure")
+    | "\($r)\t\(.workflowName)\t\(.url)"'
+done</code></pre><p>If a repo's default branch is not <code>main</code>, read it with <code>gh repo view --json defaultBranchRef</code> and use that.</p>
+
+<h2 id="make-the-list-actionable">Make the list actionable</h2>
+<ul><li>Add an owner column from CODEOWNERS or a repo topic; see <a href='/@odykyi/org-wide-ci-visibility/how-to-assign-ownership-for-repos-and-workflows/'>assigning ownership</a>.</li><li>Add the number of days it has been red. Old reds are the real debt.</li><li>Post the list to a channel weekly, not every run.</li></ul>
+
+<h2 id="a-ready-made-red-list">A ready-made red list</h2>
+<p>If you would rather not maintain a script, <a href='https://cilytics.flisk.si'>Cilytics</a> has a red workflows section built on this definition, newest default-branch run failed, for an org or one public repo via <code>?repo=owner/name</code>. It is an hourly snapshot built from the GitHub API, so a fix may take up to an hour to show. For debugging each failure, see <a href='/@odykyi/debugging-ci-failures/'>debugging CI failures</a>.</p>
+
+<h2 id="edge-cases">Edge cases</h2>
+<p>A few cases surprise people. Workflows triggered only on a schedule may have no recent run, so their newest run can be weeks old; show the age of the run next to the status. Workflows that only run on tags or releases never run on the default branch, so they will not appear at all. Decide whether to include them by listing runs for all branches in a separate report.</p><p>Matrix jobs can fail in one cell while the rest pass. The run's conclusion is still failure, which is correct, but the fix may be about one environment. Link to the run so the reader can see which cell failed.</p><p>Finally, be careful with reruns. If a run failed and a rerun of the same attempt passed, the run's final conclusion is success. That hides flakiness from the red list, which is why a separate flaky list matters. See <a href='/@odykyi/org-wide-ci-visibility/how-to-find-flaky-workflows-across-repos/'>finding flaky workflows</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does a workflow show red after I fixed it?</summary><p>If a dashboard is an hourly snapshot it lags. A script reading the API reflects the fix as soon as a new passing run exists.</p></details><details><summary>Should cancelled runs count as red?</summary><p>Usually no. Cancellations are often caused by newer commits via concurrency settings, not by a failure.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>See your whole org&#39;s CI on one page.</h3><p>Cilytics is a public CI health dashboard for GitHub. No account needed. Add <code>?repo=owner/name</code> to scan any public repository.</p></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://pages.flisk.si">Publish a CI report</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Org-Wide CI Visibility</span></div>
+<div class="rgrid"><a href="/@odykyi/org-wide-ci-visibility/how-to-find-flaky-workflows-across-repos/"><span class="lbl">Guide</span><b>How to Find Flaky Workflows Across Many Repositories</b><span>Count how often a workflow flips between pass and fail on the default branch and rank the worst, with a script you can run today.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-find-slow-github-actions-workflows/"><span class="lbl">Guide</span><b>How to Find Slow GitHub Actions Workflows (Median and p90)</b><span>Compute median and p90 run time per workflow from the GitHub API, rank by total wait, and learn why p90 matters more than the average for developers.</span></a><a href="/@odykyi/org-wide-ci-visibility/how-to-compute-pass-rate-per-repo-with-the-github-api/"><span class="lbl">Guide</span><b>How to Compute CI Pass Rate Per Repo With the GitHub API</b><span>What counts as a pass, which runs to exclude and a script that gives each repository a pass rate over its last 100 runs.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
