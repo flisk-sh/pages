@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Cache Docker Builds in GitHub Actions with Buildx</title>
+<meta name="description" content="Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Cache Docker Builds in GitHub Actions with Buildx">
+<meta property="og:description" content="Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Cache Docker Builds in GitHub Actions with Buildx","description":"Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.","url":"https://pages.flisk.si/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Faster GitHub Actions","url":"https://pages.flisk.si/@odykyi/faster-github-actions/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does my Docker cache miss on every run?","acceptedAnswer":{"@type":"Answer","text":"An early layer changes each build, such as copying the whole source before installing dependencies, or a step that writes a timestamp. Reorder the Dockerfile."}},{"@type":"Question","name":"Is type=gha shared across branches?","acceptedAnswer":{"@type":"Answer","text":"It follows the same scoping rules as the GitHub Actions cache, so a branch can read the default branch cache but not the reverse."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/faster-github-actions/">Faster GitHub Actions</a></div>
+<section class="hero"><div><div class="lbl">Faster GitHub Actions</div><h1>How to Cache Docker Builds in GitHub Actions with Buildx</h1><p class="dek">Reuse Docker layers between runs with the GitHub cache backend, order your Dockerfile for cache hits, and know when the cache will not help.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#workflow-setup">Workflow setup</a></li><li><a href="#order-the-dockerfile-for-the-cache">Order the Dockerfile for the cache</a></li><li><a href="#use-a-dockerignore">Use a .dockerignore</a></li><li><a href="#alternatives-a-registry-cache">Alternatives: a registry cache</a></li><li><a href="#check-that-layers-are-reused">Check that layers are reused</a></li><li><a href="#when-it-will-not-help">When it will not help</a></li></ol></nav></aside>
+<article><p>Use Docker Buildx with the <code>gha</code> cache backend so layers are saved in the GitHub Actions cache and reused on the next run. Pair that with a Dockerfile that copies dependency files before source code, so most layers stay unchanged.</p>
+
+<h2 id="workflow-setup">Workflow setup</h2>
+<pre><code>- uses: docker/setup-buildx-action@v3
+- uses: docker/build-push-action@v6
+  with:
+    context: .
+    push: false
+    tags: myapp:ci
+    cache-from: type=gha
+    cache-to: type=gha,mode=max</code></pre><p><code>mode=max</code> exports all layers, including intermediate ones from multi-stage builds. The default exports only final layers, which misses a lot. Check the action's README for current major versions.</p>
+
+<h2 id="order-the-dockerfile-for-the-cache">Order the Dockerfile for the cache</h2>
+<p>Docker reuses a layer only if everything before it is unchanged. Put things that change rarely first.</p><pre><code>FROM node:20-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN npm run build</code></pre><p>If you copy all source first, every code change reinstalls all dependencies. Splitting the copy keeps the <code>npm ci</code> layer cached until the lockfile changes.</p>
+
+<h2 id="use-a-dockerignore">Use a .dockerignore</h2>
+<p>Without it, <code>COPY . .</code> sends <code>.git</code>, <code>node_modules</code> and build output as context, which slows the build and changes the layer hash for no reason.</p><pre><code>.git
+node_modules
+dist
+*.log</code></pre>
+
+<h2 id="alternatives-a-registry-cache">Alternatives: a registry cache</h2>
+<p>The GitHub cache has size limits and is scoped per branch. An alternative is a registry cache that you push to your own image repository.</p><pre><code>cache-from: type=registry,ref=ghcr.io/OWNER/myapp:buildcache
+cache-to: type=registry,ref=ghcr.io/OWNER/myapp:buildcache,mode=max</code></pre><p>This needs login and package write permissions. It works across branches and from your laptop. It is more setup, so start with <code>gha</code>.</p>
+
+<h2 id="check-that-layers-are-reused">Check that layers are reused</h2>
+<p>Read the build log. Cached layers are marked <code>CACHED</code> in BuildKit output. Run the workflow twice with no code change and the second run should show most steps as cached. Then change one source file and confirm only the steps after the <code>COPY . .</code> line rebuild. If the dependency install runs again, the layer order or the cache scope needs a fix. Also pin the base image tag, since a moving tag such as <code>latest</code> changes the first layer and invalidates everything after it.</p>
+
+<h2 id="when-it-will-not-help">When it will not help</h2>
+<p>If your image build is under a minute, the overhead of loading and saving cache may cancel the gain. Builds with unpinned downloads, like <code>apt-get update</code> without versions, can produce a changed layer anyway. And if you need a clean build for releases, build without cache on the release workflow. For other ways to speed up a stack with containers, see <a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a>.</p><p>One more habit: use multi-stage builds so the final image does not carry compilers and test tools. The build stage can be cached on its own, and the final stage stays small, which also speeds up pushing and pulling the image. Keep the number of layers reasonable and combine related shell commands in a single <code>RUN</code> so a failed download does not leave half-finished layers cached.</p><p>If you build for several platforms, remember each platform has its own cache entry, so the first multi-platform build is slow and emulated platforms are much slower than native ones. Build only the platforms you test in CI, and leave the full set for the release workflow.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does my Docker cache miss on every run?</summary><p>An early layer changes each build, such as copying the whole source before installing dependencies, or a step that writes a timestamp. Reorder the Dockerfile.</p></details><details><summary>Is type=gha shared across branches?</summary><p>It follows the same scoping rules as the GitHub Actions cache, so a branch can read the default branch cache but not the reverse.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Measure before you tune</div><h3>See which workflows are slow before you change anything.</h3><p>Cilytics is a public CI health dashboard for GitHub. It shows median and p90 run time per workflow, for an org or any public repo. It reads default-branch runs only, from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Faster GitHub Actions</span></div>
+<div class="rgrid"><a href="/@odykyi/faster-github-actions/shallow-checkout-and-smaller-clones/"><span class="lbl">Guide</span><b>Faster Checkout in GitHub Actions: Shallow Clones and Sparse Checkout</b><span>actions/checkout fetches only one commit by default. Learn when to fetch more, how to use sparse checkout for big repos, and how to skip large files and submodules.</span></a><a href="/@odykyi/faster-github-actions/larger-runners-vs-self-hosted-runners/"><span class="lbl">Guide</span><b>Larger Runners vs Self-Hosted Runners: When Is Each Worth It?</b><span>Compare GitHub-hosted, larger hosted and self-hosted runners on speed, cost, security and upkeep, with a plain rule for when to leave the default runner.</span></a><a href="/@odykyi/faster-github-actions/split-slow-jobs-and-use-needs/"><span class="lbl">Guide</span><b>How to Split Slow GitHub Actions Jobs and Use needs and Artifacts</b><span>Break one long job into parallel jobs, share build output with artifacts, and order cheap checks first so failures stop the pipeline early.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
