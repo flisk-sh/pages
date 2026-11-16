@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Renovate Config Basics: A renovate.json You Can Start With</title>
+<meta name="description" content="Start from the recommended preset, add a schedule, group related packages with packageRules and enable a dependency dashboard, in under thirty lines.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dependency-updates/renovate-config-basics/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Renovate Config Basics: A renovate.json You Can Start With">
+<meta property="og:description" content="Start from the recommended preset, add a schedule, group related packages with packageRules and enable a dependency dashboard, in under thirty lines.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dependency-updates/renovate-config-basics/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Renovate Config Basics: A renovate.json You Can Start With","description":"Start from the recommended preset, add a schedule, group related packages with packageRules and enable a dependency dashboard, in under thirty lines.","url":"https://pages.flisk.si/@odykyi/dependency-updates/renovate-config-basics/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Dependency Updates Without Chaos","url":"https://pages.flisk.si/@odykyi/dependency-updates/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is config:recommended?","acceptedAnswer":{"@type":"Answer","text":"A built-in Renovate preset with common defaults, such as the dependency dashboard and sensible grouping. It is the usual starting point in the Renovate documentation."}},{"@type":"Question","name":"How do I limit how many PRs Renovate opens?","acceptedAnswer":{"@type":"Answer","text":"Set prConcurrentLimit and prHourlyLimit, and use a schedule so updates arrive on defined days."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dependency-updates/">Dependency Updates Without Chaos</a></div>
+<section class="hero"><div><div class="lbl">Dependency Updates Without Chaos</div><h1>Renovate Config Basics: A renovate.json You Can Start With</h1><p class="dek">Start from the recommended preset, add a schedule, group related packages with packageRules and enable a dependency dashboard, in under thirty lines.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-starting-config">A starting config</a></li><li><a href="#how-packagerules-work">How packageRules work</a></li><li><a href="#the-dependency-dashboard">The dependency dashboard</a></li><li><a href="#shared-presets-for-many-repositories">Shared presets for many repositories</a></li><li><a href="#common-first-rules">Common first rules</a></li><li><a href="#test-your-config-before-you-merge-it">Test your config before you merge it</a></li></ol></nav></aside>
+<article><p>Create <code>renovate.json</code> in the repository root with <code>extends: ['config:recommended']</code>, then add a schedule and a few <code>packageRules</code>. The recommended preset already sets sensible defaults, so start small and add rules only when a specific pull request annoys you.</p>
+
+<h2 id="a-starting-config">A starting config</h2>
+<pre><code>{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "UTC",
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev dependencies"
+    }
+  ]
+}</code></pre><p>The schema line gives editor validation. The schedule and the concurrency limit keep the volume predictable. The rule groups minor and patch updates of dev dependencies into one pull request.</p>
+
+<h2 id="how-packagerules-work">How packageRules work</h2>
+<p>Each rule has matchers and effects. Matchers select updates by package name, update type (major, minor, patch), dependency type, manager or file path. Effects change what Renovate does: group, label, set a schedule, delay, or enable automerge. Rules are applied in order, and later rules override earlier ones for the same update. That lets you write a broad rule first and exceptions after it.</p><pre><code>{
+  "matchPackageNames": ["react", "react-dom"],
+  "groupName": "react"
+}</code></pre>
+
+<h2 id="the-dependency-dashboard">The dependency dashboard</h2>
+<p>The recommended preset can create an issue that lists all detected updates, which ones are open, which are waiting for the schedule or rate limits, and lets you tick a box to trigger one. It is the best place to see why Renovate has not yet opened a particular update. Read it once a week with your triage, or turn it off if you do not want an extra issue.</p>
+
+<h2 id="shared-presets-for-many-repositories">Shared presets for many repositories</h2>
+<p>If you manage several repositories, move your rules into a preset that lives in one repo and extend it everywhere. Each repo then needs a two-line config, and a policy change happens in one place. The Renovate documentation describes the preset naming and hosting, so follow it for the exact reference format. This is the main reason teams with many repos pick Renovate over <a href='/@odykyi/dependency-updates/dependabot-vs-renovate/'>Dependabot</a>.</p>
+
+<h2 id="common-first-rules">Common first rules</h2>
+<ul><li>Pause updates for a package: set <code>enabled</code> to false in a rule that matches it.</li><li>Separate majors: label them with a rule on <code>matchUpdateTypes</code> and keep them off the schedule of minors.</li><li>Pin to one Node major: restrict the allowed versions for the runtime package.</li><li>Keep lockfiles fresh: use the lockfile maintenance feature on a monthly schedule.</li></ul><p>Look up each option name in the Renovate documentation before use.</p>
+
+<h2 id="test-your-config-before-you-merge-it">Test your config before you merge it</h2>
+<p>A broken config means no updates and no loud error. Run the config validator that ships with Renovate on the file, for example <code>npx --yes --package renovate -- renovate-config-validator</code>, and read the first onboarding pull request carefully. Then wire up automerge only for safe cases, see <a href='/@odykyi/dependency-updates/automerge-safe-dependency-updates/'>automerge for safe dependency updates</a>, and make sure CI proves each update, see <a href='/@odykyi/dependency-updates/ci-checks-for-dependency-prs/'>CI checks for dependency PRs</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What is config:recommended?</summary><p>A built-in Renovate preset with common defaults, such as the dependency dashboard and sensible grouping. It is the usual starting point in the Renovate documentation.</p></details><details><summary>How do I limit how many PRs Renovate opens?</summary><p>Set prConcurrentLimit and prHourlyLimit, and use a schedule so updates arrive on defined days.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on a repo</div><h3>See how healthy the CI behind your dependency PRs really is.</h3><p>Cilytics is a public CI health dashboard for GitHub: pass rate, red, flaky and slow workflows for an org or any public repo, no account. It reads default-branch runs from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://gardener.flisk.si">Draw a dependency tower</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dependency Updates Without Chaos</span></div>
+<div class="rgrid"><a href="/@odykyi/dependency-updates/automerge-safe-dependency-updates/"><span class="lbl">Guide</span><b>How to Automerge Dependency Updates Safely</b><span>Merge patch updates and trusted dev tools without a human, behind required checks and branch protection, and keep majors and production runtime changes for review.</span></a><a href="/@odykyi/dependency-updates/fast-security-updates/"><span class="lbl">Guide</span><b>How to Land Dependency Security Fixes Fast</b><span>Turn on security alerts and security updates, separate them from routine version bumps, triage by reachability and set a clear time to merge for each severity.</span></a><a href="/@odykyi/dependency-updates/lockfiles-and-version-pinning/"><span class="lbl">Guide</span><b>Lockfiles and Version Pinning: Ranges, Pins and npm ci</b><span>Decide when to use version ranges, exact pins and lockfiles, why CI should install from the lockfile, and what an updater bot needs from you.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

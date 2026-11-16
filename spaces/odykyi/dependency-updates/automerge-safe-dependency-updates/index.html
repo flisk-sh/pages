@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Automerge Dependency Updates Safely</title>
+<meta name="description" content="Merge patch updates and trusted dev tools without a human, behind required checks and branch protection, and keep majors and production runtime changes for review.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/dependency-updates/automerge-safe-dependency-updates/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Automerge Dependency Updates Safely">
+<meta property="og:description" content="Merge patch updates and trusted dev tools without a human, behind required checks and branch protection, and keep majors and production runtime changes for review.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/dependency-updates/automerge-safe-dependency-updates/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Automerge Dependency Updates Safely","description":"Merge patch updates and trusted dev tools without a human, behind required checks and branch protection, and keep majors and production runtime changes for review.","url":"https://pages.flisk.si/@odykyi/dependency-updates/automerge-safe-dependency-updates/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Dependency Updates Without Chaos","url":"https://pages.flisk.si/@odykyi/dependency-updates/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is automerge for dependencies a good idea?","acceptedAnswer":{"@type":"Answer","text":"Yes for patch updates and dev tools when your tests are reliable and branch protection requires them. No for major updates or critical runtime packages."}},{"@type":"Question","name":"Why does gh pr merge --auto fail?","acceptedAnswer":{"@type":"Answer","text":"Auto-merge must be allowed in the repository settings, and the branch needs at least one required check or protection rule for it to wait on."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/dependency-updates/">Dependency Updates Without Chaos</a></div>
+<section class="hero"><div><div class="lbl">Dependency Updates Without Chaos</div><h1>How to Automerge Dependency Updates Safely</h1><p class="dek">Merge patch updates and trusted dev tools without a human, behind required checks and branch protection, and keep majors and production runtime changes for review.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#prerequisites">Prerequisites</a></li><li><a href="#automerge-with-dependabot-and-github-actions">Automerge with Dependabot and GitHub Actions</a></li><li><a href="#automerge-with-renovate">Automerge with Renovate</a></li><li><a href="#what-to-leave-for-review">What to leave for review</a></li><li><a href="#start-small-and-widen">Start small and widen</a></li><li><a href="#watch-what-gets-merged">Watch what gets merged</a></li></ol></nav></aside>
+<article><p>Automerge only what a green CI run can really prove: patch updates and dev-tool updates, with required status checks and branch protection in place. Keep major versions and runtime dependencies that change behaviour for a person. Automerge without good tests is a fast way to ship broken code.</p>
+
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Before you automerge anything, check three things. First, the default branch is protected and requires the checks that matter (tests, build, lint). Second, those checks are reliable: a flaky suite makes automerge either stall or merge on luck, see <a href='/@odykyi/flaky-tests-and-ci/'>Flaky Tests and Flaky CI</a>. Third, your tests cover what a dependency can break. If they do not, fix that first.</p>
+
+<h2 id="automerge-with-dependabot-and-github-actions">Automerge with Dependabot and GitHub Actions</h2>
+<p>Dependabot does not merge by itself. A common pattern is a workflow that reads the update type with the <code>dependabot/fetch-metadata</code> action and enables auto-merge on the pull request when it is a patch. GitHub then merges it once required checks pass.</p><pre><code>name: Dependabot automerge
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}</code></pre><p>Allow auto-merge in the repository settings first, or the command fails. Pin the metadata action by SHA if you want to be strict, see <a href='/@odykyi/dependency-updates/update-github-actions-dependencies/'>keeping Actions up to date</a>.</p>
+
+<h2 id="automerge-with-renovate">Automerge with Renovate</h2>
+<p>Renovate has this built in as a rule:</p><pre><code>{
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["patch"],
+      "automerge": true
+    },
+    {
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
+    }
+  ]
+}</code></pre><p>Renovate can wait for status checks, and it can add a minimum release age so brand new versions have a few days to prove themselves. Check the current option names in the Renovate docs before copying.</p>
+
+<h2 id="what-to-leave-for-review">What to leave for review</h2>
+<ul><li>Major version updates of anything.</li><li>Runtime dependencies that touch security, authentication, parsing or payments.</li><li>Updates of the build toolchain or compiler, when they change output.</li><li>Any package with a new maintainer or a sudden unusual release.</li></ul><p>A small time delay before merging patch releases is cheap protection against a compromised or yanked release. The supply chain risk is real, so automerge is a trade-off between speed and exposure.</p>
+
+<h2 id="start-small-and-widen">Start small and widen</h2>
+<p>Begin with one narrow rule, such as patch updates of dev dependencies, for two weeks. Count how many were merged and whether any broke the branch. If none did, widen to minor updates of dev tools, then to patch updates of runtime packages. Keep a written list of what is allowed to automerge. Widening in steps builds evidence for each decision and gives you a clear point to stop.</p>
+
+<h2 id="watch-what-gets-merged">Watch what gets merged</h2>
+<p>Automerged does not mean unseen. Review the merged list weekly. If a bad update slips through, revert it, add a test that would have caught it, and tighten the rule. Track how often automerged PRs break the default branch: if it is more than rarely, the safety net is too thin. Pair this with <a href='/@odykyi/dependency-updates/fast-security-updates/'>a fast path for security fixes</a>, which should merge even faster.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is automerge for dependencies a good idea?</summary><p>Yes for patch updates and dev tools when your tests are reliable and branch protection requires them. No for major updates or critical runtime packages.</p></details><details><summary>Why does gh pr merge --auto fail?</summary><p>Auto-merge must be allowed in the repository settings, and the branch needs at least one required check or protection rule for it to wait on.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it on a repo</div><h3>See how healthy the CI behind your dependency PRs really is.</h3><p>Cilytics is a public CI health dashboard for GitHub: pass rate, red, flaky and slow workflows for an org or any public repo, no account. It reads default-branch runs from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://gardener.flisk.si">Draw a dependency tower</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Dependency Updates Without Chaos</span></div>
+<div class="rgrid"><a href="/@odykyi/dependency-updates/fast-security-updates/"><span class="lbl">Guide</span><b>How to Land Dependency Security Fixes Fast</b><span>Turn on security alerts and security updates, separate them from routine version bumps, triage by reachability and set a clear time to merge for each severity.</span></a><a href="/@odykyi/dependency-updates/lockfiles-and-version-pinning/"><span class="lbl">Guide</span><b>Lockfiles and Version Pinning: Ranges, Pins and npm ci</b><span>Decide when to use version ranges, exact pins and lockfiles, why CI should install from the lockfile, and what an updater bot needs from you.</span></a><a href="/@odykyi/dependency-updates/major-version-upgrade-plan/"><span class="lbl">Guide</span><b>How to Plan a Major Dependency Upgrade Without Breaking Everything</b><span>Read the migration notes, upgrade in a branch with small steps, let the compiler and tests lead, and ship it behind your normal release checks.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
