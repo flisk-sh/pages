@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>llms.txt: what it is and how to write one</title>
+<meta name="description" content="A proposed plain-text file that points language models to your best pages. Learn the format, what to put in it, and why it is cheap to add but not a ranking switch.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/get-found-by-ai-search/llms-txt-what-it-is-and-how-to-write-it/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="llms.txt: what it is and how to write one">
+<meta property="og:description" content="A proposed plain-text file that points language models to your best pages. Learn the format, what to put in it, and why it is cheap to add but not a ranking switch.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/get-found-by-ai-search/llms-txt-what-it-is-and-how-to-write-it/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"llms.txt: what it is and how to write one","description":"A proposed plain-text file that points language models to your best pages. Learn the format, what to put in it, and why it is cheap to add but not a ranking switch.","url":"https://pages.flisk.si/@odykyi/get-found-by-ai-search/llms-txt-what-it-is-and-how-to-write-it/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Get found by AI search","url":"https://pages.flisk.si/@odykyi/get-found-by-ai-search/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do ChatGPT or Google use llms.txt?","acceptedAnswer":{"@type":"Answer","text":"No major vendor has said it is a ranking signal. Some tools and agents do read it, so it is low cost and low risk to add."}},{"@type":"Question","name":"Where does the file go?","acceptedAnswer":{"@type":"Answer","text":"At the root of your domain, so it loads at /llms.txt, served as plain text or Markdown."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/get-found-by-ai-search/">Get found by AI search</a></div>
+<section class="hero"><div><div class="lbl">Get found by AI search</div><h1>llms.txt: what it is and how to write one</h1><p class="dek">A proposed plain-text file that points language models to your best pages. Learn the format, what to put in it, and why it is cheap to add but not a ranking switch.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-the-file-looks-like">What the file looks like</a></li><li><a href="#what-to-put-in-it">What to put in it</a></li><li><a href="#a-longer-variant">A longer variant</a></li><li><a href="#be-honest-about-the-benefit">Be honest about the benefit</a></li><li><a href="#keep-it-accurate">Keep it accurate</a></li><li><a href="#generate-it-from-your-docs">Generate it from your docs</a></li></ol></nav></aside>
+<article><p>llms.txt is a proposed convention: a Markdown file at the root of your site that gives a model a short summary of the site and links to the pages that matter. It is cheap to add and helpful to tools that read it, but no major search product has promised to rank you for it.</p>
+
+<h2 id="what-the-file-looks-like">What the file looks like</h2>
+<p>The proposal uses plain Markdown. A title, a one-line summary in a blockquote, then sections of links with short notes.</p><pre><code># Acme Billing
+
+&gt; Acme Billing is an open-source invoicing library for Node.
+
+## Docs
+
+- [Quick start](https://acme.dev/docs/start.md): install and send a first invoice
+- [API reference](https://acme.dev/docs/api.md): every function and option
+
+## Optional
+
+- [Changelog](https://acme.dev/changelog.md)</code></pre><p>Serve it at <code>/llms.txt</code> with a text content type. Check the llms.txt proposal site for the current wording of the format.</p>
+
+<h2 id="what-to-put-in-it">What to put in it</h2>
+<ul><li>One sentence on what the product is and who it is for.</li><li>Links to the five to twenty pages you would hand a new engineer.</li><li>A short note on each link, so a model can choose.</li><li>Links to Markdown versions of pages when you have them, since clean text is easier to read than a styled page.</li></ul>
+
+<h2 id="a-longer-variant">A longer variant</h2>
+<p>Some sites also publish <code>llms-full.txt</code>, one file holding the full text of the docs. It is useful when a coding agent should load everything in one fetch. Keep it under a size an agent can reasonably read, and generate it from your docs source so it never goes stale.</p>
+
+<h2 id="be-honest-about-the-benefit">Be honest about the benefit</h2>
+<p>Do not expect traffic from this file alone. Some developer tools and agents read it, and it costs an hour. Treat it as documentation for machines. The real gains come from crawlable pages and clear writing, see <a href='/@odykyi/get-found-by-ai-search/how-to-get-cited-by-chatgpt-and-perplexity/'>how to get cited</a>.</p>
+
+<h2 id="keep-it-accurate">Keep it accurate</h2>
+<p>Every link must work and every summary must match the page. Add a check to CI that fetches each link and fails on an error status. A stale llms.txt that points to dead pages is worse than none. For the repo-level equivalent aimed at coding agents, see <a href='/@odykyi/docs-and-readmes-for-agents/'>docs and READMEs for agents</a>.</p>
+
+<h2 id="generate-it-from-your-docs">Generate it from your docs</h2>
+<p>Do not hand-maintain the list. If your docs live in a folder of Markdown files, write a small script that reads each file's title and first line and emits the links. Run it in the build, commit the output or publish it with the site, and fail the build when a link target is missing. That keeps the file honest with almost no ongoing effort, and it is the same idea as a sitemap generated at build time.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do ChatGPT or Google use llms.txt?</summary><p>No major vendor has said it is a ranking signal. Some tools and agents do read it, so it is low cost and low risk to add.</p></details><details><summary>Where does the file go?</summary><p>At the root of your domain, so it loads at /llms.txt, served as plain text or Markdown.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your site</div><h3>See whether AI search can find, read and cite your site.</h3><p>Citable checks whether AI search and chatbots can reach and cite a website. For a GitHub project, README Score gives the README a score out of 100 with a fix for each gap.</p></div><div class="btns"><a class="btn primary" href="https://citable.flisk.si">Open Citable</a><a class="btn" href="https://readme.flisk.si">Open README Score</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Get found by AI search</span></div>
+<div class="rgrid"><a href="/@odykyi/get-found-by-ai-search/does-ai-search-see-javascript-rendered-sites/"><span class="lbl">Guide</span><b>Can AI crawlers read JavaScript-rendered sites?</b><span>Many AI crawlers fetch HTML and do not run your scripts. How to test what they see, and how to fix a single-page app with server rendering or prerendering.</span></a><a href="/@odykyi/get-found-by-ai-search/structured-data-json-ld-for-ai-search/"><span class="lbl">Guide</span><b>Structured data and JSON-LD for AI search and rich results</b><span>Add schema.org JSON-LD to describe your product, articles and FAQs in a machine-readable way, with copy-paste examples and the mistakes that invalidate them.</span></a><a href="/@odykyi/get-found-by-ai-search/how-to-check-if-ai-can-read-your-website/"><span class="lbl">Guide</span><b>How to check if AI search can read your website</b><span>A five-minute audit: fetch the page as a bot, read the raw HTML, check robots.txt and headers, then run a checker and fix what it finds.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
