@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to deploy a remote MCP server on Cloudflare Workers</title>
+<meta name="description" content="Host an HTTP MCP server on Workers: what fits the runtime, how to keep state, how to store secrets and how to deploy with Wrangler.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/mcp-servers-in-production/how-to-deploy-a-remote-mcp-server-on-cloudflare-workers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to deploy a remote MCP server on Cloudflare Workers">
+<meta property="og:description" content="Host an HTTP MCP server on Workers: what fits the runtime, how to keep state, how to store secrets and how to deploy with Wrangler.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/mcp-servers-in-production/how-to-deploy-a-remote-mcp-server-on-cloudflare-workers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to deploy a remote MCP server on Cloudflare Workers","description":"Host an HTTP MCP server on Workers: what fits the runtime, how to keep state, how to store secrets and how to deploy with Wrangler.","url":"https://pages.flisk.si/@odykyi/mcp-servers-in-production/how-to-deploy-a-remote-mcp-server-on-cloudflare-workers/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"MCP servers in production","url":"https://pages.flisk.si/@odykyi/mcp-servers-in-production/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can a Worker keep an MCP session in memory?","acceptedAnswer":{"@type":"Answer","text":"Not reliably, because requests may run on different instances. Keep the server stateless or store session data in a Durable Object or external store."}},{"@type":"Question","name":"Is there a free tier for this?","acceptedAnswer":{"@type":"Answer","text":"Cloudflare has a free Workers plan with limits that change over time. Check the current Workers pricing and limits pages before you rely on it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/mcp-servers-in-production/">MCP servers in production</a></div>
+<section class="hero"><div><div class="lbl">MCP servers in production</div><h1>How to deploy a remote MCP server on Cloudflare Workers</h1><p class="dek">Host an HTTP MCP server on Workers: what fits the runtime, how to keep state, how to store secrets and how to deploy with Wrangler.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#decide-if-workers-fits">Decide if Workers fits</a></li><li><a href="#set-up-the-project">Set up the project</a></li><li><a href="#handle-the-mcp-endpoint">Handle the MCP endpoint</a></li><li><a href="#store-secrets-and-state-correctly">Store secrets and state correctly</a></li><li><a href="#deploy-and-verify">Deploy and verify</a></li></ol></nav></aside>
+<article><p>A stateless MCP server that speaks Streamable HTTP fits well on Cloudflare Workers. Write a fetch handler, store secrets with <code>wrangler secret put</code>, and run <code>npx wrangler deploy</code>. Cloudflare also publishes agent and MCP helper libraries, so check their docs for the current recommended package before you hand-write the transport.</p>
+
+<h2 id="decide-if-workers-fits">Decide if Workers fits</h2>
+<p>Workers run short-lived request handlers at the edge. That suits tools that call HTTP APIs, query a hosted database, or read from KV or D1. It suits poorly a tool that needs a long-running process, a big native dependency, or a local filesystem. For those, use a container host and read <a href="/@odykyi/mcp-servers-in-production/stdio-vs-streamable-http-mcp-transport/">stdio vs Streamable HTTP</a> first.</p><p>Remember the runtime has CPU time and memory limits that depend on your plan. Look at the current Workers limits page before you design long tool calls.</p>
+
+<h2 id="set-up-the-project">Set up the project</h2>
+<pre><code>npm create cloudflare@latest my-mcp
+cd my-mcp
+npx wrangler dev</code></pre><p>The <code>wrangler.toml</code> (or <code>wrangler.jsonc</code>) file names the Worker and binds resources:</p><pre><code>name = "my-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[[kv_namespaces]]
+binding = "CACHE"
+id = "YOUR_KV_ID"</code></pre><p>Pick a <code>compatibility_date</code> that is today or recent, and keep it fixed until you test a newer one.</p>
+
+<h2 id="handle-the-mcp-endpoint">Handle the MCP endpoint</h2>
+<p>Route one path, such as <code>/mcp</code>, to your MCP handler, and reject everything else with <code>404</code>. Check the token before parsing the body.</p><pre><code>export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 });
+    const auth = request.headers.get("authorization");
+    if (auth !== "Bearer " + env.MCP_TOKEN)
+      return new Response("Unauthorized", { status: 401,
+        headers: { "WWW-Authenticate": "Bearer" } });
+    return handleMcp(request, env); // your MCP SDK glue
+  }
+};</code></pre><p><code>handleMcp</code> is where your SDK or Cloudflare's helper library turns the request into a JSON-RPC response.</p>
+
+<h2 id="store-secrets-and-state-correctly">Store secrets and state correctly</h2>
+<ul><li>Secrets: <code>npx wrangler secret put MCP_TOKEN</code>. Never put them in <code>wrangler.toml</code>.</li><li>Small shared data: KV for cached reads, D1 for relational data.</li><li>Per-session state: Workers instances do not share memory, so either stay stateless or use a Durable Object.</li></ul><p>More patterns are in <a href="/@odykyi/cloudflare-workers-for-small-apps/">Cloudflare Workers for small apps</a>.</p>
+
+<h2 id="deploy-and-verify">Deploy and verify</h2>
+<pre><code>npx wrangler deploy
+curl -i https://my-mcp.YOUR-SUBDOMAIN.workers.dev/mcp</code></pre><p>The unauthenticated call should return <code>401</code>. Then connect the <a href="/@odykyi/mcp-servers-in-production/how-to-test-an-mcp-server-with-the-inspector-and-ci/">MCP Inspector</a> with your token and call a tool. For a working example of remote MCP endpoints, Flisk publishes its Pages MCP at <a href="https://pages.flisk.si/mcp">pages.flisk.si/mcp</a>, which you can add to a client to see what a small hosted server feels like.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can a Worker keep an MCP session in memory?</summary><p>Not reliably, because requests may run on different instances. Keep the server stateless or store session data in a Durable Object or external store.</p></details><details><summary>Is there a free tier for this?</summary><p>Cloudflare has a free Workers plan with limits that change over time. Check the current Workers pricing and limits pages before you rely on it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an MCP server locally before you put it in front of users.</h3><p>Flisk can scaffold an <code>mcp</code> service next to your database and agents, so you test the whole stack on your own machine first. It is a local development tool, not a production orchestrator.</p><pre><code>flisk resource my-tools --type mcp</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">MCP servers in production</span></div>
+<div class="rgrid"><a href="/@odykyi/mcp-servers-in-production/mcp-server-security-checklist/"><span class="lbl">Guide</span><b>MCP server security checklist before you go public</b><span>A short checklist for MCP servers that real users connect to: auth, least privilege, input handling, prompt injection through tool results, and safe defaults.</span></a><a href="/@odykyi/mcp-servers-in-production/how-to-publish-an-mcp-server-to-the-registry/"><span class="lbl">Guide</span><b>How to publish your MCP server so people can find and install it</b><span>Package the server, write a README that clients and people can use, add a manifest and list it in the MCP Registry and other directories.</span></a><a href="/@odykyi/mcp-servers-in-production/how-to-add-authentication-to-a-remote-mcp-server/"><span class="lbl">Guide</span><b>How to add authentication to a remote MCP server</b><span>Protect an HTTP MCP server with bearer tokens or OAuth, return the right 401 response, and keep tokens out of logs and tool arguments.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

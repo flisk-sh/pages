@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCP server rate limits, timeouts and retries</title>
+<meta name="description" content="Stop one runaway agent from taking your server down: per-client limits, tool timeouts, idempotency keys and safe retry rules.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/mcp-servers-in-production/mcp-server-rate-limits-timeouts-and-retries/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MCP server rate limits, timeouts and retries">
+<meta property="og:description" content="Stop one runaway agent from taking your server down: per-client limits, tool timeouts, idempotency keys and safe retry rules.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/mcp-servers-in-production/mcp-server-rate-limits-timeouts-and-retries/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"MCP server rate limits, timeouts and retries","description":"Stop one runaway agent from taking your server down: per-client limits, tool timeouts, idempotency keys and safe retry rules.","url":"https://pages.flisk.si/@odykyi/mcp-servers-in-production/mcp-server-rate-limits-timeouts-and-retries/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"MCP servers in production","url":"https://pages.flisk.si/@odykyi/mcp-servers-in-production/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What rate limit should I start with?","acceptedAnswer":{"@type":"Answer","text":"Pick a number well above normal human use, such as a few calls per second per client, then watch your logs and adjust. Tighten limits for expensive or write tools."}},{"@type":"Question","name":"Should the model see rate limit errors?","acceptedAnswer":{"@type":"Answer","text":"Yes. Return a clear message with the wait time so the agent can pause instead of retrying immediately."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/mcp-servers-in-production/">MCP servers in production</a></div>
+<section class="hero"><div><div class="lbl">MCP servers in production</div><h1>MCP server rate limits, timeouts and retries</h1><p class="dek">Stop one runaway agent from taking your server down: per-client limits, tool timeouts, idempotency keys and safe retry rules.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#limit-by-client-not-only-by-ip">Limit by client, not only by IP</a></li><li><a href="#say-clearly-when-you-limit">Say clearly when you limit</a></li><li><a href="#put-a-timeout-on-every-tool">Put a timeout on every tool</a></li><li><a href="#make-write-tools-idempotent">Make write tools idempotent</a></li><li><a href="#know-who-retries-what">Know who retries what</a></li></ol></nav></aside>
+<article><p>Agents call tools in loops, sometimes hundreds of times a minute, so an MCP server needs a per-client rate limit, a hard timeout on every tool, and idempotency for anything that writes. Add these before you publish the URL, not after the first incident.</p>
+
+<h2 id="limit-by-client-not-only-by-ip">Limit by client, not only by IP</h2>
+<p>A single user behind a shared network address can look like many. Identify callers by token or user ID, and count requests per identity. A token bucket is easy to reason about: each client gets a bucket of N calls that refills at a steady rate.</p><pre><code>const buckets = new Map();
+function allow(id, cap = 30, refillPerSec = 0.5) {
+  const now = Date.now() / 1000;
+  const b = buckets.get(id) ?? { tokens: cap, t: now };
+  b.tokens = Math.min(cap, b.tokens + (now - b.t) * refillPerSec);
+  b.t = now;
+  if (b.tokens &lt; 1) { buckets.set(id, b); return false; }
+  b.tokens -= 1; buckets.set(id, b); return true;
+}</code></pre><p>This in-memory version works for one instance. With several instances, keep counters in Redis or another shared store.</p>
+
+<h2 id="say-clearly-when-you-limit">Say clearly when you limit</h2>
+<p>Return HTTP <code>429</code> with a <code>Retry-After</code> header for the transport, and a plain-language tool error for the model: "Rate limit reached. Wait 20 seconds before calling this tool again." A model can obey a sentence. It cannot obey a bare connection error.</p>
+
+<h2 id="put-a-timeout-on-every-tool">Put a timeout on every tool</h2>
+<p>A tool that hangs holds a connection, a database handle and a model turn. Set a deadline on each call and return an error when it passes. Choose the number from your slowest legitimate call plus a margin, not from guesswork.</p><pre><code>async function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, rej) =&gt;
+    { timer = setTimeout(() =&gt; rej(new Error("tool timed out")), ms); });
+  try { return await Promise.race([promise, timeout]); }
+  finally { clearTimeout(timer); }
+}</code></pre><p>For long jobs, do not make the model wait. Start the work, return a job ID, and offer a <code>check_job</code> tool. See <a href="/@odykyi/workers-and-queues/">workers and queues</a> for the pattern.</p>
+
+<h2 id="make-write-tools-idempotent">Make write tools idempotent</h2>
+<p>Clients and networks retry. If <code>create_invoice</code> runs twice, you have two invoices. Accept an optional <code>idempotency_key</code> argument, store it with the result, and return the stored result on a repeat.</p><p>Prefer operations that are naturally idempotent, such as "set status to paid" over "advance status".</p>
+
+<h2 id="know-who-retries-what">Know who retries what</h2>
+<p>Retry reads freely with exponential backoff and a cap. Retry writes only when you have an idempotency key. Do not retry on validation errors, since the same input will fail again. Cap total attempts so a retry loop cannot become an outage. For transport choices that affect connection behaviour, see <a href="/@odykyi/mcp-servers-in-production/stdio-vs-streamable-http-mcp-transport/">stdio vs Streamable HTTP</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What rate limit should I start with?</summary><p>Pick a number well above normal human use, such as a few calls per second per client, then watch your logs and adjust. Tighten limits for expensive or write tools.</p></details><details><summary>Should the model see rate limit errors?</summary><p>Yes. Return a clear message with the wait time so the agent can pause instead of retrying immediately.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an MCP server locally before you put it in front of users.</h3><p>Flisk can scaffold an <code>mcp</code> service next to your database and agents, so you test the whole stack on your own machine first. It is a local development tool, not a production orchestrator.</p><pre><code>flisk resource my-tools --type mcp</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">MCP servers in production</span></div>
+<div class="rgrid"><a href="/@odykyi/mcp-servers-in-production/logging-and-monitoring-an-mcp-server/"><span class="lbl">Guide</span><b>Logging and monitoring an MCP server in production</b><span>Which fields to log for every tool call, which metrics and alerts matter, and how to keep logs useful without leaking user data or secrets.</span></a><a href="/@odykyi/mcp-servers-in-production/how-to-test-an-mcp-server-with-the-inspector-and-ci/"><span class="lbl">Guide</span><b>How to test an MCP server with the Inspector and in CI</b><span>Check your server by hand with the MCP Inspector, then automate protocol checks and tool tests in CI so a refactor cannot silently break clients.</span></a><a href="/@odykyi/mcp-servers-in-production/how-to-deploy-a-remote-mcp-server-on-cloudflare-workers/"><span class="lbl">Guide</span><b>How to deploy a remote MCP server on Cloudflare Workers</b><span>Host an HTTP MCP server on Workers: what fits the runtime, how to keep state, how to store secrets and how to deploy with Wrangler.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
