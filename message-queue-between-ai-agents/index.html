@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to connect AI agents with a message queue</title>
+<meta name="description" content="A queue lets agents work at their own pace, survive restarts and retry failed tasks. Here is a simple design with a database table you already have.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/multi-agent-systems/message-queue-between-ai-agents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to connect AI agents with a message queue">
+<meta property="og:description" content="A queue lets agents work at their own pace, survive restarts and retry failed tasks. Here is a simple design with a database table you already have.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/multi-agent-systems/message-queue-between-ai-agents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to connect AI agents with a message queue","description":"A queue lets agents work at their own pace, survive restarts and retry failed tasks. Here is a simple design with a database table you already have.","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/message-queue-between-ai-agents/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Multi-agent system patterns","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need Kafka or RabbitMQ for agents?","acceptedAnswer":{"@type":"Answer","text":"Not to start. A database table with SKIP LOCKED handles small workloads. Move to a broker when you outgrow it."}},{"@type":"Question","name":"How do I avoid running a task twice?","acceptedAnswer":{"@type":"Answer","text":"You cannot fully avoid it, so make the task idempotent: key results by task id and check for existing output before side effects."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/multi-agent-systems/">Multi-agent system patterns</a></div>
+<section class="hero"><div><div class="lbl">Multi-agent system patterns</div><h1>How to connect AI agents with a message queue</h1><p class="dek">A queue lets agents work at their own pace, survive restarts and retry failed tasks. Here is a simple design with a database table you already have.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-queue-instead-of-direct-calls">Why a queue instead of direct calls</a></li><li><a href="#a-queue-in-one-sql-table">A queue in one SQL table</a></li><li><a href="#make-tasks-safe-to-retry">Make tasks safe to retry</a></li><li><a href="#when-to-use-a-real-broker">When to use a real broker</a></li><li><a href="#pairing-it-with-an-orchestrator">Pairing it with an orchestrator</a></li></ol></nav></aside>
+<article><p>Put tasks in a queue and let each worker agent pull one at a time. The queue gives you retries, back-pressure and a record of what was done, and it removes the need for agents to call each other directly. You can start with a plain database table.</p>
+
+<h2 id="why-a-queue-instead-of-direct-calls">Why a queue instead of direct calls</h2>
+<p>Agent calls are slow and sometimes fail. If agent A calls agent B over HTTP and B is busy or restarting, A is stuck. With a queue, A writes a task and moves on. B picks it up when ready. If B crashes halfway, the task goes back in the queue.</p><p>Queues also let you scale by running more workers on the same queue, and they cap load: a burst of 500 tasks waits its turn instead of hitting your model rate limit at once.</p>
+
+<h2 id="a-queue-in-one-sql-table">A queue in one SQL table</h2>
+<p>For a small system, Postgres is enough. Use <code>FOR UPDATE SKIP LOCKED</code> so two workers never claim the same row.</p><pre><code>CREATE TABLE tasks (
+  id         bigserial PRIMARY KEY,
+  kind       text NOT NULL,
+  payload    jsonb NOT NULL,
+  status     text NOT NULL DEFAULT 'queued',
+  attempts   int  NOT NULL DEFAULT 0,
+  result     jsonb,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- claim one task
+UPDATE tasks SET status = 'running', attempts = attempts + 1, updated_at = now()
+WHERE id = (
+  SELECT id FROM tasks WHERE status = 'queued' AND kind = 'summarize'
+  ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
+)
+RETURNING *;</code></pre>
+
+<h2 id="make-tasks-safe-to-retry">Make tasks safe to retry</h2>
+<p>Queues deliver a task at least once, so a worker may run it twice. Design for that. Give each task an id, write results keyed by that id, and make side effects idempotent: check whether the output already exists before sending the email or opening the pull request.</p><ul><li>Cap <code>attempts</code>, for example at 3, then mark the task <code>dead</code> for a person to look at.</li><li>Reset tasks stuck in <code>running</code> longer than a timeout back to <code>queued</code>.</li><li>Store the model error with the failed attempt. It is the first thing you will want to read.</li></ul>
+
+<h2 id="when-to-use-a-real-broker">When to use a real broker</h2>
+<p>A table is fine for dozens of tasks per second. When you need fan-out to many consumers, delays, priorities or higher throughput, use a broker such as Redis, RabbitMQ or a cloud queue. The agent code barely changes: it still claims a task, works, then reports a result. The older guide on <a href="/@odykyi/workers-and-queues/">workers and queues</a> covers the options.</p>
+
+<h2 id="pairing-it-with-an-orchestrator">Pairing it with an orchestrator</h2>
+<p>The orchestrator writes one row per subtask and polls for results, or the workers write results to a second table. This is the same orchestrator-worker layout from <a href="/@odykyi/multi-agent-systems/orchestrator-worker-pattern-ai-agents/">the first guide</a>, with the queue as the transport. The <a href="https://github.com/flisk-sh/flisk-agent-stack">Flisk Agent Stack</a> starter scaffolds a multi-agent layout with tools, a database and messaging that you can use as a reference.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need Kafka or RabbitMQ for agents?</summary><p>Not to start. A database table with SKIP LOCKED handles small workloads. Move to a broker when you outgrow it.</p></details><details><summary>How do I avoid running a task twice?</summary><p>You cannot fully avoid it, so make the task idempotent: key results by task id and check for existing output before side effects.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an agent stack on your own computer first.</h3><p>Flisk is an open-source CLI that starts agents, tool servers, a database and a queue locally, so you can watch a multi-agent system work before you deploy it.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a><a class="btn" href="https://github.com/flisk-sh/flisk-agent-stack">Flisk Agent Stack</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Multi-agent system patterns</span></div>
+<div class="rgrid"><a href="/@odykyi/multi-agent-systems/shared-state-for-multiple-agents/"><span class="lbl">Guide</span><b>Where should multiple AI agents keep shared state?</b><span>Agents should not share memory by reading each other&#39;s prompts. Use a store with clear owners, versions and small typed records.</span></a><a href="/@odykyi/multi-agent-systems/multi-agent-failure-modes/"><span class="lbl">Guide</span><b>Why multi-agent systems fail, and how to plan for it</b><span>The common failures are loops, lost context, conflicting writes and runaway cost. Know them early and design guards for each.</span></a><a href="/@odykyi/multi-agent-systems/multi-agent-loops-cost-limits/"><span class="lbl">Guide</span><b>How to put limits on agent loops, steps and cost</b><span>Every agent loop needs a step cap, a token budget, a time limit and a clear stop condition. Here is how to add them in a few lines.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

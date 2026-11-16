@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to trace and debug a multi-agent run</title>
+<meta name="description" content="Give every run an id, log each model call and handoff as a structured event, and you can replay what happened when the final answer is wrong.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/multi-agent-systems/trace-and-debug-multi-agent-runs/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to trace and debug a multi-agent run">
+<meta property="og:description" content="Give every run an id, log each model call and handoff as a structured event, and you can replay what happened when the final answer is wrong.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/multi-agent-systems/trace-and-debug-multi-agent-runs/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to trace and debug a multi-agent run","description":"Give every run an id, log each model call and handoff as a structured event, and you can replay what happened when the final answer is wrong.","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/trace-and-debug-multi-agent-runs/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Multi-agent system patterns","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a tracing product to debug agents?","acceptedAnswer":{"@type":"Answer","text":"No. JSON lines with run, task and parent ids in a file or table are enough to start. Add a tool when the volume grows."}},{"@type":"Question","name":"Should I log full prompts?","acceptedAnswer":{"@type":"Answer","text":"Store them for debugging, but redact secrets and apply the same retention and access rules as the underlying user data."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/multi-agent-systems/">Multi-agent system patterns</a></div>
+<section class="hero"><div><div class="lbl">Multi-agent system patterns</div><h1>How to trace and debug a multi-agent run</h1><p class="dek">Give every run an id, log each model call and handoff as a structured event, and you can replay what happened when the final answer is wrong.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#log-events-not-prose">Log events, not prose</a></li><li><a href="#keep-the-full-prompts-somewhere">Keep the full prompts somewhere</a></li><li><a href="#read-a-run-from-the-first-wrong-step">Read a run from the first wrong step</a></li><li><a href="#replay-and-turn-bugs-into-tests">Replay and turn bugs into tests</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>To debug a multi-agent run, give it a run id, give each task a span id, and write one structured event per model call, tool call and handoff. With those events you can read the run as a timeline and find the first step where things went wrong.</p>
+
+<h2 id="log-events-not-prose">Log events, not prose</h2>
+<p>Plain log lines are hard to query across agents. Write one JSON object per event, with the same keys each time.</p><pre><code>{
+  "run_id": "r_8f3a",
+  "task_id": "t_2",
+  "parent_task_id": "t_0",
+  "agent": "researcher",
+  "event": "model_call",
+  "model": "your-model-name",
+  "input_tokens": 1820,
+  "output_tokens": 240,
+  "ms": 3100,
+  "status": "ok"
+}</code></pre><p>Add similar events for <code>tool_call</code>, <code>handoff</code>, <code>retry</code> and <code>limit_hit</code>. Write them as JSON lines to a file or a database table.</p>
+
+<h2 id="keep-the-full-prompts-somewhere">Keep the full prompts somewhere</h2>
+<p>Metadata tells you where to look. The prompt and the reply tell you why. Store them, with the same ids, in a separate table or object store so you can read the exact text a worker saw. Mind privacy: prompts can contain user data, so apply the same retention and access rules as for the data itself, and redact secrets before logging.</p>
+
+<h2 id="read-a-run-from-the-first-wrong-step">Read a run from the first wrong step</h2>
+<p>When the final answer is wrong, do not start at the end. Walk back along the task tree to the first step whose output was wrong. Usually it is one of:</p><ol><li>A plan that missed a task.</li><li>A handoff that dropped a constraint.</li><li>A tool result the worker misread.</li><li>A worker that hit a limit and returned a partial result as if complete.</li></ol><p>Each of these maps to a fix, described in <a href="/@odykyi/multi-agent-systems/multi-agent-failure-modes/">why multi-agent systems fail</a>.</p><p>Build one small viewer early: a script that takes a run id, prints the task tree with status, tokens and time for each node, and marks the first failed or partial task. Ten minutes of work here saves hours of scrolling raw logs, and it makes bug reports from teammates specific.</p>
+
+<h2 id="replay-and-turn-bugs-into-tests">Replay and turn bugs into tests</h2>
+<p>Because you stored the prompts and tool results, you can replay a failing task against a changed prompt and compare. Better, turn each real failure into a test case. Save the inputs and the check that would have caught the failure, and add it to your suite. Over time the suite becomes a record of every mistake you have already fixed. The testing guide, <a href="/@odykyi/agent-evals-and-testing/">testing and evaluating AI agents</a>, shows how to score such cases.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<p>Do not log secrets or full user documents without a retention plan. Do not rely on timestamps alone to order events from different processes, since clocks differ; use a sequence number per run. And keep logging cheap, so it never becomes the reason a run is slow. For local setups, <a href="/@odykyi/observability-local/">observability for local development</a> covers logs and metrics.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a tracing product to debug agents?</summary><p>No. JSON lines with run, task and parent ids in a file or table are enough to start. Add a tool when the volume grows.</p></details><details><summary>Should I log full prompts?</summary><p>Store them for debugging, but redact secrets and apply the same retention and access rules as the underlying user data.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an agent stack on your own computer first.</h3><p>Flisk is an open-source CLI that starts agents, tool servers, a database and a queue locally, so you can watch a multi-agent system work before you deploy it.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a><a class="btn" href="https://github.com/flisk-sh/flisk-agent-stack">Flisk Agent Stack</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Multi-agent system patterns</span></div>
+<div class="rgrid"><a href="/@odykyi/multi-agent-systems/orchestrator-worker-pattern-ai-agents/"><span class="lbl">Guide</span><b>How to build the orchestrator-worker pattern for AI agents</b><span>One agent splits a job into tasks, several workers do them, and the orchestrator merges the results. Here is the shape, the code and the traps.</span></a><a href="/@odykyi/multi-agent-systems/single-agent-vs-multi-agent/"><span class="lbl">Guide</span><b>Single agent vs multi-agent: when you actually need more than one</b><span>Most tasks run fine with one agent and good tools. Here is a short test for when splitting into several agents earns its cost and complexity.</span></a><a href="/@odykyi/multi-agent-systems/agent-handoff-between-ai-agents/"><span class="lbl">Guide</span><b>How to hand off work between AI agents without losing context</b><span>A handoff is a message from one agent to another. Make it a typed contract with the goal, the facts, the constraints and the expected result.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
