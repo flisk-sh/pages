@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build your first AI agent: a tool-calling loop in 60 lines</title>
+<meta name="description" content="An agent is a loop: the model asks for a tool, your code runs it, the result goes back. Build one in Python with two tools and learn where it breaks.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/learn-ai-engineering/build-your-first-ai-agent-project/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Build your first AI agent: a tool-calling loop in 60 lines">
+<meta property="og:description" content="An agent is a loop: the model asks for a tool, your code runs it, the result goes back. Build one in Python with two tools and learn where it breaks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/learn-ai-engineering/build-your-first-ai-agent-project/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Build your first AI agent: a tool-calling loop in 60 lines","description":"An agent is a loop: the model asks for a tool, your code runs it, the result goes back. Build one in Python with two tools and learn where it breaks.","url":"https://pages.flisk.si/@odykyi/learn-ai-engineering/build-your-first-ai-agent-project/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Learn AI engineering by building","url":"https://pages.flisk.si/@odykyi/learn-ai-engineering/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need LangChain or another framework?","acceptedAnswer":{"@type":"Answer","text":"Not to start. Writing the loop yourself teaches what frameworks do. Adopt one later if it saves real work."}},{"@type":"Question","name":"Why does my agent call the same tool again and again?","acceptedAnswer":{"@type":"Answer","text":"Usually the tool result is unclear or the model cannot tell the task is done. Return clear results and keep a step limit."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/learn-ai-engineering/">Learn AI engineering by building</a></div>
+<section class="hero"><div><div class="lbl">Learn AI engineering by building</div><h1>Build your first AI agent: a tool-calling loop in 60 lines</h1><p class="dek">An agent is a loop: the model asks for a tool, your code runs it, the result goes back. Build one in Python with two tools and learn where it breaks.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-loop">The loop</a></li><li><a href="#add-a-useful-second-tool">Add a useful second tool</a></li><li><a href="#where-it-breaks">Where it breaks</a></li><li><a href="#make-it-a-project">Make it a project</a></li><li><a href="#what-to-learn-next">What to learn next</a></li></ol></nav></aside>
+<article><p>An agent is a loop around a model call. You send the conversation and a list of tools, the model replies with either an answer or a request to call a tool, your code runs the tool and appends the result, and you repeat until the model answers. That is all, and you can write it without a framework.</p>
+
+<h2 id="the-loop">The loop</h2>
+<p>Define tools as plain functions with a JSON schema description. Send them with each request. If the reply has tool calls, run them and send results back. Stop on a plain answer or after a maximum number of steps.</p><pre><code>import json
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="local")
+
+def add(a: float, b: float) -&gt; float: return a + b
+TOOLS = {"add": add}
+SCHEMA = [{"type": "function", "function": {
+    "name": "add", "description": "Add two numbers",
+    "parameters": {"type": "object",
+      "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+      "required": ["a", "b"]}}}]
+
+msgs = [{"role": "user", "content": "What is 17.5 plus 24.25?"}]
+for step in range(5):
+    r = client.chat.completions.create(model="llama3.2", messages=msgs, tools=SCHEMA)
+    m = r.choices[0].message
+    msgs.append(m)
+    if not m.tool_calls:
+        print(m.content); break
+    for c in m.tool_calls:
+        out = TOOLS[c.function.name](**json.loads(c.function.arguments))
+        msgs.append({"role": "tool", "tool_call_id": c.id, "content": str(out)})
+</code></pre><p>Not every local model supports tool calling well. Check that your model does, or pick one that does.</p>
+
+<h2 id="add-a-useful-second-tool">Add a useful second tool</h2>
+<p>A calculator is a toy. Add something with a side effect that matters, such as reading a file from one allowed folder, or searching your notes. Each tool needs a clear name, a one-line description and a strict schema. The description is a prompt: the model decides based on it. Say when to use the tool and when not to.</p>
+
+<h2 id="where-it-breaks">Where it breaks</h2>
+<ul><li><strong>Bad arguments.</strong> The model sends a string where a number is needed. Validate arguments and return the error text as the tool result, so the model can retry.</li><li><strong>Endless loops.</strong> Keep the step cap and log every step.</li><li><strong>Wrong tool.</strong> Too many similar tools confuse it. Start with two or three.</li><li><strong>Dangerous tools.</strong> Never give a tool the power to delete or send without a check. See <a href="/@odykyi/ai-security-for-builders/">AI security for builders</a>.</li></ul>
+
+<h2 id="make-it-a-project">Make it a project</h2>
+<p>Pick a small job you really have: summarise today's git commits, triage a folder of notes, check a list of URLs. Run it daily for a week and keep a log of failures. That log is your next-step list. When it works, give it a process contract and run it with a database and a queue. The Flisk CLI can scaffold an <code>agent</code> resource next to an MCP tool server: <code>flisk resource my-agent --type agent</code>, then <code>flisk up</code>. It is a local development tool, so use it to build and test, not as a production orchestrator. More in <a href="/@odykyi/ai-agents-local/">AI agents locally</a>.</p>
+
+<h2 id="what-to-learn-next">What to learn next</h2>
+<p>Add memory and sessions, then tests. Go to <a href="/@odykyi/learn-ai-engineering/learn-evals-first/">learn evals first</a> so you can tell whether a change helped, and read <a href="/@odykyi/agent-memory-and-context/">agent memory and context</a> when conversations get long.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need LangChain or another framework?</summary><p>Not to start. Writing the loop yourself teaches what frameworks do. Adopt one later if it saves real work.</p></details><details><summary>Why does my agent call the same tool again and again?</summary><p>Usually the tool result is unclear or the model cannot tell the task is done. Return clear results and keep a step limit.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Practice it</div><h3>Learn by doing small, checkable exercises.</h3><p>Learn, practice and exam for AI skills is in an early version. Try it, or start with the free local setup in the Flisk docs.</p></div><div class="btns"><a class="btn primary" href="https://learn.flisk.si">Open Learn</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Learn AI engineering by building</span></div>
+<div class="rgrid"><a href="/@odykyi/learn-ai-engineering/ai-engineering-project-ideas-portfolio/"><span class="lbl">Guide</span><b>10 AI engineering project ideas that teach real skills</b><span>Project ideas that teach something specific, with a clear finish line and a way to measure success. Pick one, scope it to two weeks, and ship it.</span></a><a href="/@odykyi/learn-ai-engineering/learn-rag-by-building/"><span class="lbl">Guide</span><b>Learn RAG by building: a document Q&amp;A app, step by step</b><span>Build retrieval-augmented generation from scratch: chunk text, embed it, search by similarity, and answer with citations. Then measure whether it is any good.</span></a><a href="/@odykyi/learn-ai-engineering/practice-ai-skills-sandbox/"><span class="lbl">Guide</span><b>Where to practice AI skills safely: sandboxes, exercises and exams</b><span>Reading does not build skill. Here is how to set up a safe practice loop with exercises, throwaway sandboxes and self-tests, and tools made for it.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
