@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Secure a GitHub Actions Release Workflow</title>
+<meta name="description" content="A release job holds the keys to your users&#39; machines. Limit who can trigger it, require approval, pin actions, scope tokens and add provenance.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/release-automation/secure-a-release-workflow/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Secure a GitHub Actions Release Workflow">
+<meta property="og:description" content="A release job holds the keys to your users&#39; machines. Limit who can trigger it, require approval, pin actions, scope tokens and add provenance.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/release-automation/secure-a-release-workflow/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Secure a GitHub Actions Release Workflow","description":"A release job holds the keys to your users' machines. Limit who can trigger it, require approval, pin actions, scope tokens and add provenance.","url":"https://pages.flisk.si/@odykyi/release-automation/secure-a-release-workflow/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Release Automation","url":"https://pages.flisk.si/@odykyi/release-automation/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What does an environment with required reviewers do?","acceptedAnswer":{"@type":"Answer","text":"A job that targets the environment waits until a listed reviewer approves it, and only then gets the environment's secrets."}},{"@type":"Question","name":"Is pinning actions by SHA worth the effort?","acceptedAnswer":{"@type":"Answer","text":"For jobs that hold publish rights, yes. A moved tag on a third-party action could run attacker code with your credentials. Use an update bot to keep SHAs current."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/release-automation/">Release Automation</a></div>
+<section class="hero"><div><div class="lbl">Release Automation</div><h1>How to Secure a GitHub Actions Release Workflow</h1><p class="dek">A release job holds the keys to your users&#39; machines. Limit who can trigger it, require approval, pin actions, scope tokens and add provenance.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#gate-the-publish-step-with-an-environment">Gate the publish step with an environment</a></li><li><a href="#control-who-can-release">Control who can release</a></li><li><a href="#pin-and-minimise">Pin and minimise</a></li><li><a href="#credentials">Credentials</a></li><li><a href="#a-short-audit-you-can-do-today">A short audit you can do today</a></li><li><a href="#make-the-release-auditable">Make the release auditable</a></li></ol></nav></aside>
+<article><p>A release workflow can publish code that thousands of machines will run, so give it stricter rules than your test jobs. Use a protected environment with required reviewers for the publish step, minimal <code>permissions</code>, actions pinned by commit SHA, short-lived or narrowly scoped credentials and protected tags.</p>
+
+<h2 id="gate-the-publish-step-with-an-environment">Gate the publish step with an environment</h2>
+<p>Environments hold secrets and rules. Put the registry token in an environment, for example <code>release</code>, and require reviewers or a wait before jobs that use it run.</p><pre><code>jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}</code></pre><p>Secrets in that environment are not available to other jobs, so a compromised test job cannot read them. You can also limit which branches or tags may deploy to the environment.</p>
+
+<h2 id="control-who-can-release">Control who can release</h2>
+<p>Protect release tags with tag protection or a ruleset so only maintainers can create <code>v*</code> tags. Protect the main branch: required reviews, required status checks, no force pushes. Limit who can edit workflow files, because a changed workflow is a changed release process. A CODEOWNERS entry for <code>.github/workflows/</code> makes workflow changes require a specific reviewer.</p>
+
+<h2 id="pin-and-minimise">Pin and minimise</h2>
+<p>Tags on third-party actions can be moved by their owner. Pin actions that run in the release job by full commit SHA, with a comment for the version, and let a dependency updater propose bumps (see <a href='/@odykyi/dependency-updates/'>keeping Actions up to date</a>). Set <code>permissions</code> explicitly at the top of every workflow. Avoid running arbitrary scripts from the pull request that triggered the run, and never build releases from <code>pull_request_target</code> with untrusted code.</p><pre><code>- uses: actions/checkout@SHA_OF_THE_COMMIT # v4.x.y</code></pre>
+
+<h2 id="credentials">Credentials</h2>
+<p>Prefer short-lived credentials from OIDC over stored long-lived tokens, where the registry supports it. Otherwise use a token that is scoped to one package, publish-only and with an expiry. Rotate it on a schedule and when anyone with access leaves. Never echo secrets, and be aware that logs mask only exact secret values.</p>
+
+<h2 id="a-short-audit-you-can-do-today">A short audit you can do today</h2>
+<p>Open your release workflow and check: are permissions declared, are third-party actions pinned, does the publish job use an environment, who can push tags, who can edit the workflow, and when was the registry token last rotated? Each 'no' is a task. Fix the cheapest first, which is usually permissions and environment approval, then plan the rest. An hour spent here is worth more than most features.</p>
+
+<h2 id="make-the-release-auditable">Make the release auditable</h2>
+<p>Publish with provenance where supported so users can trace a package to a commit and a run (<a href='/@odykyi/release-automation/publish-npm-package-from-github-actions/'>how to do it for npm</a>). Keep release logs. Announce releases in one place so unexpected ones are noticed. For the full picture of workflow hardening, read <a href='/@odykyi/github-actions-security/'>GitHub Actions Security</a>. Security reduces risk, it does not remove it: assume someday a credential leaks, and make sure you can revoke it and see what it did.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What does an environment with required reviewers do?</summary><p>A job that targets the environment waits until a listed reviewer approves it, and only then gets the environment&#39;s secrets.</p></details><details><summary>Is pinning actions by SHA worth the effort?</summary><p>For jobs that hold publish rights, yes. A moved tag on a third-party action could run attacker code with your credentials. Use an update bot to keep SHAs current.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Share the release notes</div><h3>Publish a release report to a public link in one command.</h3><p>Pages turns an HTML or Markdown file into a free public link. It is public, so do not publish anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Release Automation</span></div>
+<div class="rgrid"><a href="/@odykyi/release-automation/repair-half-finished-release/"><span class="lbl">Guide</span><b>What to Do When a Release Only Half Finished</b><span>The package is on npm but the GitHub release is missing, or the tag exists but publishing failed. List what is done, repair forward with idempotent steps and avoid republishing.</span></a><a href="/@odykyi/release-automation/semantic-versioning-next-version/"><span class="lbl">Guide</span><b>Semantic Versioning: How to Choose the Next Version Number</b><span>Decide between patch, minor and major from what changed for the people who use your package, and handle pre-releases and 0.x versions without surprises.</span></a><a href="/@odykyi/release-automation/generate-changelog-from-commits/"><span class="lbl">Guide</span><b>How to Generate a Changelog from Commits and Pull Requests</b><span>Write changelogs that humans read: from conventional commits, from pull request titles or from GitHub generated notes, and edit them before they ship.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

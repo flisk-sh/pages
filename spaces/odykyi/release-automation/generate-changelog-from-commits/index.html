@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Generate a Changelog from Commits and Pull Requests</title>
+<meta name="description" content="Write changelogs that humans read: from conventional commits, from pull request titles or from GitHub generated notes, and edit them before they ship.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/release-automation/generate-changelog-from-commits/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Generate a Changelog from Commits and Pull Requests">
+<meta property="og:description" content="Write changelogs that humans read: from conventional commits, from pull request titles or from GitHub generated notes, and edit them before they ship.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/release-automation/generate-changelog-from-commits/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Generate a Changelog from Commits and Pull Requests","description":"Write changelogs that humans read: from conventional commits, from pull request titles or from GitHub generated notes, and edit them before they ship.","url":"https://pages.flisk.si/@odykyi/release-automation/generate-changelog-from-commits/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Release Automation","url":"https://pages.flisk.si/@odykyi/release-automation/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need conventional commits to get a changelog?","acceptedAnswer":{"@type":"Answer","text":"No. GitHub generated notes work from pull request titles and labels. Conventional commits add grouping and automatic version bumps."}},{"@type":"Question","name":"Where should the changelog live?","acceptedAnswer":{"@type":"Answer","text":"A CHANGELOG.md in the repository and the GitHub release page both work. Pick one as the source of truth and link to it from the other."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/release-automation/">Release Automation</a></div>
+<section class="hero"><div><div class="lbl">Release Automation</div><h1>How to Generate a Changelog from Commits and Pull Requests</h1><p class="dek">Write changelogs that humans read: from conventional commits, from pull request titles or from GitHub generated notes, and edit them before they ship.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#option-1-github-generated-release-notes">Option 1: GitHub generated release notes</a></li><li><a href="#option-2-conventional-commits">Option 2: conventional commits</a></li><li><a href="#option-3-a-hand-kept-changelog-md">Option 3: a hand-kept CHANGELOG.md</a></li><li><a href="#write-entries-for-the-user">Write entries for the user</a></li><li><a href="#a-release-yml-for-grouped-notes">A release.yml for grouped notes</a></li><li><a href="#automate-the-draft-review-the-final">Automate the draft, review the final</a></li></ol></nav></aside>
+<article><p>The quickest way to a changelog is to let GitHub generate release notes from merged pull requests with <code>gh release create --generate-notes</code>, then edit the result. If you want grouped sections by type, use conventional commit messages and a tool that reads them. In both cases, a person should read the text before it is published.</p>
+
+<h2 id="option-1-github-generated-release-notes">Option 1: GitHub generated release notes</h2>
+<p>GitHub can build notes from the pull requests merged since the previous release and list contributors. You can call it from the CLI:</p><pre><code>gh release create v1.5.0 --generate-notes --title v1.5.0</code></pre><p>You can group entries by label with a <code>.github/release.yml</code> file, so that pull requests labelled for example <code>breaking</code> or <code>bug</code> land under their own headings. The notes are only as good as your pull request titles, so write titles for readers, not for yourself.</p>
+
+<h2 id="option-2-conventional-commits">Option 2: conventional commits</h2>
+<p>If every commit or squashed PR title starts with <code>feat:</code>, <code>fix:</code>, <code>docs:</code> and so on, a tool can group them into Features, Fixes and the rest, and decide the version bump. Squash merging makes this practical: the PR title becomes the single commit message, so you only need to check titles. A small CI job can reject titles that do not match the format.</p>
+
+<h2 id="option-3-a-hand-kept-changelog-md">Option 3: a hand-kept CHANGELOG.md</h2>
+<p>The Keep a Changelog layout is simple and readable: an Unreleased section at the top, then one section per version with Added, Changed, Deprecated, Removed, Fixed and Security. Each contributor adds a line in their pull request. It costs a little discipline and gives the best text, because the author describes the change in user terms.</p><pre><code>## [1.5.0] - 2026-11-10
+### Added
+- `status --json` prints machine readable output.
+### Fixed
+- Empty config file no longer crashes startup.</code></pre>
+
+<h2 id="write-entries-for-the-user">Write entries for the user</h2>
+<p>A commit says what the code did. A changelog entry says what is different for the reader. Compare 'refactor config loader' with 'Config files may now include comments'. Put breaking changes first and say what to do: the old name, the new name, one line on how to migrate. Link to the pull request or issue for details. Leave out internal changes that nobody outside your team would notice.</p>
+
+<h2 id="a-release-yml-for-grouped-notes">A release.yml for grouped notes</h2>
+<p>To group generated notes by label, add this file and label pull requests accordingly:</p><pre><code>changelog:
+  categories:
+    - title: Breaking changes
+      labels: [breaking]
+    - title: Features
+      labels: [enhancement]
+    - title: Fixes
+      labels: [bug]
+    - title: Other
+      labels: ['*']</code></pre><p>Check the GitHub documentation for the exact keys, since the format can gain options over time.</p>
+
+<h2 id="automate-the-draft-review-the-final">Automate the draft, review the final</h2>
+<p>Generate the draft in CI when a release is prepared, then let a person edit it before it is published. The release workflow itself is covered in <a href='/@odykyi/release-automation/publish-github-release-from-tag/'>publishing a GitHub release from a tag</a>. If you want a shareable page for a big release, you can publish the notes as a Markdown file with Pages (<a href='https://pages.flisk.si'>pages.flisk.si</a>): <code>npx -y @flisk-sh/pages publish notes.md --wait</code>. The link is public, so only use it for notes you want public.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need conventional commits to get a changelog?</summary><p>No. GitHub generated notes work from pull request titles and labels. Conventional commits add grouping and automatic version bumps.</p></details><details><summary>Where should the changelog live?</summary><p>A CHANGELOG.md in the repository and the GitHub release page both work. Pick one as the source of truth and link to it from the other.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Share the release notes</div><h3>Publish a release report to a public link in one command.</h3><p>Pages turns an HTML or Markdown file into a free public link. It is public, so do not publish anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Release Automation</span></div>
+<div class="rgrid"><a href="/@odykyi/release-automation/publish-github-release-from-tag/"><span class="lbl">Guide</span><b>How to Publish a GitHub Release from a Tag with Actions</b><span>A small workflow that runs on a version tag, tests the code, builds the artifacts and creates the GitHub release, with the permissions it needs and nothing more.</span></a><a href="/@odykyi/release-automation/publish-npm-package-from-github-actions/"><span class="lbl">Guide</span><b>How to Publish an npm Package from GitHub Actions</b><span>Set up setup-node with the npm registry, authenticate safely, publish with provenance and avoid the common failures on first publish and scoped packages.</span></a><a href="/@odykyi/release-automation/release-candidate-before-publishing/"><span class="lbl">Guide</span><b>How to Run a Release Candidate Before Publishing</b><span>Dry runs, pre-release tags and a test install give you a rehearsal of the real release, so mistakes happen where they are cheap to fix.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Verify a Release After You Publish It</title>
+<meta name="description" content="Check that the registry serves the new version, that it installs and runs on a clean machine, and retry around registry lag so a good release is not reported as failed.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/release-automation/verify-release-after-publish/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Verify a Release After You Publish It">
+<meta property="og:description" content="Check that the registry serves the new version, that it installs and runs on a clean machine, and retry around registry lag so a good release is not reported as failed.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/release-automation/verify-release-after-publish/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Verify a Release After You Publish It","description":"Check that the registry serves the new version, that it installs and runs on a clean machine, and retry around registry lag so a good release is not reported as failed.","url":"https://pages.flisk.si/@odykyi/release-automation/verify-release-after-publish/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Release Automation","url":"https://pages.flisk.si/@odykyi/release-automation/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does npm view not show my new version right away?","acceptedAnswer":{"@type":"Answer","text":"Registry metadata is cached and replicated, so a new version can take a short time to appear. Retry for a bounded period before treating it as a failure."}},{"@type":"Question","name":"What is the smallest useful smoke test?","acceptedAnswer":{"@type":"Answer","text":"Install the exact version into an empty directory and run the package's main command with --version or import it. Check that the output matches the release."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/release-automation/">Release Automation</a></div>
+<section class="hero"><div><div class="lbl">Release Automation</div><h1>How to Verify a Release After You Publish It</h1><p class="dek">Check that the registry serves the new version, that it installs and runs on a clean machine, and retry around registry lag so a good release is not reported as failed.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#check-the-registry">Check the registry</a></li><li><a href="#retry-around-registry-lag">Retry around registry lag</a></li><li><a href="#install-and-run-on-a-clean-machine">Install and run on a clean machine</a></li><li><a href="#verify-every-channel">Verify every channel</a></li><li><a href="#make-the-check-part-of-the-workflow">Make the check part of the workflow</a></li><li><a href="#report-the-result">Report the result</a></li></ol></nav></aside>
+<article><p>After publishing, look the version up in the registry, install it in an empty directory and run a basic command. Retry the lookup for a short time, because registries can take seconds to minutes to show a new version. A release that is published but never verified is only a hope.</p>
+
+<h2 id="check-the-registry">Check the registry</h2>
+<p>Ask the registry what it now serves:</p><pre><code>npm view your-package version
+npm view your-package dist-tags
+npm view your-package@1.5.0 dist.tarball</code></pre><p>The first shows the latest version, the second shows tags such as <code>latest</code> and <code>next</code>, and the third confirms that this exact version exists. Compare the result to the version you intended, not to a number you typed from memory.</p>
+
+<h2 id="retry-around-registry-lag">Retry around registry lag</h2>
+<p>A lookup right after publish can return the old version or a not-found error, because of caches and replication. Do not fail the release on the first try. Poll a bounded number of times:</p><pre><code>VERSION=1.5.0
+for i in $(seq 1 10); do
+  got=$(npm view your-package@"$VERSION" version 2&gt;/dev/null || true)
+  [ "$got" = "$VERSION" ] &amp;&amp; echo ok &amp;&amp; exit 0
+  sleep 15
+done
+echo 'version not visible' &gt;&amp;2
+exit 1</code></pre><p>Keep the loop bounded, so a real failure still ends the job. Without retries, a correct release can turn the pipeline red and tempt someone to publish twice.</p>
+
+<h2 id="install-and-run-on-a-clean-machine">Install and run on a clean machine</h2>
+<p>The registry listing says nothing about whether the package works. Install it in an empty directory and run a command that touches the real entry point:</p><pre><code>cd "$(mktemp -d)"
+npm init -y
+npm install your-package@"$VERSION"
+node -e "require('your-package')"
+npx your-package --version</code></pre><p>Make the smoke test fail if the printed version differs from the release. Run it on each operating system you support, using a matrix in the workflow.</p>
+
+<h2 id="verify-every-channel">Verify every channel</h2>
+<p>Many projects publish to more than one place: a registry, a GitHub release, a container image, a binary download, documentation. Check each channel, not only the first. List the channels in the release checklist and give each a one-line check: a command or a URL that must return the new version. A half finished release is the usual result of verifying only one of them, see <a href='/@odykyi/release-automation/repair-half-finished-release/'>repair a half finished release</a>.</p>
+
+<h2 id="make-the-check-part-of-the-workflow">Make the check part of the workflow</h2>
+<p>Add the verification as a final job that depends on the publish job, so a green run means the release is installable and not only uploaded. Give it its own timeout. If it fails, the run should be red and notify someone, because the situation needs a decision: wait, roll back or repair. Treat a failed verification as an incident, not as noise.</p>
+
+<h2 id="report-the-result">Report the result</h2>
+<p>End the workflow with a clear summary: version, channels checked, links. A job summary or a message to the team channel is enough. A short, public release page helps users too, see <a href='/@odykyi/release-automation/generate-changelog-from-commits/'>generating the changelog</a>. If verification fails after publishing, do not delete the release in a hurry. Decide with <a href='/@odykyi/release-automation/roll-back-a-bad-npm-release/'>the rollback options</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does npm view not show my new version right away?</summary><p>Registry metadata is cached and replicated, so a new version can take a short time to appear. Retry for a bounded period before treating it as a failure.</p></details><details><summary>What is the smallest useful smoke test?</summary><p>Install the exact version into an empty directory and run the package&#39;s main command with --version or import it. Check that the output matches the release.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Share the release notes</div><h3>Publish a release report to a public link in one command.</h3><p>Pages turns an HTML or Markdown file into a free public link. It is public, so do not publish anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Release Automation</span></div>
+<div class="rgrid"><a href="/@odykyi/release-automation/roll-back-a-bad-npm-release/"><span class="lbl">Guide</span><b>How to Roll Back a Bad npm Release</b><span>You cannot edit a published version. Move the latest tag back, deprecate the bad version, ship a fixed patch and know when unpublish is allowed.</span></a><a href="/@odykyi/release-automation/release-please-vs-changesets-vs-semantic-release/"><span class="lbl">Guide</span><b>release-please vs Changesets vs semantic-release</b><span>Three ways to automate versions and changelogs, how each decides the next version, and which fits a single package, a monorepo or a team that wants a human gate.</span></a><a href="/@odykyi/release-automation/secure-a-release-workflow/"><span class="lbl">Guide</span><b>How to Secure a GitHub Actions Release Workflow</b><span>A release job holds the keys to your users&#39; machines. Limit who can trigger it, require approval, pin actions, scope tokens and add provenance.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Publish an npm Package from GitHub Actions</title>
+<meta name="description" content="Set up setup-node with the npm registry, authenticate safely, publish with provenance and avoid the common failures on first publish and scoped packages.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/release-automation/publish-npm-package-from-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Publish an npm Package from GitHub Actions">
+<meta property="og:description" content="Set up setup-node with the npm registry, authenticate safely, publish with provenance and avoid the common failures on first publish and scoped packages.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/release-automation/publish-npm-package-from-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Publish an npm Package from GitHub Actions","description":"Set up setup-node with the npm registry, authenticate safely, publish with provenance and avoid the common failures on first publish and scoped packages.","url":"https://pages.flisk.si/@odykyi/release-automation/publish-npm-package-from-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Release Automation","url":"https://pages.flisk.si/@odykyi/release-automation/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why does npm publish fail with 403 for a scoped package?","acceptedAnswer":{"@type":"Answer","text":"Scoped packages default to private, which needs a paid plan. Publish with --access public, or set publishConfig.access to public."}},{"@type":"Question","name":"Can I publish without a long-lived token?","acceptedAnswer":{"@type":"Answer","text":"npm supports trusted publishing through OIDC for CI. Check the current npm documentation for the setup and requirements."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/release-automation/">Release Automation</a></div>
+<section class="hero"><div><div class="lbl">Release Automation</div><h1>How to Publish an npm Package from GitHub Actions</h1><p class="dek">Set up setup-node with the npm registry, authenticate safely, publish with provenance and avoid the common failures on first publish and scoped packages.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-working-publish-job">A working publish job</a></li><li><a href="#use-the-right-kind-of-token">Use the right kind of token</a></li><li><a href="#provenance">Provenance</a></li><li><a href="#common-failures">Common failures</a></li><li><a href="#a-pre-publish-checklist">A pre-publish checklist</a></li><li><a href="#check-the-package-before-it-goes-out">Check the package before it goes out</a></li></ol></nav></aside>
+<article><p>Use <code>actions/setup-node</code> with <code>registry-url</code>, pass an npm token as <code>NODE_AUTH_TOKEN</code>, and run <code>npm publish</code>. Add <code>--provenance</code> with the <code>id-token: write</code> permission to let npm record where the package was built. Scoped packages need <code>--access public</code> on the first publish.</p>
+
+<h2 id="a-working-publish-job">A working publish job</h2>
+<pre><code>name: Publish
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm test
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}</code></pre><p><code>setup-node</code> writes an <code>.npmrc</code> that reads the token from <code>NODE_AUTH_TOKEN</code>. The token itself lives in repository or environment secrets, never in the repo.</p>
+
+<h2 id="use-the-right-kind-of-token">Use the right kind of token</h2>
+<p>Create a granular access token on npmjs.com limited to the one package and to publish rights, with an expiry. Avoid a classic token with full account access. If your account requires two-factor authentication for publishing, an automation or granular token set up for CI is needed, since a CI job cannot type a one-time code. npm also supports trusted publishing from CI through OpenID Connect, which removes the long-lived token. It has requirements on workflow setup, so check the current npm documentation before relying on it.</p>
+
+<h2 id="provenance">Provenance</h2>
+<p>With <code>--provenance</code>, npm records a signed statement linking the published package to the repository, commit and workflow run that built it. Users can see that on the package page. It needs a supported CI provider, the <code>id-token: write</code> permission and a public repository for the public display. It proves where the package came from, not that the code is safe.</p>
+
+<h2 id="common-failures">Common failures</h2>
+<ul><li><strong>403 on first publish of a scoped package.</strong> Scoped packages are private by default, so add <code>--access public</code> or set <code>publishConfig.access</code> in <code>package.json</code>.</li><li><strong>You cannot publish over an existing version.</strong> Bump the version. Registry versions are immutable.</li><li><strong>404 or 401 on publish.</strong> The token is missing, expired, or lacks rights on that package or scope.</li><li><strong>Wrong files published.</strong> The <code>files</code> field and <code>.npmignore</code> decide the content. Check before you publish.</li></ul>
+
+<h2 id="a-pre-publish-checklist">A pre-publish checklist</h2>
+<ul><li>Version in <code>package.json</code> is new and matches the tag.</li><li><code>npm pack --dry-run</code> lists only the files you intend.</li><li>The token is scoped and not expired.</li><li>Tests and build passed in the same workflow.</li><li><code>publishConfig.access</code> is set for scoped packages.</li></ul><p>Put this list in the release checklist of the repository, and turn each line you can into an automatic check.</p>
+
+<h2 id="check-the-package-before-it-goes-out">Check the package before it goes out</h2>
+<p>Run <code>npm pack --dry-run</code> to list the files that would be included, and look for secrets, test fixtures and build leftovers. Combine this with a prerelease flow, see <a href='/@odykyi/release-automation/release-candidate-before-publishing/'>run a release candidate before publishing</a>, and verify the result afterwards with <a href='/@odykyi/release-automation/verify-release-after-publish/'>a post-publish check</a>. Keep publish rights narrow, as described in <a href='/@odykyi/release-automation/secure-a-release-workflow/'>secure a release workflow</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why does npm publish fail with 403 for a scoped package?</summary><p>Scoped packages default to private, which needs a paid plan. Publish with --access public, or set publishConfig.access to public.</p></details><details><summary>Can I publish without a long-lived token?</summary><p>npm supports trusted publishing through OIDC for CI. Check the current npm documentation for the setup and requirements.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Share the release notes</div><h3>Publish a release report to a public link in one command.</h3><p>Pages turns an HTML or Markdown file into a free public link. It is public, so do not publish anything private.</p><pre><code>npx -y @flisk-sh/pages publish page.html --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://pages.flisk.si">Open Pages</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Release Automation</span></div>
+<div class="rgrid"><a href="/@odykyi/release-automation/release-candidate-before-publishing/"><span class="lbl">Guide</span><b>How to Run a Release Candidate Before Publishing</b><span>Dry runs, pre-release tags and a test install give you a rehearsal of the real release, so mistakes happen where they are cheap to fix.</span></a><a href="/@odykyi/release-automation/verify-release-after-publish/"><span class="lbl">Guide</span><b>How to Verify a Release After You Publish It</b><span>Check that the registry serves the new version, that it installs and runs on a clean machine, and retry around registry lag so a good release is not reported as failed.</span></a><a href="/@odykyi/release-automation/roll-back-a-bad-npm-release/"><span class="lbl">Guide</span><b>How to Roll Back a Bad npm Release</b><span>You cannot edit a published version. Move the latest tag back, deprecate the bad version, ship a fixed patch and know when unpublish is allowed.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
