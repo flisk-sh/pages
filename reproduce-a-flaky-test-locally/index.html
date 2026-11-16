@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Reproduce a Flaky Test Locally</title>
+<meta name="description" content="Run the suspect test in a loop, in random order, under CPU load and with the CI seed, until it fails on your machine. Commands for pytest, Jest, Go and Playwright.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Reproduce a Flaky Test Locally">
+<meta property="og:description" content="Run the suspect test in a loop, in random order, under CPU load and with the CI seed, until it fails on your machine. Commands for pytest, Jest, Go and Playwright.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Reproduce a Flaky Test Locally","description":"Run the suspect test in a loop, in random order, under CPU load and with the CI seed, until it fails on your machine. Commands for pytest, Jest, Go and Playwright.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many loops are enough?","acceptedAnswer":{"@type":"Answer","text":"If a test fails one run in 20, 200 loops will almost certainly show it. For rarer flakes, run overnight or in parallel."}},{"@type":"Question","name":"Why does it pass on my machine?","acceptedAnswer":{"@type":"Answer","text":"Your machine is usually faster, has more cores and a different clock or locale. Limit CPU, match versions and shuffle order to get closer to CI."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>How to Reproduce a Flaky Test Locally</h1><p class="dek">Run the suspect test in a loop, in random order, under CPU load and with the CI seed, until it fails on your machine. Commands for pytest, Jest, Go and Playwright.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#run-it-alone-many-times">Run it alone, many times</a></li><li><a href="#run-it-with-the-rest-of-the-suite">Run it with the rest of the suite</a></li><li><a href="#make-your-machine-behave-like-ci">Make your machine behave like CI</a></li><li><a href="#control-the-inputs">Control the inputs</a></li><li><a href="#a-short-checklist">A short checklist</a></li><li><a href="#when-you-cannot-reproduce-it">When you cannot reproduce it</a></li></ol></nav></aside>
+<article><p>To reproduce a flaky test, run it many times in a loop, then change one condition at a time: order, parallelism, CPU load, seed and clock. A failure you can trigger on demand is a failure you can fix.</p>
+
+<h2 id="run-it-alone-many-times">Run it alone, many times</h2>
+<p>First answer one question: does it fail by itself? Loop the single test.</p><pre><code># Go
+go test -run TestJobFinishes -count=200 ./...
+
+# pytest (pip install pytest-repeat)
+pytest tests/test_jobs.py::test_job_finishes --count=200
+
+# Playwright
+npx playwright test jobs.spec.ts --repeat-each=50
+
+# anything else
+for i in $(seq 1 200); do npm test -- -t 'job finishes' || break; done</code></pre><p>If it fails alone, you have a timing or nondeterminism problem inside the test. If it never fails alone, suspect order or shared state.</p>
+
+<h2 id="run-it-with-the-rest-of-the-suite">Run it with the rest of the suite</h2>
+<p>If it only fails in the full run, another test is leaking state. Randomize order and note the seed so you can replay it.</p><pre><code># pytest with pytest-randomly prints a seed
+pytest
+pytest -p randomly --randomly-seed=12345
+
+# Go
+go test -shuffle=on ./...</code></pre><p>The runner prints the seed when it shuffles. Copy it from the CI log and run with the same one. Check your runner's docs for the exact flag, since names differ.</p>
+
+<h2 id="make-your-machine-behave-like-ci">Make your machine behave like CI</h2>
+<p>CI runners are slower and have fewer cores than your laptop. Many flakes only appear under load. Limit CPUs in a container to get closer.</p><pre><code>docker run --rm --cpus=1 -v "$PWD":/app -w /app node:20 npm test</code></pre><p>You can also run something heavy in another terminal while the loop runs. Run with parallel workers at the same count as CI, and with the same Node, Python or Go version.</p>
+
+<h2 id="control-the-inputs">Control the inputs</h2>
+<ul><li><strong>Time zone and clock.</strong> Set <code>TZ=UTC</code> and also try another zone. Tests near midnight or month ends fail on certain days.</li><li><strong>Locale and sort order.</strong> Different OSes sort strings differently.</li><li><strong>Random seed.</strong> Log the seed on failure so the next run can reuse it.</li><li><strong>Environment variables.</strong> Diff <code>env</code> between CI and local.</li></ul>
+
+<h2 id="a-short-checklist">A short checklist</h2>
+<ol><li>Loop the test alone, 100 to 200 times.</li><li>Loop it with the whole suite, shuffled, with the CI seed.</li><li>Limit CPU and run with the same worker count as CI.</li><li>Match runtime versions and the time zone.</li><li>Capture logs of the failing run and compare with a passing one.</li></ol><p>Stop at the first step that produces a failure and work from there. Each step takes a few minutes and most flakes fall at step one or two.</p>
+
+<h2 id="when-you-cannot-reproduce-it">When you cannot reproduce it</h2>
+<p>Add logging in the test, upload it as an artifact, and let CI catch the next failure with more data. Run the job with debug output for a week. If the failure only happens on runners, treat it as an environment problem: see <a href="/@odykyi/flaky-tests-and-ci/flaky-workflows-vs-flaky-tests/">flaky workflows versus flaky tests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many loops are enough?</summary><p>If a test fails one run in 20, 200 loops will almost certainly show it. For rarer flakes, run overnight or in parallel.</p></details><details><summary>Why does it pass on my machine?</summary><p>Your machine is usually faster, has more cores and a different clock or locale. Limit CPU, match versions and shuffle order to get closer to CI.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/rerun-failed-tests-in-github-actions/"><span class="lbl">Guide</span><b>Retry Failed Tests in GitHub Actions Without Hiding Bugs</b><span>Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.</span></a><a href="/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/"><span class="lbl">Guide</span><b>How to Quarantine Flaky Tests Without Losing Coverage</b><span>Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.</span></a><a href="/@odykyi/flaky-tests-and-ci/fix-timing-and-race-condition-flakes/"><span class="lbl">Guide</span><b>How to Fix Timing and Race Condition Flaky Tests</b><span>Replace fixed sleeps with waits on real conditions, inject the clock, and find races between your test and the code it checks. Examples in Python and JavaScript.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
