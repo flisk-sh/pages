@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mean Time to Green: How Fast Do You Fix a Broken Main Branch?</title>
+<meta name="description" content="Measure how long the default branch stays red after a failure, compute it from run history, and cut it with ownership, alerts and a revert-first rule.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/mean-time-to-green/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Mean Time to Green: How Fast Do You Fix a Broken Main Branch?">
+<meta property="og:description" content="Measure how long the default branch stays red after a failure, compute it from run history, and cut it with ownership, alerts and a revert-first rule.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-metrics-that-matter/mean-time-to-green/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Mean Time to Green: How Fast Do You Fix a Broken Main Branch?","description":"Measure how long the default branch stays red after a failure, compute it from run history, and cut it with ownership, alerts and a revert-first rule.","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/mean-time-to-green/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI Metrics That Matter","url":"https://pages.flisk.si/@odykyi/ci-metrics-that-matter/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Median or mean time to green?","acceptedAnswer":{"@type":"Answer","text":"Report both. One weekend-long red period can pull the mean up, while the median shows the typical repair."}},{"@type":"Question","name":"What is a good target?","acceptedAnswer":{"@type":"Answer","text":"Pick one from your baseline. Many teams aim for a repair or revert within the same working day, and under an hour for critical pipelines."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-metrics-that-matter/">CI Metrics That Matter</a></div>
+<section class="hero"><div><div class="lbl">CI Metrics That Matter</div><h1>Mean Time to Green: How Fast Do You Fix a Broken Main Branch?</h1><p class="dek">Measure how long the default branch stays red after a failure, compute it from run history, and cut it with ownership, alerts and a revert-first rule.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#define-the-interval">Define the interval</a></li><li><a href="#compute-it">Compute it</a></li><li><a href="#beware-flaky-red-periods">Beware flaky red periods</a></li><li><a href="#how-to-shorten-it">How to shorten it</a></li><li><a href="#what-the-number-hides">What the number hides</a></li><li><a href="#see-red-workflows-now">See red workflows now</a></li></ol></nav></aside>
+<article><p>Mean time to green is the average time between the first failed run on the default branch and the next successful run. It measures how fast a team repairs CI. A broken main blocks everyone, so shorter is better, and the median is often more honest than the mean.</p>
+
+<h2 id="define-the-interval">Define the interval</h2>
+<p>Sort completed default-branch runs by time. Find each failure that follows a success. That is the start of a red period. The period ends at the next success. The duration is the end time minus the start time. Skip cancelled runs.</p>
+
+<h2 id="compute-it">Compute it</h2>
+<pre><code>gh run list --workflow ci.yml --branch main --limit 100 \
+  --json conclusion,createdAt &gt; runs.json
+
+node -e '
+const r=require("./runs.json")
+  .filter(x=&gt;x.conclusion==="success"||x.conclusion==="failure")
+  .sort((a,b)=&gt;a.createdAt&lt;b.createdAt?-1:1);
+const d=[];let start=null;
+for(const x of r){
+  if(x.conclusion==="failure"&amp;&amp;!start) start=new Date(x.createdAt);
+  if(x.conclusion==="success"&amp;&amp;start){d.push((new Date(x.createdAt)-start)/3600000);start=null;}
+}
+d.sort((a,b)=&gt;a-b);
+console.log("red periods",d.length,"median hours",d[Math.floor(d.length/2)]);
+'</code></pre>
+
+<h2 id="beware-flaky-red-periods">Beware flaky red periods</h2>
+<p>If a flaky test causes a failure and the next run passes with no change, the red period is short, but nothing was repaired. A cluster of very short red periods is a sign of flakes, not of fast fixes. Pair this metric with <a href="/@odykyi/ci-metrics-that-matter/flip-count-as-a-flaky-signal/">flip count</a>.</p>
+
+<h2 id="how-to-shorten-it">How to shorten it</h2>
+<ul><li><strong>Revert first.</strong> If a merge broke main, revert it and fix forward on a branch.</li><li><strong>Alert someone.</strong> A failed default-branch run should notify the author of the commit, or a team channel, within minutes.</li><li><strong>Name an owner.</strong> A rotation for who watches main prevents everyone assuming someone else will.</li><li><strong>Use a merge queue.</strong> It tests the combined change before it lands, so main breaks less often.</li></ul>
+
+<h2 id="what-the-number-hides">What the number hides</h2>
+<p>The metric treats a failure on a Friday evening the same as one on Tuesday morning, so weekends inflate it. Consider measuring in working hours, or report the median next to the mean. It also says nothing about how many people were blocked. A red main on a busy team costs more than the same red on a quiet repo. Use it as a prompt to ask why the repair took as long as it did, and note the cause for each long red period.</p>
+
+<h2 id="see-red-workflows-now">See red workflows now</h2>
+<p>To see which workflows are red right now, Cilytics lists red workflows, defined as those where the newest default-branch run failed, for a whole org or a public repo. Since it is an hourly snapshot, it is not an alerting tool. Use GitHub notifications for real-time alerts and read <a href="/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/">how to alert on a red default branch</a>.</p><p>For teams that use pull requests with required checks, main should rarely go red, so there may be only a few red periods in 100 runs. In that case widen the window to 90 days and read each red period by hand. Small numbers are fine here: the goal is to learn why each one lasted as long as it did, and to find the pattern, such as no owner, slow review of the revert, or a flaky rerun hiding the failure.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Median or mean time to green?</summary><p>Report both. One weekend-long red period can pull the mean up, while the median shows the typical repair.</p></details><details><summary>What is a good target?</summary><p>Pick one from your baseline. Many teams aim for a repair or revert within the same working day, and under an hour for critical pipelines.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See the numbers</div><h3>Look at the CI metrics of any public GitHub repo, no account needed.</h3><p>Cilytics shows pass rate trend, red workflows, median and p90 run time, flaky and slow workflows for an org or a single public repo. It uses default-branch runs from the last 100 runs and an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI Metrics That Matter</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/ci-metrics-to-ignore/"><span class="lbl">Guide</span><b>CI Metrics to Ignore: Vanity Numbers That Mislead</b><span>Total runs, average duration, test count, coverage percent in isolation and billable minutes without context: why these mislead, and what to look at instead.</span></a><a href="/@odykyi/ci-metrics-that-matter/alert-on-a-red-default-branch/"><span class="lbl">Guide</span><b>How to Alert When Your Default Branch Goes Red</b><span>Send a notification when a default-branch workflow fails, using a workflow_run trigger or the built-in GitHub notifications, and avoid alert fatigue from flaky runs.</span></a><a href="/@odykyi/ci-metrics-that-matter/ci-cost-and-queue-time/"><span class="lbl">Guide</span><b>CI Queue Time vs Run Time vs Cost: What to Measure First</b><span>Separate waiting for a runner from running, and billed minutes from wall-clock time, so you optimize the right thing: speed, concurrency or cost.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
