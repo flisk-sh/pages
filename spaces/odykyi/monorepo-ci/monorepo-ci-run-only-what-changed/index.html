@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monorepo CI: How to Run Only What Changed</title>
+<meta name="description" content="Three ways to skip work for unchanged packages in GitHub Actions, from simple path filters to build-graph tools, with the trade-offs of each so you pick the right one.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-ci-run-only-what-changed/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Monorepo CI: How to Run Only What Changed">
+<meta property="og:description" content="Three ways to skip work for unchanged packages in GitHub Actions, from simple path filters to build-graph tools, with the trade-offs of each so you pick the right one.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-ci-run-only-what-changed/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Monorepo CI: How to Run Only What Changed","description":"Three ways to skip work for unchanged packages in GitHub Actions, from simple path filters to build-graph tools, with the trade-offs of each so you pick the right one.","url":"https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-ci-run-only-what-changed/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Monorepo CI","url":"https://pages.flisk.si/@odykyi/monorepo-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Will path filters miss tests when shared code changes?","acceptedAnswer":{"@type":"Answer","text":"Only if the shared paths are not in the filter. List shared libraries and the workflow file in every filter, or use a dependency-aware tool that finds affected packages for you."}},{"@type":"Question","name":"Should the default branch run everything?","acceptedAnswer":{"@type":"Answer","text":"Yes. Running the full suite after merge catches filter mistakes and cross-package breakage that pull request runs skipped."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-ci/">Monorepo CI</a></div>
+<section class="hero"><div><div class="lbl">Monorepo CI</div><h1>Monorepo CI: How to Run Only What Changed</h1><p class="dek">Three ways to skip work for unchanged packages in GitHub Actions, from simple path filters to build-graph tools, with the trade-offs of each so you pick the right one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-run-everything-is-the-default-and-why-it-hurts">Why run everything is the default and why it hurts</a></li><li><a href="#option-1-path-filters-per-workflow">Option 1: path filters per workflow</a></li><li><a href="#option-2-one-workflow-a-changed-files-job">Option 2: one workflow, a changed-files job</a></li><li><a href="#option-3-the-affected-graph">Option 3: the affected graph</a></li><li><a href="#which-to-pick-and-the-safety-net">Which to pick, and the safety net</a></li></ol></nav></aside>
+<article><p>Start with path filters on the workflow trigger, move to a changed-files job when one workflow covers many packages, and use a build tool's affected graph when packages depend on each other. Each step costs more setup and catches more cases.</p>
+
+<h2 id="why-run-everything-is-the-default-and-why-it-hurts">Why run everything is the default and why it hurts</h2>
+<p>A monorepo with twenty packages that runs every test on every pull request wastes minutes on every change and trains people to ignore CI. The goal is not to skip checks. The goal is to run the checks that could have changed, and to be sure you did not miss one.</p>
+
+<h2 id="option-1-path-filters-per-workflow">Option 1: path filters per workflow</h2>
+<p>The simplest approach is one workflow per area, each triggered only when its paths change.</p><pre><code>on:
+  pull_request:
+    paths:
+      - 'services/api/**'
+      - 'libs/shared/**'
+      - '.github/workflows/api.yml'</code></pre><p>Include shared libraries and the workflow file itself in the list, or changes there silently skip the check. This works well when packages are independent. The trap with required checks is covered in <a href='/@odykyi/github-actions-paths-filter-required-checks/'>this article on skipped required checks</a>.</p>
+
+<h2 id="option-2-one-workflow-a-changed-files-job">Option 2: one workflow, a changed-files job</h2>
+<p>A first job computes which areas changed, and later jobs run conditionally. This keeps one workflow file and lets you add one always-running summary job for branch protection.</p><pre><code>jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.f.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@&lt;pinned-sha&gt;
+        with:
+          filters: |
+            api:
+              - 'services/api/**'
+              - 'libs/**'
+  api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test api</code></pre><p>Pin third-party actions, see <a href='/@odykyi/github-actions-security/'>GitHub Actions security</a>.</p>
+
+<h2 id="option-3-the-affected-graph">Option 3: the affected graph</h2>
+<p>Tools such as Nx and Turborepo know the dependency graph between packages. If <code>libs/shared</code> changes, they also rebuild everything that imports it, which a hand-written path list often misses. See <a href='/@odykyi/nx-turborepo-affected-ci/'>affected commands with Nx and Turborepo</a>. The cost is adopting the tool and keeping its configuration accurate.</p>
+
+<h2 id="which-to-pick-and-the-safety-net">Which to pick, and the safety net</h2>
+<ul><li>Fewer than five independent packages: path filters.</li><li>Many packages, one workflow, no build tool: changed-files job.</li><li>Packages that import each other: an affected graph.</li></ul><p>Whatever you choose, run the full suite on the default branch after every merge and on a nightly schedule. A skipped test is a bet that your filter is right, and the full run is how you find out when it is not.</p><p>Prove the filter works before you trust it. Open three test pull requests: one that touches only a docs file, one that touches a single package and one that touches a shared library. Confirm that the first runs almost nothing, the second runs only that package and its dependents, and the third runs everything that imports the library. Write the results in the pull request that introduces the filter, so the next person can repeat the test when the structure of the repo changes.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Will path filters miss tests when shared code changes?</summary><p>Only if the shared paths are not in the filter. List shared libraries and the workflow file in every filter, or use a dependency-aware tool that finds affected packages for you.</p></details><details><summary>Should the default branch run everything?</summary><p>Yes. Running the full suite after merge catches filter mistakes and cross-package breakage that pull request runs skipped.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it locally</div><h3>Run the same multi-service stack on your laptop that CI tests.</h3><p>Flisk is an open-source (MIT) CLI that runs services, databases, queues and agents locally from one <code>service.json</code> per service. It is a local development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepo CI</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-ci/github-actions-paths-filter-required-checks/"><span class="lbl">Guide</span><b>Path Filters and Required Checks: Fix Stuck Pull Requests</b><span>Why a pull request waits forever on a required check when a workflow is skipped by a path filter, and the two reliable ways to fix it for good.</span></a><a href="/@odykyi/monorepo-ci/dynamic-matrix-github-actions-monorepo/"><span class="lbl">Guide</span><b>Dynamic Matrix in GitHub Actions for a Monorepo</b><span>Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.</span></a><a href="/@odykyi/monorepo-ci/monorepo-caching-github-actions/"><span class="lbl">Guide</span><b>Caching Dependencies in a Monorepo with GitHub Actions</b><span>Key the cache by lockfile, share it across packages, avoid cache thrash from too many matrix entries and know which caches are worth restoring at all.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

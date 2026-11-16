@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Path Filters and Required Checks: Fix Stuck Pull Requests</title>
+<meta name="description" content="Why a pull request waits forever on a required check when a workflow is skipped by a path filter, and the two reliable ways to fix it for good.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-ci/github-actions-paths-filter-required-checks/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Path Filters and Required Checks: Fix Stuck Pull Requests">
+<meta property="og:description" content="Why a pull request waits forever on a required check when a workflow is skipped by a path filter, and the two reliable ways to fix it for good.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-ci/github-actions-paths-filter-required-checks/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Path Filters and Required Checks: Fix Stuck Pull Requests","description":"Why a pull request waits forever on a required check when a workflow is skipped by a path filter, and the two reliable ways to fix it for good.","url":"https://pages.flisk.si/@odykyi/monorepo-ci/github-actions-paths-filter-required-checks/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Monorepo CI","url":"https://pages.flisk.si/@odykyi/monorepo-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is a skipped job treated as success but a skipped workflow is not?","acceptedAnswer":{"@type":"Answer","text":"A skipped job still belongs to a workflow run that reports a result. A workflow that never starts creates no run, so there is nothing to report to the required check."}},{"@type":"Question","name":"Do I need the summary job if I have one workflow with no filters?","acceptedAnswer":{"@type":"Answer","text":"No. If every required job always runs, you can require them directly. The summary job helps when jobs are conditional or when matrix names change."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-ci/">Monorepo CI</a></div>
+<section class="hero"><div><div class="lbl">Monorepo CI</div><h1>Path Filters and Required Checks: Fix Stuck Pull Requests</h1><p class="dek">Why a pull request waits forever on a required check when a workflow is skipped by a path filter, and the two reliable ways to fix it for good.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-problem">The problem</a></li><li><a href="#fix-1-a-summary-job-that-always-runs">Fix 1: a summary job that always runs</a></li><li><a href="#fix-2-duplicate-no-op-workflow">Fix 2: duplicate no-op workflow</a></li><li><a href="#rename-carefully">Rename carefully</a></li><li><a href="#related-traps">Related traps</a></li></ol></nav></aside>
+<article><p>If a workflow is skipped because of <code>paths</code> or <code>paths-ignore</code>, its required status check never reports, and the pull request shows 'Expected: waiting for status'. Fix it by making one always-running summary job the only required check.</p>
+
+<h2 id="the-problem">The problem</h2>
+<p>Branch protection waits for the named checks to report success. A workflow that never starts reports nothing, so the check stays pending. For example, a workflow filtered to <code>src/**</code> never runs on a README-only change, and if it is required, the merge is blocked even though nothing needed testing.</p><p>Note the difference: if a <em>job</em> inside a running workflow is skipped by <code>if:</code>, GitHub reports the check as success. If the whole <em>workflow</em> is skipped by a path filter, nothing is reported.</p>
+
+<h2 id="fix-1-a-summary-job-that-always-runs">Fix 1: a summary job that always runs</h2>
+<p>Remove the path filter from the trigger, compute changes inside the workflow, and add a final job that depends on all others. Make only that job required.</p><pre><code>jobs:
+  changes: { ... }
+  test-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps: [ ... ]
+  ci-ok:
+    if: always()
+    needs: [changes, test-api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any needed job failed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          case "$RESULTS" in *failure*|*cancelled*) exit 1;; esac</code></pre><p>The <code>if: always()</code> is essential: without it the summary job is itself skipped when a dependency fails or is skipped.</p>
+
+<h2 id="fix-2-duplicate-no-op-workflow">Fix 2: duplicate no-op workflow</h2>
+<p>GitHub's documentation describes a second approach: create a second workflow with the same name and job names, triggered by the opposite path filter, that just reports success. It works, but it is easy to let the two drift apart, so prefer the summary job.</p>
+
+<h2 id="rename-carefully">Rename carefully</h2>
+<p>When you change which job is required, branch protection still lists the old names until you remove them. Add the new check as required first, merge a test pull request, then remove the old requirements. Required checks are matched by name, so renaming a job breaks the gate silently.</p>
+
+<h2 id="related-traps">Related traps</h2>
+<ul><li>Matrix jobs create one check per combination. Requiring each by name is brittle, so require the summary job instead.</li><li>With a merge queue, workflows must also trigger on the <code>merge_group</code> event, or checks never report there.</li><li>A flaky required check teaches people to bypass the rule. Fix that first, see <a href='/@odykyi/flaky-tests-and-ci/'>flaky tests and CI</a>.</li><li>Back to the overview in <a href='/@odykyi/monorepo-ci-run-only-what-changed/'>running only what changed</a>.</li></ul><p>After the change, test the three cases on a scratch branch: a docs-only change, a code change that passes and a code change that fails. The first should merge with the summary check green, the second should run the real jobs, and the third should block. If the failing case still merges, your summary job is probably missing the <code>if: always()</code> line or a dependency in <code>needs</code>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is a skipped job treated as success but a skipped workflow is not?</summary><p>A skipped job still belongs to a workflow run that reports a result. A workflow that never starts creates no run, so there is nothing to report to the required check.</p></details><details><summary>Do I need the summary job if I have one workflow with no filters?</summary><p>No. If every required job always runs, you can require them directly. The summary job helps when jobs are conditional or when matrix names change.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it locally</div><h3>Run the same multi-service stack on your laptop that CI tests.</h3><p>Flisk is an open-source (MIT) CLI that runs services, databases, queues and agents locally from one <code>service.json</code> per service. It is a local development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepo CI</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-ci/dynamic-matrix-github-actions-monorepo/"><span class="lbl">Guide</span><b>Dynamic Matrix in GitHub Actions for a Monorepo</b><span>Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.</span></a><a href="/@odykyi/monorepo-ci/monorepo-caching-github-actions/"><span class="lbl">Guide</span><b>Caching Dependencies in a Monorepo with GitHub Actions</b><span>Key the cache by lockfile, share it across packages, avoid cache thrash from too many matrix entries and know which caches are worth restoring at all.</span></a><a href="/@odykyi/monorepo-ci/nx-turborepo-affected-ci/"><span class="lbl">Guide</span><b>Nx and Turborepo in CI: Run Only Affected Tasks</b><span>How to use the affected and filter commands of Nx and Turborepo in GitHub Actions, why they need git history, and when a build tool is overkill for your repo.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

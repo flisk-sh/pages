@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dynamic Matrix in GitHub Actions for a Monorepo</title>
+<meta name="description" content="Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-ci/dynamic-matrix-github-actions-monorepo/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Dynamic Matrix in GitHub Actions for a Monorepo">
+<meta property="og:description" content="Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-ci/dynamic-matrix-github-actions-monorepo/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Dynamic Matrix in GitHub Actions for a Monorepo","description":"Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.","url":"https://pages.flisk.si/@odykyi/monorepo-ci/dynamic-matrix-github-actions-monorepo/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Monorepo CI","url":"https://pages.flisk.si/@odykyi/monorepo-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can a job output hold large JSON?","acceptedAnswer":{"@type":"Answer","text":"Job outputs have a size limit, around one megabyte per job, so keep the matrix small. Pass only package names and let each job look up the details."}},{"@type":"Question","name":"Why does fromJSON fail?","acceptedAnswer":{"@type":"Answer","text":"Usually the output is empty or not valid JSON. Print it in the plan job and make sure an empty result is the string [] and not nothing."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-ci/">Monorepo CI</a></div>
+<section class="hero"><div><div class="lbl">Monorepo CI</div><h1>Dynamic Matrix in GitHub Actions for a Monorepo</h1><p class="dek">Build the job matrix at run time from the packages that changed, so one workflow tests exactly the right set. Includes a working script and the empty matrix trap.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-shape">The shape</a></li><li><a href="#the-planning-script">The planning script</a></li><li><a href="#the-empty-matrix-trap">The empty matrix trap</a></li><li><a href="#limits-and-tips">Limits and tips</a></li><li><a href="#when-not-to-do-this">When not to do this</a></li></ol></nav></aside>
+<article><p>Compute a JSON list of changed packages in a first job, expose it as an output, and feed it to <code>strategy.matrix</code> with <code>fromJSON</code>. One workflow then fans out one job per changed package, with no hand-edited list.</p>
+
+<h2 id="the-shape">The shape</h2>
+<pre><code>jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.p.outputs.packages }}
+      any: ${{ steps.p.outputs.any }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: p
+        run: ./scripts/changed-packages.sh origin/${{ github.base_ref }}
+
+  test:
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.plan.outputs.packages) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd packages/${{ matrix.package }} &amp;&amp; npm ci &amp;&amp; npm test</code></pre><p>Note that <code>${{ github.base_ref }}</code> is a branch name chosen by the repository, but treat any ref text carefully, see <a href='/@odykyi/github-actions-script-injection/'>script injection</a>.</p>
+
+<h2 id="the-planning-script">The planning script</h2>
+<p>A small shell script turns changed paths into package names. This one assumes packages live in <code>packages/&lt;name&gt;</code>.</p><pre><code>#!/usr/bin/env bash
+set -euo pipefail
+base=$(git merge-base HEAD "$1")
+pkgs=$(git diff --name-only "$base" HEAD \
+  | grep '^packages/' | cut -d/ -f2 | sort -u \
+  | jq -R . | jq -sc .)
+echo "packages=${pkgs:-[]}" &gt;&gt; "$GITHUB_OUTPUT"
+if [ "$pkgs" = '[]' ] || [ -z "$pkgs" ]; then
+  echo 'any=false' &gt;&gt; "$GITHUB_OUTPUT"
+else
+  echo 'any=true' &gt;&gt; "$GITHUB_OUTPUT"
+fi</code></pre><p>Add logic for shared directories: if <code>libs/</code> or the lockfile changed, output all packages.</p>
+
+<h2 id="the-empty-matrix-trap">The empty matrix trap</h2>
+<p>A matrix with an empty list makes the workflow fail with an error that the matrix must define at least one vector. That is why the example has an <code>any</code> flag and an <code>if:</code> on the test job. When the test job is skipped, pair it with a summary job so branch protection still works, see <a href='/@odykyi/github-actions-paths-filter-required-checks/'>path filters and required checks</a>.</p>
+
+<h2 id="limits-and-tips">Limits and tips</h2>
+<ul><li>A matrix can have at most 256 jobs per workflow run. For large repos, group packages into batches.</li><li>Use <code>fail-fast: false</code> so one failing package does not hide results from the others.</li><li>Include richer objects in the matrix, for example <code>{"name":"api","node":"20"}</code>, and read <code>matrix.package.name</code>.</li><li>Print the plan in the job summary so reviewers see why a package ran.</li></ul>
+
+<h2 id="when-not-to-do-this">When not to do this</h2>
+<p>If packages depend on each other, a path-based plan is wrong: it will skip a dependent when its dependency changes. Use a dependency-aware tool instead, see <a href='/@odykyi/nx-turborepo-affected-ci/'>Nx and Turborepo affected runs</a>. Dynamic matrices also make cache keys and job names harder to read, so keep them for cases where static jobs would be unmanageable.</p><p>Log the plan so it is visible. Write the list of selected packages to the job summary with <code>echo 'Packages: ...' &gt;&gt; "$GITHUB_STEP_SUMMARY"</code>, and a short reason for each. When a developer asks why their package did not run, the answer is one click away instead of a code reading session. Unit test the planning script with a few fake diffs, because a bug there silently skips tests.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can a job output hold large JSON?</summary><p>Job outputs have a size limit, around one megabyte per job, so keep the matrix small. Pass only package names and let each job look up the details.</p></details><details><summary>Why does fromJSON fail?</summary><p>Usually the output is empty or not valid JSON. Print it in the plan job and make sure an empty result is the string [] and not nothing.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it locally</div><h3>Run the same multi-service stack on your laptop that CI tests.</h3><p>Flisk is an open-source (MIT) CLI that runs services, databases, queues and agents locally from one <code>service.json</code> per service. It is a local development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepo CI</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-ci/monorepo-caching-github-actions/"><span class="lbl">Guide</span><b>Caching Dependencies in a Monorepo with GitHub Actions</b><span>Key the cache by lockfile, share it across packages, avoid cache thrash from too many matrix entries and know which caches are worth restoring at all.</span></a><a href="/@odykyi/monorepo-ci/nx-turborepo-affected-ci/"><span class="lbl">Guide</span><b>Nx and Turborepo in CI: Run Only Affected Tasks</b><span>How to use the affected and filter commands of Nx and Turborepo in GitHub Actions, why they need git history, and when a build tool is overkill for your repo.</span></a><a href="/@odykyi/monorepo-ci/monorepo-git-history-fetch-depth/"><span class="lbl">Guide</span><b>Git History in CI: fetch-depth and Finding the Merge Base</b><span>Why changed-file detection fails on a shallow clone, how to fetch just enough history in GitHub Actions and how to diff a pull request against the right base.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
