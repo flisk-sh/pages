@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to use Hono on Cloudflare Workers</title>
+<meta name="description" content="Add routing, middleware and JSON handling to a Worker with Hono, a small web framework, instead of hand-written URL checks.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-use-hono-on-cloudflare-workers/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to use Hono on Cloudflare Workers">
+<meta property="og:description" content="Add routing, middleware and JSON handling to a Worker with Hono, a small web framework, instead of hand-written URL checks.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-use-hono-on-cloudflare-workers/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to use Hono on Cloudflare Workers","description":"Add routing, middleware and JSON handling to a Worker with Hono, a small web framework, instead of hand-written URL checks.","url":"https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/how-to-use-hono-on-cloudflare-workers/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Cloudflare Workers for small apps","url":"https://pages.flisk.si/@odykyi/cloudflare-workers-for-small-apps/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a framework on Workers?","acceptedAnswer":{"@type":"Answer","text":"No. A plain fetch handler is enough for small APIs. A framework helps when routes, middleware and validation start to pile up."}},{"@type":"Question","name":"Does Hono work outside Cloudflare?","acceptedAnswer":{"@type":"Answer","text":"Yes, it runs on other runtimes such as Node, Deno and Bun, which keeps your code portable."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/cloudflare-workers-for-small-apps/">Cloudflare Workers for small apps</a></div>
+<section class="hero"><div><div class="lbl">Cloudflare Workers for small apps</div><h1>How to use Hono on Cloudflare Workers</h1><p class="dek">Add routing, middleware and JSON handling to a Worker with Hono, a small web framework, instead of hand-written URL checks.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#install-and-write-routes">Install and write routes</a></li><li><a href="#middleware">Middleware</a></li><li><a href="#validate-input">Validate input</a></li><li><a href="#organise-a-growing-app">Organise a growing app</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Install Hono with <code>npm i hono</code>, create an app with routes, and export it as the default export of your Worker. It gives you routing, middleware and helpers while staying small enough for the edge.</p>
+
+<h2 id="install-and-write-routes">Install and write routes</h2>
+<pre><code>npm i hono</code></pre><pre><code>import { Hono } from "hono";
+
+const app = new Hono();
+
+app.get("/health", (c) =&gt; c.json({ ok: true }));
+
+app.get("/notes/:id", async (c) =&gt; {
+  const row = await c.env.DB
+    .prepare("SELECT * FROM notes WHERE id = ?")
+    .bind(c.req.param("id"))
+    .first();
+  return row ? c.json(row) : c.json({ error: "not found" }, 404);
+});
+
+export default app;</code></pre><p>Hono's app object has a <code>fetch</code> method, so exporting it works as a Worker. Bindings arrive as <code>c.env</code>.</p>
+
+<h2 id="middleware">Middleware</h2>
+<pre><code>import { cors } from "hono/cors";
+
+app.use("/api/*", cors({ origin: "https://example.com" }));
+
+app.use("/api/*", async (c, next) =&gt; {
+  const key = c.req.header("authorization");
+  if (key !== "Bearer " + c.env.API_TOKEN) {
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  await next();
+});</code></pre><p>Do not set CORS origin to a wildcard on endpoints that use credentials or are expensive.</p>
+
+<h2 id="validate-input">Validate input</h2>
+<p>Never trust a request body. Parse it and check the fields before use.</p><pre><code>app.post("/notes", async (c) =&gt; {
+  const body = await c.req.json().catch(() =&gt; null);
+  if (!body || typeof body.text !== "string" || body.text.length &gt; 2000) {
+    return c.json({ error: "bad input" }, 400);
+  }
+  await c.env.DB.prepare("INSERT INTO notes (body) VALUES (?)").bind(body.text).run();
+  return c.body(null, 201);
+});</code></pre><p>Hono also has validator middleware that works with schema libraries like Zod.</p>
+
+<h2 id="organise-a-growing-app">Organise a growing app</h2>
+<p>Split routes into files and mount them on the main app, which keeps each file short and testable.</p><pre><code>// notes.js
+import { Hono } from "hono";
+export const notes = new Hono();
+notes.get("/", (c) =&gt; c.json([]));
+
+// index.js
+import { Hono } from "hono";
+import { notes } from "./notes.js";
+const app = new Hono();
+app.route("/api/notes", notes);
+export default app;</code></pre><p>Handle errors in one place with <code>app.onError</code> so every failure returns a consistent JSON shape.</p><p>Keep an eye on bundle size after adding middleware packages. Run <code>npx wrangler deploy --dry-run --outdir dist</code> to see the bundled output size without deploying, and drop anything you do not use.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul><li>Typing <code>c.env</code>: pass your bindings type as a generic, <code>new Hono&lt;{ Bindings: Env }&gt;()</code>.</li><li>Middleware order matters. Register auth before the routes it protects.</li><li>A framework adds bundle size. For three routes, plain <code>fetch</code> may be simpler. Compare with the minimal version in <a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-create-and-deploy-a-cloudflare-worker/">creating a Worker</a>.</li></ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a framework on Workers?</summary><p>No. A plain fetch handler is enough for small APIs. A framework helps when routes, middleware and validation start to pile up.</p></details><details><summary>Does Hono work outside Cloudflare?</summary><p>Yes, it runs on other runtimes such as Node, Deno and Bun, which keeps your code portable.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run the same stack locally first.</h3><p>Flisk runs services, databases and queues on your laptop from one service.json each. It is a development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk CLI docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Source on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Cloudflare Workers for small apps</span></div>
+<div class="rgrid"><a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-store-secrets-in-a-cloudflare-worker/"><span class="lbl">Guide</span><b>How to store secrets in a Cloudflare Worker</b><span>Keep API keys out of your code and repo: wrangler secret put for production, .dev.vars for local, and what not to put in plain vars.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-run-scheduled-jobs-with-cron-triggers/"><span class="lbl">Guide</span><b>How to run scheduled jobs with Cron Triggers</b><span>Add a scheduled handler to a Worker, set a cron expression, test it locally and handle failures so a nightly job does not silently stop.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/how-to-build-a-webhook-receiver-on-cloudflare-workers/"><span class="lbl">Guide</span><b>How to build a webhook receiver on Cloudflare Workers</b><span>Accept webhooks from GitHub, Stripe or a bot platform: verify the HMAC signature, respond fast, and process the event without blocking.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
