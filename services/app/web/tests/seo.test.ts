@@ -92,20 +92,31 @@ describe("files for crawlers", () => {
 		expect(robots).toContain("Sitemap: https://tool.test/sitemap.xml");
 	});
 
-	it("sitemap.xml lists the home page, about, each publisher and each space", async () => {
+	it("sitemap.xml is an index of the site's pages and one sitemap per publisher", async () => {
 		const res = await app.request("/sitemap.xml");
 		expect(res.headers.get("content-type")).toContain("application/xml");
 		const xml = await res.text();
+		expect(xml).toContain("<sitemapindex");
+		expect(xml).toContain("<loc>https://tool.test/sitemap-site.xml</loc>");
+		expect(xml).toContain("<loc>https://tool.test/@sam/sitemap.xml</loc>");
+	});
+
+	it("sitemap-site.xml lists the home page, about and each publisher", async () => {
+		const xml = await page("/sitemap-site.xml");
 		expect(xml).toContain(
 			"<loc>https://tool.test/</loc><lastmod>2026-10-28</lastmod>",
 		);
 		expect(xml).toContain("<loc>https://tool.test/about</loc>");
+		expect(xml).toContain("<loc>https://tool.test/@sam/</loc>");
+	});
+
+	it("/@handle/sitemap.xml lists that publisher's spaces and sub-pages", async () => {
+		const xml = await page("/@sam/sitemap.xml");
 		expect(xml).toContain(
 			"<loc>https://tool.test/@sam/gpu-explainer/</loc><lastmod>2026-10-27</lastmod>",
 		);
-		expect(xml.match(/<url>/g)).toHaveLength(
-			2 + 1 + spaces.filter((s) => !s.unlisted).length + 1, // + sam/gpu-explainer/part-two/
-		);
+		expect(xml).toContain("<loc>https://tool.test/@sam/gpu-explainer/part-two/</loc>");
+		expect((await app.request("/@nobody/sitemap.xml")).status).toBe(404);
 	});
 
 	it("llms.txt, the manifest and security.txt", async () => {

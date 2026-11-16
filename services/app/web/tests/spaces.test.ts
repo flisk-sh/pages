@@ -295,7 +295,7 @@ describe("bar visibility badge", () => {
 
 describe("sitemap sub-pages", () => {
 	it("lists a space's <folder>/index.html pages, and never a shared page's", async () => {
-		const xml = await (await get("/sitemap.xml")).text();
+		const xml = await (await get("/@sam/sitemap.xml")).text();
 		expect(xml).toContain("https://pages.test/@sam/gpu-explainer/part-two/");
 		expect(xml).not.toContain("for-bob");
 	});
@@ -309,7 +309,9 @@ describe("shared pages", () => {
 		expect(await (await get("/")).text()).not.toContain("for-bob");
 		expect(await (await get("/@sam/")).text()).not.toContain("for-bob");
 		expect(await (await get("/spaces.json")).text()).not.toContain("for-bob");
-		expect(await (await get("/sitemap.xml")).text()).not.toContain("for-bob");
+		expect(await (await get("/@sam/sitemap.xml")).text()).not.toContain(
+			"for-bob",
+		);
 	});
 });
 

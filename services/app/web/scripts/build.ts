@@ -112,6 +112,7 @@ export async function build(meta: Record<string, SpaceGit>) {
 		["/spaces.json", "spaces.json"],
 		["/robots.txt", "robots.txt"],
 		["/sitemap.xml", "sitemap.xml"],
+		["/sitemap-site.xml", "sitemap-site.xml"],
 		["/llms.txt", "llms.txt"],
 		["/site.webmanifest", "site.webmanifest"],
 		["/.well-known/security.txt", ".well-known/security.txt"],
@@ -122,7 +123,10 @@ export async function build(meta: Record<string, SpaceGit>) {
 	for (const handle of new Set(
 		spaces.filter((s) => !s.unlisted).map((s) => s.handle),
 	))
+	{
 		await write(`/@${handle}/`, `@${handle}/index.html`);
+		await write(`/@${handle}/sitemap.xml`, `@${handle}/sitemap.xml`);
+	}
 	for (const s of spaces) {
 		const prefix = spacePath(s);
 		const list = files(s.dir);

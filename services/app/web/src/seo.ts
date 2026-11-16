@@ -170,6 +170,17 @@ export function sitemapXml(
 	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;
 }
 
+/** A sitemap index: the list of sitemap files, one per publisher plus one for the site's own pages. */
+export function sitemapIndexXml(base: string, paths: string[], lastmod: string) {
+	const items = paths
+		.map(
+			(p) =>
+				`<sitemap><loc>${esc(`${base}/${p}`)}</loc><lastmod>${lastmod}</lastmod></sitemap>`,
+		)
+		.join("");
+	return `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${items}</sitemapindex>\n`;
+}
+
 /** llms.txt (llmstxt.org): what the site is and where its useful pages are, for AI assistants. */
 export function llmsTxt(
 	base: string,
