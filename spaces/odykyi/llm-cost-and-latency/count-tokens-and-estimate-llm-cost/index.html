@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to count tokens and estimate LLM cost before you ship</title>
+<meta name="description" content="Count tokens in code, turn them into a per-request and monthly cost estimate, and avoid the surprises that blow up a budget.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/llm-cost-and-latency/count-tokens-and-estimate-llm-cost/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to count tokens and estimate LLM cost before you ship">
+<meta property="og:description" content="Count tokens in code, turn them into a per-request and monthly cost estimate, and avoid the surprises that blow up a budget.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/llm-cost-and-latency/count-tokens-and-estimate-llm-cost/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to count tokens and estimate LLM cost before you ship","description":"Count tokens in code, turn them into a per-request and monthly cost estimate, and avoid the surprises that blow up a budget.","url":"https://pages.flisk.si/@odykyi/llm-cost-and-latency/count-tokens-and-estimate-llm-cost/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Cut LLM cost and latency","url":"https://pages.flisk.si/@odykyi/llm-cost-and-latency/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many tokens is 1,000 words?","acceptedAnswer":{"@type":"Answer","text":"Roughly 1,300 to 1,500 tokens in English, but it varies by model and text. Count with the real tokenizer if it matters."}},{"@type":"Question","name":"Do output tokens cost the same as input tokens?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Most providers price output tokens higher than input tokens. Check the pricing page for your model."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/llm-cost-and-latency/">Cut LLM cost and latency</a></div>
+<section class="hero"><div><div class="lbl">Cut LLM cost and latency</div><h1>How to count tokens and estimate LLM cost before you ship</h1><p class="dek">Count tokens in code, turn them into a per-request and monthly cost estimate, and avoid the surprises that blow up a budget.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#tokens-are-not-words">Tokens are not words</a></li><li><a href="#count-in-code">Count in code</a></li><li><a href="#write-the-cost-formula">Write the cost formula</a></li><li><a href="#include-what-people-forget">Include what people forget</a></li><li><a href="#check-estimate-against-reality">Check estimate against reality</a></li><li><a href="#build-a-tiny-cost-dashboard">Build a tiny cost dashboard</a></li></ol></nav></aside>
+<article><p>Count input tokens with your provider's tokenizer or token-count endpoint, add an estimate for output tokens, and multiply by the per-token prices from the pricing page. Do this per feature, then multiply by expected traffic to get a monthly figure.</p>
+
+<h2 id="tokens-are-not-words">Tokens are not words</h2>
+<p>A token is a chunk of text, often a word piece. English averages somewhere around three to four characters per token, but code, other languages and unusual formatting change it a lot. Never estimate from word count alone when money is at stake.</p><p>Each model family has its own tokenizer, so counts differ between providers. Use the one that matches the model you call.</p>
+
+<h2 id="count-in-code">Count in code</h2>
+<p>Some providers expose a token-counting call. For OpenAI-style models you can also use a local tokenizer library such as tiktoken.</p><pre><code>import tiktoken
+enc = tiktoken.get_encoding('cl100k_base')
+print(len(enc.encode('Summarise this text.')))</code></pre><p>The encoding name must match your model. Check the provider docs for the right one. The authoritative number is always the usage block in the real response.</p>
+
+<h2 id="write-the-cost-formula">Write the cost formula</h2>
+<pre><code>def cost(inp, out, price_in, price_out):
+    # prices per million tokens, from the pricing page
+    return inp / 1e6 * price_in + out / 1e6 * price_out
+
+per_request = cost(2400, 350, PRICE_IN, PRICE_OUT)
+monthly = per_request * requests_per_day * 30</code></pre><p>Take the prices from the current pricing page. They change, so keep them in config, not in code.</p>
+
+<h2 id="include-what-people-forget">Include what people forget</h2>
+<ul><li>The system prompt and tool definitions count as input on every call.</li><li>Conversation history grows with each turn, so cost per turn rises over a long chat.</li><li>Retries, and every step of an agent loop, are separate paid calls.</li><li>Images and files are billed as tokens too.</li></ul>
+
+<h2 id="check-estimate-against-reality">Check estimate against reality</h2>
+<p>After a week of traffic, compare your estimate with the sum of logged usage. A gap of more than about twenty percent means a hidden cost, usually history growth or retries. Fix those first, see <a href='/@odykyi/llm-cost-and-latency/how-to-reduce-llm-api-costs/'>how to reduce LLM API costs</a> and <a href='/@odykyi/llm-cost-and-latency/set-llm-budgets-and-rate-limits/'>set budgets and rate limits</a>.</p>
+
+<h2 id="build-a-tiny-cost-dashboard">Build a tiny cost dashboard</h2>
+<p>You do not need a product for this. One table with columns for date, feature, model, input tokens, output tokens and computed cost is enough. A daily query that sums cost by feature tells you where to look. Add a second query for the top ten users by cost, since heavy users often explain a surprise bill.</p><pre><code>SELECT feature, SUM(cost) AS usd
+FROM llm_calls
+WHERE day = CURRENT_DATE
+GROUP BY feature
+ORDER BY usd DESC;</code></pre>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many tokens is 1,000 words?</summary><p>Roughly 1,300 to 1,500 tokens in English, but it varies by model and text. Count with the real tokenizer if it matters.</p></details><details><summary>Do output tokens cost the same as input tokens?</summary><p>Usually not. Most providers price output tokens higher than input tokens. Check the pricing page for your model.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Develop against a free model API before you pay for tokens.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. It is handy for building and testing the cost and latency tricks in these guides before you point the app at a paid model.</p><pre><code>curl https://inference.flisk.si</code></pre></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Cut LLM cost and latency</span></div>
+<div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/shorten-prompts-without-losing-quality/"><span class="lbl">Guide</span><b>How to shorten prompts without losing quality</b><span>Cut tokens from a prompt safely: remove repeats, retrieve instead of pasting, compress history and prove with a test set that the answers did not get worse.</span></a><a href="/@odykyi/llm-cost-and-latency/semantic-cache-vs-exact-cache-llm/"><span class="lbl">Guide</span><b>Semantic cache vs exact cache for LLM responses</b><span>Cache whole model answers to skip paid calls. Compare an exact-match cache with an embedding-based one, and see when each is safe.</span></a><a href="/@odykyi/llm-cost-and-latency/set-llm-budgets-and-rate-limits/"><span class="lbl">Guide</span><b>How to set budgets and rate limits for an LLM feature</b><span>Stop a bug or a heavy user from running up your bill: per-user limits, step caps for agents, spend alerts and a kill switch you can test locally.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

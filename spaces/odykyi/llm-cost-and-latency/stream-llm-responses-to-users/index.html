@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to stream LLM responses to users with SSE</title>
+<meta name="description" content="Send tokens to the browser as they are generated using server-sent events, with a minimal server, a client reader and the cancel and error cases people forget.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/llm-cost-and-latency/stream-llm-responses-to-users/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to stream LLM responses to users with SSE">
+<meta property="og:description" content="Send tokens to the browser as they are generated using server-sent events, with a minimal server, a client reader and the cancel and error cases people forget.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/llm-cost-and-latency/stream-llm-responses-to-users/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to stream LLM responses to users with SSE","description":"Send tokens to the browser as they are generated using server-sent events, with a minimal server, a client reader and the cancel and error cases people forget.","url":"https://pages.flisk.si/@odykyi/llm-cost-and-latency/stream-llm-responses-to-users/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Cut LLM cost and latency","url":"https://pages.flisk.si/@odykyi/llm-cost-and-latency/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I use SSE or WebSockets for LLM streaming?","acceptedAnswer":{"@type":"Answer","text":"SSE is simpler for one-way token streams and works over plain HTTP. Use WebSockets only if you need two-way messages on the same connection."}},{"@type":"Question","name":"Why does my stream arrive all at once?","acceptedAnswer":{"@type":"Answer","text":"A proxy, CDN or compression middleware is buffering the response. Disable buffering for that route."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/llm-cost-and-latency/">Cut LLM cost and latency</a></div>
+<section class="hero"><div><div class="lbl">Cut LLM cost and latency</div><h1>How to stream LLM responses to users with SSE</h1><p class="dek">Send tokens to the browser as they are generated using server-sent events, with a minimal server, a client reader and the cancel and error cases people forget.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#ask-the-provider-to-stream">Ask the provider to stream</a></li><li><a href="#a-minimal-node-server">A minimal Node server</a></li><li><a href="#read-it-in-the-browser">Read it in the browser</a></li><li><a href="#handle-cancel-and-errors">Handle cancel and errors</a></li><li><a href="#trade-offs">Trade-offs</a></li><li><a href="#test-it-with-curl">Test it with curl</a></li></ol></nav></aside>
+<article><p>Request a streamed response from the model, forward each chunk to the browser as a server-sent event, and read it with fetch on the client. Users see the first words in a fraction of a second instead of waiting for the full answer.</p>
+
+<h2 id="ask-the-provider-to-stream">Ask the provider to stream</h2>
+<p>Most provider SDKs accept a <code>stream: true</code> option and give you an async iterator of chunks. Each chunk holds a small piece of text. Your server loops over the chunks and writes them out.</p>
+
+<h2 id="a-minimal-node-server">A minimal Node server</h2>
+<pre><code>import http from 'node:http';
+
+http.createServer(async (req, res) =&gt; {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+  const ac = new AbortController();
+  req.on('close', () =&gt; ac.abort());
+  for await (const text of modelStream(ac.signal)) {
+    res.write('data: ' + JSON.stringify(text) + '\n\n');
+  }
+  res.write('event: done\ndata: {}\n\n');
+  res.end();
+}).listen(3000);</code></pre><p><code>modelStream</code> stands for your SDK call. Encode each chunk as JSON so newlines inside the text do not break the event format.</p>
+
+<h2 id="read-it-in-the-browser">Read it in the browser</h2>
+<pre><code>const res = await fetch('/chat', { method: 'POST', body });
+const reader = res.body.getReader();
+const dec = new TextDecoder();
+let buf = '';
+while (true) {
+  const { value, done } = await reader.read();
+  if (done) break;
+  buf += dec.decode(value, { stream: true });
+  const parts = buf.split('\n\n');
+  buf = parts.pop();
+  for (const p of parts) render(JSON.parse(p.replace(/^data: /, '')));
+}</code></pre><p>Use fetch rather than <code>EventSource</code> when you need to send a POST body or custom headers.</p>
+
+<h2 id="handle-cancel-and-errors">Handle cancel and errors</h2>
+<ul><li>Abort the upstream model call when the client disconnects, or you keep paying for tokens nobody reads.</li><li>Send an explicit error event so the UI can show a message instead of a frozen cursor.</li><li>Do not buffer: a proxy or compression layer that holds chunks back will make streaming look broken. Check proxy settings if text arrives in one lump.</li></ul>
+
+<h2 id="trade-offs">Trade-offs</h2>
+<p>Streaming makes output validation harder, since you show text before you have all of it. For JSON or tool calls, stream to the user only the prose part, and parse structured data after the end. For speed ideas beyond streaming, see <a href='/@odykyi/llm-cost-and-latency/how-to-reduce-llm-latency/'>how to reduce LLM latency</a>.</p>
+
+<h2 id="test-it-with-curl">Test it with curl</h2>
+<p>Before you write any UI, check the stream from a terminal. The <code>-N</code> flag turns off curl's output buffering so you see chunks as they arrive.</p><pre><code>curl -N -X POST http://localhost:3000/chat \
+  -H 'Content-Type: application/json' \
+  -d '{"message":"hello"}'</code></pre><p>If the text appears piece by piece here but not in the browser, the problem is in the client code or in a proxy in front of the page. If it arrives in one block here too, look at your server or at compression.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I use SSE or WebSockets for LLM streaming?</summary><p>SSE is simpler for one-way token streams and works over plain HTTP. Use WebSockets only if you need two-way messages on the same connection.</p></details><details><summary>Why does my stream arrive all at once?</summary><p>A proxy, CDN or compression middleware is buffering the response. Disable buffering for that route.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Develop against a free model API before you pay for tokens.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. It is handy for building and testing the cost and latency tricks in these guides before you point the app at a paid model.</p><pre><code>curl https://inference.flisk.si</code></pre></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://flisk.sh/docs/">Flisk CLI docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Cut LLM cost and latency</span></div>
+<div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/model-routing-cheap-vs-strong-model/"><span class="lbl">Guide</span><b>Model routing: when to use a cheap model vs a strong one</b><span>Send easy requests to a small model and hard ones to a large one. How to pick the rule, test it, and add a fallback so quality does not drop.</span></a><a href="/@odykyi/llm-cost-and-latency/batch-api-vs-real-time-llm-requests/"><span class="lbl">Guide</span><b>Batch API vs real-time LLM requests: which to use</b><span>Batch interfaces trade speed for a lower price. Learn which jobs fit a batch, how a typical batch flow works and where it falls short.</span></a><a href="/@odykyi/llm-cost-and-latency/count-tokens-and-estimate-llm-cost/"><span class="lbl">Guide</span><b>How to count tokens and estimate LLM cost before you ship</b><span>Count tokens in code, turn them into a per-request and monthly cost estimate, and avoid the surprises that blow up a budget.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
