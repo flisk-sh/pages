@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep LLM prompts in version control</title>
+<meta name="description" content="Store prompts as files in your repo, load them by name, review changes like code and tie each change to a test run. A layout and loader you can copy.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep LLM prompts in version control">
+<meta property="og:description" content="Store prompts as files in your repo, load them by name, review changes like code and tie each change to a test run. A layout and loader you can copy.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep LLM prompts in version control","description":"Store prompts as files in your repo, load them by name, review changes like code and tie each change to a test run. A layout and loader you can copy.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should prompts live in a database instead?","acceptedAnswer":{"@type":"Answer","text":"Only if non-developers must edit them live. Then keep history and test gates there too. For most teams, files and pull requests are simpler and safer."}},{"@type":"Question","name":"What about prompts that contain user data?","acceptedAnswer":{"@type":"Answer","text":"Keep templates in git, and fill in user data at runtime. Never commit real customer text into prompt files or test sets without clearing it first."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to keep LLM prompts in version control</h1><p class="dek">Store prompts as files in your repo, load them by name, review changes like code and tie each change to a test run. A layout and loader you can copy.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-not-keep-them-inline">Why not keep them inline</a></li><li><a href="#a-simple-layout">A simple layout</a></li><li><a href="#a-loader-with-variables">A loader with variables</a></li><li><a href="#review-and-test-changes">Review and test changes</a></li><li><a href="#log-which-version-ran">Log which version ran</a></li><li><a href="#a-deterministic-gate-in-ci">A deterministic gate in CI</a></li></ol></nav></aside>
+<article><p>Put each prompt in its own file in the repo, load it by name at runtime, change it through pull requests, and run a small test set on every change. Prompts are code that happens to be written in English, and they break in the same ways.</p>
+
+<h2 id="why-not-keep-them-inline">Why not keep them inline</h2>
+<p>Prompts pasted into code as long strings are hard to read, hard to diff and easy to edit by accident. A prompt in a dashboard with no history is worse: nobody knows which version produced Tuesday's bad answers. Files in git give you history, blame, review and rollback for free.</p>
+
+<h2 id="a-simple-layout">A simple layout</h2>
+<pre><code>prompts/
+  classify_ticket.v1.md
+  classify_ticket.v2.md
+  summarize_thread.md
+tests/prompts/
+  classify_ticket.cases.jsonl
+  test_prompts.py</code></pre><p>Use a version in the filename only if you need to run two versions side by side, for instance in an A/B test. Otherwise git history is the version.</p>
+
+<h2 id="a-loader-with-variables">A loader with variables</h2>
+<pre><code>from pathlib import Path
+from string import Template
+
+def load_prompt(name, **vars):
+    text = Path("prompts", name + ".md").read_text()
+    return Template(text).substitute(**vars)
+
+prompt = load_prompt("classify_ticket", text=ticket_text)</code></pre><p><code>Template.substitute</code> raises on a missing variable, which is what you want. Avoid f-strings on loaded text, since braces in JSON examples clash with them.</p>
+
+<h2 id="review-and-test-changes">Review and test changes</h2>
+<p>In a pull request, show the prompt diff and the change in test results side by side. A reviewer should see "accuracy on 60 cases: 52 to 55, no regressions" and not just changed words. How to build that check is in <a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">testing prompts before you ship</a>.</p>
+
+<h2 id="log-which-version-ran">Log which version ran</h2>
+<p>Record the prompt file name and the git commit with each model call or trace. When a user reports a bad answer, you can find the exact prompt text that produced it. A short hash of the prompt content works even if files move.</p>
+
+<h2 id="a-deterministic-gate-in-ci">A deterministic gate in CI</h2>
+<p>The pattern behind Flisk's GEL (<a href="https://gel.flisk.si">gel.flisk.si</a>) fits prompts well: the model proposes, a deterministic score decides. Treat the pass rate on your fixed cases as the score, and fail the build below a threshold. Start with a threshold equal to the current rate and only let it go up. See also <a href="/@odykyi/ci-guards-and-ai-code-review/">CI guards and AI code review</a>.</p><p><strong>Pitfalls.</strong></p><ul><li>Editing a prompt in production by hand "just this once". Every change goes through the repo.</li><li>Secrets or customer data inside prompt files. Templates hold instructions only.</li><li>Changing the model and the prompt in one commit. If results move, you will not know which caused it.</li><li>No owner. Name who reviews prompt changes, the same as for any other code path.</li></ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should prompts live in a database instead?</summary><p>Only if non-developers must edit them live. Then keep history and test gates there too. For most teams, files and pull requests are simpler and safer.</p></details><details><summary>What about prompts that contain user data?</summary><p>Keep templates in git, and fill in user data at runtime. Never commit real customer text into prompt files or test sets without clearing it first.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/"><span class="lbl">Guide</span><b>How to write a system prompt that actually works</b><span>A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.</span></a><a href="/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/"><span class="lbl">Guide</span><b>Few-shot examples: how many, which, and how to format</b><span>Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/"><span class="lbl">Guide</span><b>How to design tool schemas for LLM function calling</b><span>Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to retry when an LLM returns invalid JSON</title>
+<meta name="description" content="Retry with the exact validation error, cap the attempts, change one thing between tries and fail safely. A loop you can copy, plus what not to retry.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-retry-when-llm-returns-invalid-json/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to retry when an LLM returns invalid JSON">
+<meta property="og:description" content="Retry with the exact validation error, cap the attempts, change one thing between tries and fail safely. A loop you can copy, plus what not to retry.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-retry-when-llm-returns-invalid-json/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to retry when an LLM returns invalid JSON","description":"Retry with the exact validation error, cap the attempts, change one thing between tries and fail safely. A loop you can copy, plus what not to retry.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-retry-when-llm-returns-invalid-json/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many retries are reasonable?","acceptedAnswer":{"@type":"Answer","text":"Two or three. If the third still fails, the problem is usually the prompt, schema or input, not luck."}},{"@type":"Question","name":"Should I strip markdown fences and repair the JSON myself?","acceptedAnswer":{"@type":"Answer","text":"A small repair step for stray code fences is fine as a fallback. It should not replace enforced output or validation."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to retry when an LLM returns invalid JSON</h1><p class="dek">Retry with the exact validation error, cap the attempts, change one thing between tries and fail safely. A loop you can copy, plus what not to retry.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-loop">The loop</a></li><li><a href="#why-feeding-back-the-error-works">Why feeding back the error works</a></li><li><a href="#what-to-change-between-tries">What to change between tries</a></li><li><a href="#what-not-to-retry">What not to retry</a></li><li><a href="#measure-and-cap-cost">Measure and cap cost</a></li><li><a href="#log-what-failed">Log what failed</a></li></ol></nav></aside>
+<article><p>Catch the parse or validation error, send it back to the model with the failed reply and ask for a corrected one, and stop after two or three attempts. Retrying blindly with the same input mostly repeats the same mistake.</p>
+
+<h2 id="the-loop">The loop</h2>
+<pre><code>def get_valid(prompt, parse, call_llm, max_tries=3):
+    messages = [{"role": "user", "content": prompt}]
+    last_err = None
+    for attempt in range(max_tries):
+        reply = call_llm(messages)
+        try:
+            return parse(reply)
+        except Exception as e:
+            last_err = str(e)
+            messages += [
+                {"role": "assistant", "content": reply},
+                {"role": "user", "content": "That failed validation:\n"
+                 + last_err + "\nReply again with corrected JSON only."},
+            ]
+    raise ValueError("no valid output: " + last_err)</code></pre>
+
+<h2 id="why-feeding-back-the-error-works">Why feeding back the error works</h2>
+<p>The error names the field and the rule: "priority: must be between 1 and 3". That is far more useful than "try again". Keep the message short and put the original request in view, so the model fixes the object rather than rewriting the task.</p>
+
+<h2 id="what-to-change-between-tries">What to change between tries</h2>
+<ul><li>Add the error (always).</li><li>Lower the temperature on later tries, if your API allows it.</li><li>On the last try, switch to a stronger model or a simpler schema, if you can afford it.</li></ul><p>Prefer enforced structured output to a retry loop where it exists, as described in <a href="/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/">getting reliable JSON</a>. Retries should be the rare path.</p>
+
+<h2 id="what-not-to-retry">What not to retry</h2>
+<p>Do not retry network errors, rate limits and timeouts with this loop. They need backoff and a different handler. Do not retry when the input itself is the problem, such as an empty document: validate input before the call. And do not retry actions with side effects. Parsing may be safe to repeat, but a tool call that sends an email is not.</p>
+
+<h2 id="measure-and-cap-cost">Measure and cap cost</h2>
+<p>Count how many calls needed a retry. If more than a few percent do, fix the prompt or schema instead of relying on the loop: each retry costs tokens and time. Set a hard cap, log the raw replies of failures, and add the worst of them to your test set. Related: <a href="/@odykyi/llm-cost-and-latency/">cutting LLM cost and latency</a>.</p>
+
+<h2 id="log-what-failed">Log what failed</h2>
+<p>Store the raw reply, the error and the attempt number for every failure. After a week, group the errors by field. You will often find one field behind most failures, such as a date format or a number returned as text. Fix that with a clearer description, an example or a looser schema, and your retry rate drops without touching the loop.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many retries are reasonable?</summary><p>Two or three. If the third still fails, the problem is usually the prompt, schema or input, not luck.</p></details><details><summary>Should I strip markdown fences and repair the JSON myself?</summary><p>A small repair step for stray code fences is fine as a fallback. It should not replace enforced output or validation.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/"><span class="lbl">Guide</span><b>How to keep LLM prompts in version control</b><span>Store prompts as files in your repo, load them by name, review changes like code and tie each change to a test run. A layout and loader you can copy.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/"><span class="lbl">Guide</span><b>How to write a system prompt that actually works</b><span>A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.</span></a><a href="/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/"><span class="lbl">Guide</span><b>Few-shot examples: how many, which, and how to format</b><span>Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to test prompts before you ship a change</title>
+<meta name="description" content="Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to test prompts before you ship a change">
+<meta property="og:description" content="Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to test prompts before you ship a change","description":"Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many test cases are enough?","acceptedAnswer":{"@type":"Answer","text":"Start with 30 to 50 that reflect real use and grow the set with each bug. Quality and coverage matter more than raw count."}},{"@type":"Question","name":"Can I use an LLM to judge the outputs?","acceptedAnswer":{"@type":"Answer","text":"For subjective quality, sometimes. Calibrate it against human labels, use a different prompt from the one being tested, and keep deterministic checks as the main gate."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to test prompts before you ship a change</h1><p class="dek">Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#build-the-case-file">Build the case file</a></li><li><a href="#run-and-score-with-code">Run and score with code</a></li><li><a href="#when-code-cannot-score-it">When code cannot score it</a></li><li><a href="#compare-do-not-just-pass">Compare, do not just pass</a></li><li><a href="#put-it-in-ci">Put it in CI</a></li><li><a href="#common-traps">Common traps</a></li></ol></nav></aside>
+<article><p>Collect 30 to 100 real inputs with expected outputs, run your prompt on all of them, score with plain code, and compare against the current prompt before merging. A fixed set turns prompt editing from guesswork into a measured change.</p>
+
+<h2 id="build-the-case-file">Build the case file</h2>
+<p>One JSON object per line: the input, the expected output and a note. Take inputs from real traffic with personal data removed, and add every bug report as a new case. Cover the typical, the hard and the out-of-scope.</p><pre><code>{"input": "I was charged twice in March", "expect": {"category": "billing"}}
+{"input": "Do you have a podcast?", "expect": {"category": "other"}}</code></pre>
+
+<h2 id="run-and-score-with-code">Run and score with code</h2>
+<pre><code>import json
+
+def run(prompt_fn, cases_path):
+    ok = 0; rows = []
+    for line in open(cases_path):
+        c = json.loads(line)
+        got = prompt_fn(c["input"])        # your model call, parsed
+        good = got.get("category") == c["expect"]["category"]
+        ok += good
+        rows.append((c["input"], good))
+    return ok / len(rows), rows
+
+score, rows = run(classify, "tests/prompts/classify.cases.jsonl")
+assert score &gt;= 0.90, f"pass rate fell to {score:.2f}"</code></pre><p>Exact-match scoring on labels and fields is cheap and unambiguous. Use it wherever you can.</p>
+
+<h2 id="when-code-cannot-score-it">When code cannot score it</h2>
+<p>For free text, test properties: valid JSON, length under a limit, contains required facts, does not contain banned phrases. If you still need a model to grade quality, keep it as a second signal, calibrate it against human judgements, and never let the same prompt grade its own output. The hub on <a href="/@odykyi/agent-evals-and-testing/">testing and evaluating AI agents</a> goes further.</p>
+
+<h2 id="compare-do-not-just-pass">Compare, do not just pass</h2>
+<p>Run the old prompt and the new prompt on the same cases and diff the results: what got fixed, what broke. A change that lifts the average but breaks three important cases may not be worth shipping. Print the failures, not just the score, so a reviewer can look at them.</p>
+
+<h2 id="put-it-in-ci">Put it in CI</h2>
+<p>Run the suite on every pull request that touches a prompt or model setting. Model calls cost money and take time, so keep the set small, cache by prompt hash and input, and run the larger set nightly. Use a ratchet: the threshold equals the best pass rate so far and may only rise. This "model proposes, deterministic score decides" pattern is what Flisk's <a href="https://gel.flisk.si">GEL</a> approach is built on, and you can adapt the idea without any tool. See also <a href="/@odykyi/structured-outputs-and-prompts/how-to-make-llm-output-repeatable/">repeatable output</a> for reducing flakiness in these runs.</p>
+
+<h2 id="common-traps">Common traps</h2>
+<ul><li>Tuning the prompt on the same cases you score on. Hold back a third of the cases that you never look at while editing.</li><li>A set of only easy inputs, so every version scores 100 percent.</li><li>Ignoring cost and latency. Record tokens and time per run as well, since a prompt that doubles them has a price.</li></ul>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many test cases are enough?</summary><p>Start with 30 to 50 that reflect real use and grow the set with each bug. Quality and coverage matter more than raw count.</p></details><details><summary>Can I use an LLM to judge the outputs?</summary><p>For subjective quality, sometimes. Calibrate it against human labels, use a different prompt from the one being tested, and keep deterministic checks as the main gate.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/"><span class="lbl">Guide</span><b>How to get reliable JSON from an LLM</b><span>Ask for a schema, use the provider&#39;s structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.</span></a><a href="/@odykyi/structured-outputs-and-prompts/json-mode-vs-structured-outputs-vs-function-calling/"><span class="lbl">Guide</span><b>JSON mode vs structured outputs vs function calling</b><span>Three ways to get machine-readable output from a model. What each one guarantees, where each fits, and how to choose without reading five API docs.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-validate-llm-output-with-pydantic-or-zod/"><span class="lbl">Guide</span><b>How to validate LLM output with Pydantic or Zod</b><span>Define the shape once as a typed model, parse the reply, and turn failures into clear error messages. Working examples for Python and TypeScript.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

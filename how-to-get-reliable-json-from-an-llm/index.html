@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to get reliable JSON from an LLM</title>
+<meta name="description" content="Ask for a schema, use the provider&#39;s structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to get reliable JSON from an LLM">
+<meta property="og:description" content="Ask for a schema, use the provider&#39;s structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to get reliable JSON from an LLM","description":"Ask for a schema, use the provider's structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is JSON the best format for model output?","acceptedAnswer":{"@type":"Answer","text":"It is the most widely supported, and parsers are everywhere. For simple answers, a single label or a short list of lines can be more reliable than JSON."}},{"@type":"Question","name":"Can I rely on the model to never break the schema?","acceptedAnswer":{"@type":"Answer","text":"With enforced structured output the syntax is guaranteed by the provider, but you should still validate meaning. Without enforcement, expect occasional failures and handle them."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to get reliable JSON from an LLM</h1><p class="dek">Ask for a schema, use the provider&#39;s structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#layer-1-say-what-you-want">Layer 1: say what you want</a></li><li><a href="#layer-2-let-the-api-enforce-it">Layer 2: let the API enforce it</a></li><li><a href="#layer-3-validate-in-code">Layer 3: validate in code</a></li><li><a href="#layer-4-retry-with-the-error">Layer 4: retry with the error</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#a-test-to-run">A test to run</a></li></ol></nav></aside>
+<article><p>Describe the exact shape you want, use your provider's structured output or tool-call feature to enforce it, and validate the result in your own code before using it. Treat model output as untrusted input, even when it looks perfect.</p>
+
+<h2 id="layer-1-say-what-you-want">Layer 1: say what you want</h2>
+<p>Even with enforcement, a clear instruction helps the content, not just the shape. State the fields, their types and what each means. Give one short example. Say what to do when information is missing, for instance "use null, never guess".</p><pre><code>Extract the order from the email. Reply with JSON only:
+{"order_id": string, "items": [{"sku": string, "qty": integer}],
+ "ship_to_country": string or null}
+If a value is not in the email, use null.</code></pre>
+
+<h2 id="layer-2-let-the-api-enforce-it">Layer 2: let the API enforce it</h2>
+<p>Most major providers offer a way to constrain output to a JSON Schema: a structured output or response-format option, or a forced tool call whose arguments are the schema. Local servers such as Ollama accept a schema too. Check your provider's docs for the exact parameter, because names and supported schema features differ. The next article compares the options: <a href="/@odykyi/structured-outputs-and-prompts/json-mode-vs-structured-outputs-vs-function-calling/">JSON mode vs structured outputs vs function calling</a>.</p>
+
+<h2 id="layer-3-validate-in-code">Layer 3: validate in code</h2>
+<p>Enforcement guarantees syntax, not truth. A valid object can still hold a wrong date or an invented SKU. Parse and check it yourself.</p><pre><code>import json
+from pydantic import BaseModel
+
+class Item(BaseModel):
+    sku: str
+    qty: int
+
+class Order(BaseModel):
+    order_id: str
+    items: list[Item]
+    ship_to_country: str | None
+
+order = Order.model_validate_json(reply_text)</code></pre><p>Then apply business rules: does the SKU exist, is qty positive, is the country code known?</p>
+
+<h2 id="layer-4-retry-with-the-error">Layer 4: retry with the error</h2>
+<p>If validation fails, send the error back once or twice and ask for a corrected reply. Cap the attempts. See <a href="/@odykyi/structured-outputs-and-prompts/how-to-retry-when-llm-returns-invalid-json/">how to retry when an LLM returns invalid JSON</a>.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<ul><li>Stripping code fences with a regex and hoping. Prefer enforcement to cleanup.</li><li>Deep, large schemas. Keep them flat and small; models fill simple shapes more accurately.</li><li>Free-text fields inside the JSON that you then parse again. Add real fields instead.</li><li>Trusting the result because it parsed. It is still model output, so validate it before it touches a database or a shell.</li></ul>
+
+<h2 id="a-test-to-run">A test to run</h2>
+<p>Collect 50 real inputs, run the pipeline, and count: parsed, passed validation, passed business rules. Track the three numbers over time. A drop after a model or prompt change is your signal to look. For tooling that keeps these checks in CI, see <a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">how to test prompts before you ship changes</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is JSON the best format for model output?</summary><p>It is the most widely supported, and parsers are everywhere. For simple answers, a single label or a short list of lines can be more reliable than JSON.</p></details><details><summary>Can I rely on the model to never break the schema?</summary><p>With enforced structured output the syntax is guaranteed by the provider, but you should still validate meaning. Without enforcement, expect occasional failures and handle them.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/json-mode-vs-structured-outputs-vs-function-calling/"><span class="lbl">Guide</span><b>JSON mode vs structured outputs vs function calling</b><span>Three ways to get machine-readable output from a model. What each one guarantees, where each fits, and how to choose without reading five API docs.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-validate-llm-output-with-pydantic-or-zod/"><span class="lbl">Guide</span><b>How to validate LLM output with Pydantic or Zod</b><span>Define the shape once as a typed model, parse the reply, and turn failures into clear error messages. Working examples for Python and TypeScript.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-retry-when-llm-returns-invalid-json/"><span class="lbl">Guide</span><b>How to retry when an LLM returns invalid JSON</b><span>Retry with the exact validation error, cap the attempts, change one thing between tries and fail safely. A loop you can copy, plus what not to retry.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
