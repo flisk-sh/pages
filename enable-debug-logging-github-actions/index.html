@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Enable Debug Logging in GitHub Actions</title>
+<meta name="description" content="Turn on step and runner debug logs with a re-run checkbox or two repository variables, and add your own debug output without leaking secrets.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/debugging-ci-failures/enable-debug-logging-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Enable Debug Logging in GitHub Actions">
+<meta property="og:description" content="Turn on step and runner debug logs with a re-run checkbox or two repository variables, and add your own debug output without leaking secrets.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/debugging-ci-failures/enable-debug-logging-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Enable Debug Logging in GitHub Actions","description":"Turn on step and runner debug logs with a re-run checkbox or two repository variables, and add your own debug output without leaking secrets.","url":"https://pages.flisk.si/@odykyi/debugging-ci-failures/enable-debug-logging-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Debugging CI Failures","url":"https://pages.flisk.si/@odykyi/debugging-ci-failures/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does debug logging expose my secrets?","acceptedAnswer":{"@type":"Answer","text":"GitHub masks registered secret values in logs, but derived values and extra debug output may still show sensitive data. Review the log and turn debug logging off when you finish."}},{"@type":"Question","name":"Where do I set ACTIONS_STEP_DEBUG?","acceptedAnswer":{"@type":"Answer","text":"In the repository settings under Secrets and variables, for Actions. Create a secret or variable with that name and the value true."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/debugging-ci-failures/">Debugging CI Failures</a></div>
+<section class="hero"><div><div class="lbl">Debugging CI Failures</div><h1>How to Enable Debug Logging in GitHub Actions</h1><p class="dek">Turn on step and runner debug logs with a re-run checkbox or two repository variables, and add your own debug output without leaking secrets.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-quick-way-re-run-with-debug-logging">The quick way: re-run with debug logging</a></li><li><a href="#debug-logging-for-every-run">Debug logging for every run</a></li><li><a href="#write-your-own-debug-output">Write your own debug output</a></li><li><a href="#keep-artifacts-of-the-failure">Keep artifacts of the failure</a></li><li><a href="#a-debugging-session-in-practice">A debugging session in practice</a></li><li><a href="#what-debug-logs-cannot-tell-you">What debug logs cannot tell you</a></li></ol></nav></aside>
+<article><p>To get more log detail from GitHub Actions, re-run the failed job and tick Enable debug logging. For every run, set the repository secret or variable <code>ACTIONS_STEP_DEBUG</code> to <code>true</code>. Runner level diagnostics use <code>ACTIONS_RUNNER_DEBUG</code> in the same way.</p>
+
+<h2 id="the-quick-way-re-run-with-debug-logging">The quick way: re-run with debug logging</h2>
+<p>On a failed run, choose Re-run jobs, then Re-run failed jobs or Re-run all jobs. The dialog has a checkbox called Enable debug logging. Tick it and run. This affects only that run, which is what you want while investigating.</p><p>With the GitHub CLI you can do the same:</p><pre><code>gh run rerun RUN_ID --failed --debug</code></pre>
+
+<h2 id="debug-logging-for-every-run">Debug logging for every run</h2>
+<p>Add a repository secret or variable named <code>ACTIONS_STEP_DEBUG</code> with the value <code>true</code>. Actions then print extra lines starting with <code>::debug::</code>, which many actions write but hide by default. <code>ACTIONS_RUNNER_DEBUG</code> set to <code>true</code> adds diagnostic logs from the runner itself and makes them available for download with the run logs.</p><p>Do not leave these on permanently. Logs get long and slow to read, and debug output can include values you did not expect. Remove them when you finish.</p>
+
+<h2 id="write-your-own-debug-output">Write your own debug output</h2>
+<p>Print the facts you need: working directory, file listing, environment variable names (not values), tool versions, network reachability.</p><pre><code>- name: Debug context
+  if: failure()
+  run: |
+    pwd
+    ls -la
+    env | cut -d= -f1 | sort
+    df -h
+    free -m || true</code></pre><p><code>if: failure()</code> runs the step only after an earlier step failed. Printing names only with <code>cut -d= -f1</code> avoids dumping secret values into the log. GitHub masks registered secrets, but a transformed secret (for example a base64 version) is not masked, so be careful.</p>
+
+<h2 id="keep-artifacts-of-the-failure">Keep artifacts of the failure</h2>
+<p>Logs are not enough when a failure leaves files behind: screenshots, core dumps, test reports, a database dump. Upload them only on failure so you can download and inspect them.</p><pre><code>- uses: actions/upload-artifact@v4
+  if: failure()
+  with:
+    name: failure-files
+    path: |
+      test-results/
+      screenshots/
+    retention-days: 7</code></pre><p>Keep retention short and do not upload anything that contains secrets.</p>
+
+<h2 id="a-debugging-session-in-practice">A debugging session in practice</h2>
+<p>Say a deploy step fails with an unclear 403. Re-run with debug logging, find the request line that shows which API call was made, then compare the token permissions with what that call needs. Add the missing permission, re-run once more without debug and confirm it is green. Then delete the extra debug step you added. The whole loop is three runs. Without debug output the same problem often takes a dozen guesses, each costing a full pipeline run.</p><p>If your runs are slow, make the debug step run first and fail fast, so each attempt is short.</p>
+
+<h2 id="what-debug-logs-cannot-tell-you">What debug logs cannot tell you</h2>
+<p>Debug logging shows what the runner and actions did. It does not explain a flaky test or a slow dependency. For those, compare runs over time: <a href='/@odykyi/debugging-ci-failures/read-github-actions-logs/'>read the failing log carefully</a>, then <a href='/@odykyi/debugging-ci-failures/reproduce-github-actions-failure-locally/'>reproduce it locally</a>. Enabling debug is a way to gather evidence, not a fix.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does debug logging expose my secrets?</summary><p>GitHub masks registered secret values in logs, but derived values and extra debug output may still show sensitive data. Review the log and turn debug logging off when you finish.</p></details><details><summary>Where do I set ACTIONS_STEP_DEBUG?</summary><p>In the repository settings under Secrets and variables, for Actions. Create a secret or variable with that name and the value true.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your red workflows</div><h3>Find the failing workflows before someone pings you about them.</h3><p>Cilytics is a public CI health dashboard for GitHub. It lists red workflows, flaky workflows and slow workflows for an org or any public repo, with no account.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Debugging CI Failures</span></div>
+<div class="rgrid"><a href="/@odykyi/debugging-ci-failures/real-regression-vs-environment-problem/"><span class="lbl">Guide</span><b>CI Regression or Environment Problem? How to Tell</b><span>Decide in a few checks whether a red build is caused by your commit, by a changed dependency or runner, or by an outside service, and who should fix it.</span></a><a href="/@odykyi/debugging-ci-failures/find-breaking-commit-git-bisect/"><span class="lbl">Guide</span><b>How to Find the Commit That Broke CI with git bisect</b><span>Use git bisect with a script that exits non-zero on failure to find the first bad commit in a few steps instead of reading a long diff.</span></a><a href="/@odykyi/debugging-ci-failures/debug-ci-job-hangs-or-times-out/"><span class="lbl">Guide</span><b>How to Debug a GitHub Actions Job That Hangs or Times Out</b><span>Find which step stalls, set timeouts that fail fast, and track down the usual causes: open handles, waiting for input, deadlocks and slow network calls.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
