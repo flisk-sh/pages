@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to build an audit log for AI agent actions</title>
+<meta name="description" content="When an agent does something wrong you need to know who asked, what it saw and what it did. Log tool calls and decisions in an append-only record.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ai-security-for-builders/audit-log-for-ai-agent-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to build an audit log for AI agent actions">
+<meta property="og:description" content="When an agent does something wrong you need to know who asked, what it saw and what it did. Log tool calls and decisions in an append-only record.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ai-security-for-builders/audit-log-for-ai-agent-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to build an audit log for AI agent actions","description":"When an agent does something wrong you need to know who asked, what it saw and what it did. Log tool calls and decisions in an append-only record.","url":"https://pages.flisk.si/@odykyi/ai-security-for-builders/audit-log-for-ai-agent-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"AI security for builders","url":"https://pages.flisk.si/@odykyi/ai-security-for-builders/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is an application log enough as an audit log?","acceptedAnswer":{"@type":"Answer","text":"Usually not. An audit log should be structured, append-only, redacted and access-controlled, so it can be trusted after an incident."}},{"@type":"Question","name":"How long should I keep agent audit logs?","acceptedAnswer":{"@type":"Answer","text":"Set a retention period that fits your legal and business needs, and delete or anonymize after it. Do not keep sensitive data forever."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ai-security-for-builders/">AI security for builders</a></div>
+<section class="hero"><div><div class="lbl">AI security for builders</div><h1>How to build an audit log for AI agent actions</h1><p class="dek">When an agent does something wrong you need to know who asked, what it saw and what it did. Log tool calls and decisions in an append-only record.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-to-record">What to record</a></li><li><a href="#a-table-that-only-grows">A table that only grows</a></li><li><a href="#redact-before-you-store">Redact before you store</a></li><li><a href="#alert-on-patterns">Alert on patterns</a></li><li><a href="#use-it-to-improve">Use it to improve</a></li></ol></nav></aside>
+<article><p>Write one append-only record for every tool call an agent makes: who triggered it, which tool, which arguments, what came back, and whether a person approved it. With that record you can answer what happened after an incident, and you can spot abuse as it starts.</p>
+
+<h2 id="what-to-record">What to record</h2>
+<ul><li><strong>Who:</strong> the user or system that started the run, and the agent identity.</li><li><strong>When:</strong> a timestamp, plus a run id and a sequence number.</li><li><strong>What:</strong> tool name and arguments, and the result or error.</li><li><strong>Why:</strong> the model name and a reference to the prompt version. Keep the full prompt in a separate store.</li><li><strong>Approval:</strong> who approved, when, and the exact arguments approved.</li></ul>
+
+<h2 id="a-table-that-only-grows">A table that only grows</h2>
+<pre><code>CREATE TABLE agent_audit (
+  id          bigserial PRIMARY KEY,
+  at          timestamptz NOT NULL DEFAULT now(),
+  run_id      text NOT NULL,
+  seq         int  NOT NULL,
+  actor       text NOT NULL,
+  tool        text NOT NULL,
+  args        jsonb NOT NULL,
+  outcome     text NOT NULL,   -- ok | error | denied
+  approved_by text
+);
+
+REVOKE UPDATE, DELETE ON agent_audit FROM app_user;</code></pre><p>Revoking update and delete from the application role makes the table append-only for the app, so a compromised agent path cannot rewrite history. Ship the same events to a second place you control for extra safety.</p><p>Write the audit row in the same code path that runs the tool, not inside the model loop, so a missing log line cannot happen because the model skipped a step. If the audit insert fails, fail the tool call. An action with no record is worse than an action that did not happen.</p>
+
+<h2 id="redact-before-you-store">Redact before you store</h2>
+<p>Audit logs live a long time and many people read them. Remove secrets, tokens and sensitive personal data from arguments and results before writing. Store a hash or an id in place of a full document. Set a retention period and apply access control to the log itself. See <a href="/@odykyi/ai-security-for-builders/keep-api-keys-away-from-llm-agents/">keeping secrets away from agents</a>.</p>
+
+<h2 id="alert-on-patterns">Alert on patterns</h2>
+<p>A log nobody reads is only useful after the fact. Add a few simple alerts:</p><ul><li>A burst of denied calls or validation failures from one run.</li><li>A tool called far more often than normal.</li><li>A write or send action right after a run read untrusted content.</li><li>Calls to a host that is not on the allowlist.</li></ul><p>These checks are plain queries on the table above and need no model.</p>
+
+<h2 id="use-it-to-improve">Use it to improve</h2>
+<p>Each incident is a lesson. Add the missing check, narrow the tool or add an approval step, then write a test that replays the failing case. The same events feed the traces in <a href="/@odykyi/multi-agent-systems/">multi-agent system patterns and tracing</a> and your evaluations in <a href="/@odykyi/agent-evals-and-testing/">agent testing</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is an application log enough as an audit log?</summary><p>Usually not. An audit log should be structured, append-only, redacted and access-controlled, so it can be trusted after an incident.</p></details><details><summary>How long should I keep agent audit logs?</summary><p>Set a retention period that fits your legal and business needs, and delete or anonymize after it. Do not keep sensitive data forever.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Run it in a sandbox</div><h3>Test risky agent code away from your real machine.</h3><p>Run untrusted agent code in a disposable sandbox with no secrets and limited network. Fleet offers agent sandboxes behind one API key; it is in beta.</p></div><div class="btns"><a class="btn primary" href="https://fleet.flisk.si">Fleet sandboxes</a><a class="btn" href="https://gel.flisk.si">GEL guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">AI security for builders</span></div>
+<div class="rgrid"><a href="/@odykyi/ai-security-for-builders/ai-app-security-checklist-before-launch/"><span class="lbl">Guide</span><b>AI app security checklist before you launch</b><span>A short checklist covering secrets, permissions, untrusted input, output handling, sandboxing, approvals, logging and automated checks in CI.</span></a><a href="/@odykyi/ai-security-for-builders/what-is-prompt-injection-and-how-to-defend/"><span class="lbl">Guide</span><b>What is prompt injection and how do you defend against it?</b><span>Prompt injection tricks a model into following instructions that came from data instead of from you. You cannot fully prevent it, so limit what a fooled model can do.</span></a><a href="/@odykyi/ai-security-for-builders/indirect-prompt-injection-in-tool-results/"><span class="lbl">Guide</span><b>Indirect prompt injection: attacks hidden in pages and tool results</b><span>When an agent reads a web page, email or issue, the author of that content can speak to your model. Here is how to design so that this does not hurt you.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
