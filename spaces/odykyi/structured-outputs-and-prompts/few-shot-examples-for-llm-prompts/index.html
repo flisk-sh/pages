@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Few-shot examples: how many, which, and how to format</title>
+<meta name="description" content="Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Few-shot examples: how many, which, and how to format">
+<meta property="og:description" content="Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Few-shot examples: how many, which, and how to format","description":"Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many examples do I need?","acceptedAnswer":{"@type":"Answer","text":"Often three to five. Add more only if tests show specific failures that an example would fix."}},{"@type":"Question","name":"Do examples still help with strong models?","acceptedAnswer":{"@type":"Answer","text":"Yes for format and edge cases, but test it. If zero examples already pass your cases, skip them and save tokens."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>Few-shot examples: how many, which, and how to format</h1><p class="dek">Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#when-examples-beat-rules">When examples beat rules</a></li><li><a href="#choosing-examples">Choosing examples</a></li><li><a href="#formatting-them">Formatting them</a></li><li><a href="#pitfalls">Pitfalls</a></li><li><a href="#static-or-retrieved-examples">Static or retrieved examples</a></li><li><a href="#a-quick-check-for-bias">A quick check for bias</a></li></ol></nav></aside>
+<article><p>Use three to five examples that cover the typical case and the hard edge cases, in exactly the output format you want, and keep them separate from your test data. Examples show the model what you mean when rules alone leave room for guessing.</p>
+
+<h2 id="when-examples-beat-rules">When examples beat rules</h2>
+<p>Rules struggle with style, tone and fine category boundaries. "Short, neutral summary" can mean ten things. Two examples of a good summary show it at once. Use examples for output format, labelling decisions and tricky cases. Use rules for hard constraints.</p>
+
+<h2 id="choosing-examples">Choosing examples</h2>
+<ul><li>One plain, typical case.</li><li>One edge case per common mistake you have seen.</li><li>One example where the right answer is "unknown" or "other", so the model learns to abstain.</li><li>Variety in length and wording, so it does not lock onto surface features.</li></ul><p>Take them from real inputs, with personal data removed, not made up in the abstract.</p>
+
+<h2 id="formatting-them">Formatting them</h2>
+<pre><code>Classify the ticket. Reply with JSON only.
+
+Example 1
+Ticket: "I was charged twice in March."
+Answer: {"category": "billing", "priority": 2}
+
+Example 2
+Ticket: "The export button does nothing on Safari."
+Answer: {"category": "bug", "priority": 2}
+
+Example 3
+Ticket: "Do you have a podcast?"
+Answer: {"category": "other", "priority": 1}
+
+Ticket: "{{ticket}}"
+Answer:</code></pre><p>Match the real output format exactly, including key order and quotes. Models copy format faithfully, including your typos.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<p><strong>Label skew.</strong> If four of five examples are "bug", the model leans that way. Balance them to reflect reality.</p><p><strong>Order effects.</strong> The last example can pull hardest. Test a shuffled order.</p><p><strong>Leakage.</strong> Never use your test cases as examples, or your scores will look better than reality.</p><p><strong>Cost.</strong> Examples are tokens on every call. Prefer fewer, sharper ones.</p>
+
+<h2 id="static-or-retrieved-examples">Static or retrieved examples</h2>
+<p>For a stable task, fix the examples in the prompt file. For a wide task, store many labelled examples and pick the few most similar to the current input at call time. Start static. Move to retrieval only if accuracy on varied inputs needs it. Keep the example set in <a href="/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/">version control</a> beside the prompt. For a compact guide to the rest of the prompt, read <a href="/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/">how to write a system prompt</a>.</p>
+
+<h2 id="a-quick-check-for-bias">A quick check for bias</h2>
+<p>After you pick your examples, count the labels and the openings. If every example starts with "Thank you for", or four of five carry the same label, rebalance. Then run your test set with and without the examples. If the score does not move, remove them. If it rises on easy cases but falls on hard ones, your examples may be too similar to each other, so swap one for a harder case.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many examples do I need?</summary><p>Often three to five. Add more only if tests show specific failures that an example would fix.</p></details><details><summary>Do examples still help with strong models?</summary><p>Yes for format and edge cases, but test it. If zero examples already pass your cases, skip them and save tokens.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/"><span class="lbl">Guide</span><b>How to design tool schemas for LLM function calling</b><span>Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-make-llm-output-repeatable/"><span class="lbl">Guide</span><b>How to make LLM output more repeatable</b><span>Lower temperature, pin the model version, fix the prompt and constrain the format. What you can control, what you cannot, and how to test around the rest.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/"><span class="lbl">Guide</span><b>How to test prompts before you ship a change</b><span>Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

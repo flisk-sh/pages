@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to design tool schemas for LLM function calling</title>
+<meta name="description" content="Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to design tool schemas for LLM function calling">
+<meta property="og:description" content="Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to design tool schemas for LLM function calling","description":"Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should tool descriptions be long?","acceptedAnswer":{"@type":"Answer","text":"Keep them to a few sentences. Say what the tool does, what it returns and when to use it. Move long reference text elsewhere."}},{"@type":"Question","name":"Can the model call a tool with wrong arguments?","acceptedAnswer":{"@type":"Answer","text":"Yes, even with a schema. Validate arguments in your code and return a helpful error so the model can correct itself."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to design tool schemas for LLM function calling</h1><p class="dek">Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#names-and-descriptions-do-the-routing">Names and descriptions do the routing</a></li><li><a href="#keep-parameters-simple">Keep parameters simple</a></li><li><a href="#how-many-tools-is-too-many">How many tools is too many</a></li><li><a href="#return-results-and-errors-the-model-can-use">Return results and errors the model can use</a></li><li><a href="#validate-on-your-side-always">Validate on your side, always</a></li><li><a href="#test-tool-selection">Test tool selection</a></li></ol></nav></aside>
+<article><p>Give each tool a clear verb-first name, a one or two sentence description that says when to use it and when not to, a small flat parameter schema with enums where you can, and error messages the model can act on. Fewer, sharper tools beat many overlapping ones.</p>
+
+<h2 id="names-and-descriptions-do-the-routing">Names and descriptions do the routing</h2>
+<p>The model reads the name and description to decide. <code>search_orders</code> beats <code>query</code>. Write the description as guidance: what it does, what it returns, when to use it, and when to use a different tool instead.</p><pre><code>{
+  "name": "search_orders",
+  "description": "Find orders by customer email or order ID. Returns up to 10 orders with status and total. Use get_order for full details of one order.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "email": {"type": "string"},
+      "order_id": {"type": "string"}
+    },
+    "additionalProperties": false
+  }
+}</code></pre><p>The key name for the schema differs between providers (<code>input_schema</code>, <code>parameters</code>), so check your API docs.</p>
+
+<h2 id="keep-parameters-simple">Keep parameters simple</h2>
+<ul><li>Flat objects. Avoid deep nesting.</li><li>Enums for fixed choices, such as <code>"status": ["open", "closed"]</code>.</li><li>Describe each parameter, with an example value and its format (dates as ISO 8601).</li><li>Make only truly needed fields required.</li><li>Prefer IDs the model has already seen over free-text names.</li></ul>
+
+<h2 id="how-many-tools-is-too-many">How many tools is too many</h2>
+<p>Every tool definition costs tokens on every call and adds a chance of picking wrongly. A handful that do clearly different things works well. If you have dozens, group them behind a router step, or load only the tools relevant to the current task. Merge near-duplicates: one <code>search</code> with a type parameter can replace three tools.</p>
+
+<h2 id="return-results-and-errors-the-model-can-use">Return results and errors the model can use</h2>
+<p>Return compact, relevant results, not raw database rows. For failures, say what went wrong and how to fix it: "No order with id 123. IDs look like ORD-1234." The model will then retry correctly. A stack trace helps nobody. Return a stable shape, so the model does not have to parse a new format each time.</p>
+
+<h2 id="validate-on-your-side-always">Validate on your side, always</h2>
+<p>The model's arguments are untrusted input. Validate them against the schema in code, check permissions for the current user, and apply limits such as a maximum page size. Destructive tools should require confirmation or run in a dry-run mode first. These ideas carry over to servers: see <a href="/@odykyi/mcp-servers-in-production/">MCP servers in production</a> and <a href="/@odykyi/ai-security-for-builders/">AI security for builders</a>.</p>
+
+<h2 id="test-tool-selection">Test tool selection</h2>
+<p>Write 20 user requests and the tool you expect for each. Run them and count the picks. Wrong picks tell you which descriptions overlap. This is cheap and catches most schema problems early. See <a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">testing prompts</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should tool descriptions be long?</summary><p>Keep them to a few sentences. Say what the tool does, what it returns and when to use it. Move long reference text elsewhere.</p></details><details><summary>Can the model call a tool with wrong arguments?</summary><p>Yes, even with a schema. Validate arguments in your code and return a helpful error so the model can correct itself.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/how-to-make-llm-output-repeatable/"><span class="lbl">Guide</span><b>How to make LLM output more repeatable</b><span>Lower temperature, pin the model version, fix the prompt and constrain the format. What you can control, what you cannot, and how to test around the rest.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/"><span class="lbl">Guide</span><b>How to test prompts before you ship a change</b><span>Build a small fixed set of real cases, run old and new prompts on it, score with code, and block regressions in CI. A minimal harness you can start with today.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-get-reliable-json-from-an-llm/"><span class="lbl">Guide</span><b>How to get reliable JSON from an LLM</b><span>Ask for a schema, use the provider&#39;s structured output feature where it exists, validate every reply in code, and retry with the error. The full recipe with code.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

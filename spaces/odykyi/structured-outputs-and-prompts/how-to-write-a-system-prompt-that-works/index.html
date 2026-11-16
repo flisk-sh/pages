@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write a system prompt that actually works</title>
+<meta name="description" content="A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write a system prompt that actually works">
+<meta property="og:description" content="A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write a system prompt that actually works","description":"A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/how-to-write-a-system-prompt-that-works/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Prompts and structured outputs","url":"https://pages.flisk.si/@odykyi/structured-outputs-and-prompts/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long should a system prompt be?","acceptedAnswer":{"@type":"Answer","text":"As short as it can be while covering the rules that matter. Many good ones are 100 to 400 words. Move reference material to retrieval instead."}},{"@type":"Question","name":"Does the role line (\"You are an expert...\") matter?","acceptedAnswer":{"@type":"Answer","text":"A concrete job description helps. Vague flattery adds little. Say what the assistant does and for whom."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/structured-outputs-and-prompts/">Prompts and structured outputs</a></div>
+<section class="hero"><div><div class="lbl">Prompts and structured outputs</div><h1>How to write a system prompt that actually works</h1><p class="dek">A good system prompt states the role, the task, the rules, the output format and what to do when unsure. A template and the mistakes that make prompts worse.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#a-structure-that-holds-up">A structure that holds up</a></li><li><a href="#a-template">A template</a></li><li><a href="#say-what-to-do-not-only-what-to-avoid">Say what to do, not only what to avoid</a></li><li><a href="#mistakes-that-make-prompts-worse">Mistakes that make prompts worse</a></li><li><a href="#iterate-with-evidence">Iterate with evidence</a></li><li><a href="#a-quick-review-pass">A quick review pass</a></li></ol></nav></aside>
+<article><p>State the job, the audience, the hard rules, the output format and what to do when information is missing, in that order, using short plain sentences. Long, emphatic prompts usually perform worse than short, specific ones.</p>
+
+<h2 id="a-structure-that-holds-up">A structure that holds up</h2>
+<ol><li><strong>Role and goal:</strong> one or two sentences about what the assistant does and for whom.</li><li><strong>Inputs:</strong> what it will receive and how it is formatted.</li><li><strong>Rules:</strong> the things that must always or never happen.</li><li><strong>Output format:</strong> exact shape, with an example.</li><li><strong>Edge cases:</strong> what to do when information is missing or the request is out of scope.</li></ol>
+
+<h2 id="a-template">A template</h2>
+<pre><code>You triage support tickets for a billing product. Readers are agents.
+
+Input: one customer message.
+
+Rules:
+- Pick exactly one category: bug, billing, other.
+- Never promise refunds or dates.
+- If the message is not about the product, use "other".
+
+Output JSON: {"category": string, "priority": 1-3, "summary": string}
+Summary: one sentence, under 25 words, no customer names.
+
+If you cannot tell, use category "other" and priority 2.</code></pre>
+
+<h2 id="say-what-to-do-not-only-what-to-avoid">Say what to do, not only what to avoid</h2>
+<p>"Do not be verbose" is weak. "Answer in at most three sentences" is testable. Positive, concrete rules are followed more reliably than a list of prohibitions. Explain the reason for a rule when it is not obvious, because a model that knows why can handle cases the rule did not list.</p>
+
+<h2 id="mistakes-that-make-prompts-worse">Mistakes that make prompts worse</h2>
+<ul><li>Capital letters and repeated warnings everywhere, so nothing stands out.</li><li>Contradictions added over time: "be brief" in one paragraph, "be thorough" in another.</li><li>Pasting a whole policy document when five rules matter.</li><li>No fallback for unclear input, so the model invents an answer.</li></ul><p>Read the prompt once as a stranger would. If two lines can be read in conflicting ways, fix them.</p>
+
+<h2 id="iterate-with-evidence">Iterate with evidence</h2>
+<p>Change one thing at a time and run it against a fixed set of examples, as in <a href="/@odykyi/structured-outputs-and-prompts/how-to-test-prompts-before-you-ship-changes/">testing prompts</a>. Add examples if rules alone leave gaps: see <a href="/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/">few-shot examples</a>. Keep the file in <a href="/@odykyi/structured-outputs-and-prompts/how-to-keep-prompts-in-version-control/">version control</a> so you can compare versions.</p>
+
+<h2 id="a-quick-review-pass">A quick review pass</h2>
+<p>Before you ship a prompt, read it against this list: Is the job clear in the first two lines? Is every rule testable? Is there at least one example of the output? Does it say what to do when the input is unclear? Is anything in it that the model could not possibly know, such as a variable that was never filled in? Print the final text with all variables substituted and read that, not the template.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long should a system prompt be?</summary><p>As short as it can be while covering the rules that matter. Many good ones are 100 to 400 words. Move reference material to retrieval instead.</p></details><details><summary>Does the role line (&quot;You are an expert...&quot;) matter?</summary><p>A concrete job description helps. Vague flattery adds little. Say what the assistant does and for whom.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Test structured output against a free open model.</h3><p>Flisk Inference is a free open-beta model API with a daily request limit. Sign in with GitHub and point your client at it to try schemas, prompts and retries.</p></div><div class="btns"><a class="btn primary" href="https://inference.flisk.si">Open Flisk Inference</a><a class="btn" href="https://gel.flisk.si">GEL: guards and evals</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Prompts and structured outputs</span></div>
+<div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/few-shot-examples-for-llm-prompts/"><span class="lbl">Guide</span><b>Few-shot examples: how many, which, and how to format</b><span>Examples teach format and edge cases better than rules do. How to pick them, how many you need, and how to avoid copying and bias.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-design-tool-schemas-for-llm-function-calling/"><span class="lbl">Guide</span><b>How to design tool schemas for LLM function calling</b><span>Models pick tools by name and description, and fill arguments from your schema. Design names, descriptions, parameters and errors so the right call is the easy one.</span></a><a href="/@odykyi/structured-outputs-and-prompts/how-to-make-llm-output-repeatable/"><span class="lbl">Guide</span><b>How to make LLM output more repeatable</b><span>Lower temperature, pin the model version, fix the prompt and constrain the format. What you can control, what you cannot, and how to test around the rest.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
