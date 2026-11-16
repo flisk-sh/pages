@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reusable Workflows vs Composite Actions in a Monorepo</title>
+<meta name="description" content="How to stop copy-pasting the same steps across package workflows: when to use a reusable workflow, when a composite action, and how inputs, secrets and permissions pass through.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-reusable-workflows-and-composite-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Reusable Workflows vs Composite Actions in a Monorepo">
+<meta property="og:description" content="How to stop copy-pasting the same steps across package workflows: when to use a reusable workflow, when a composite action, and how inputs, secrets and permissions pass through.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-reusable-workflows-and-composite-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Reusable Workflows vs Composite Actions in a Monorepo","description":"How to stop copy-pasting the same steps across package workflows: when to use a reusable workflow, when a composite action, and how inputs, secrets and permissions pass through.","url":"https://pages.flisk.si/@odykyi/monorepo-ci/monorepo-reusable-workflows-and-composite-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Monorepo CI","url":"https://pages.flisk.si/@odykyi/monorepo-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can a composite action call another action?","acceptedAnswer":{"@type":"Answer","text":"Yes, it can use other actions and run shell steps. It cannot define its own jobs, runner or permissions, which belong to the calling job."}},{"@type":"Question","name":"Do local reusable workflows need a pinned version?","acceptedAnswer":{"@type":"Answer","text":"A reference with ./ in the same repository uses the code at the same commit as the caller, so no pin is needed. Pin references to other repositories."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/monorepo-ci/">Monorepo CI</a></div>
+<section class="hero"><div><div class="lbl">Monorepo CI</div><h1>Reusable Workflows vs Composite Actions in a Monorepo</h1><p class="dek">How to stop copy-pasting the same steps across package workflows: when to use a reusable workflow, when a composite action, and how inputs, secrets and permissions pass through.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#composite-action-shared-steps">Composite action: shared steps</a></li><li><a href="#reusable-workflow-shared-jobs">Reusable workflow: shared jobs</a></li><li><a href="#how-to-choose">How to choose</a></li><li><a href="#secrets-permissions-and-limits">Secrets, permissions and limits</a></li><li><a href="#keep-it-readable">Keep it readable</a></li></ol></nav></aside>
+<article><p>Use a composite action to share a few steps inside a job, such as setup and install. Use a reusable workflow to share a whole job or several jobs, including their runner and permissions. Both live in your repo, so changes ship with the code.</p>
+
+<h2 id="composite-action-shared-steps">Composite action: shared steps</h2>
+<p>Put it in <code>.github/actions/setup/action.yml</code>:</p><pre><code>name: setup
+inputs:
+  node-version:
+    default: '20'
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: npm
+    - run: npm ci
+      shell: bash</code></pre><p>Call it with <code>uses: ./.github/actions/setup</code> after a checkout step. Every <code>run</code> step in a composite action needs an explicit <code>shell</code>.</p>
+
+<h2 id="reusable-workflow-shared-jobs">Reusable workflow: shared jobs</h2>
+<pre><code># .github/workflows/package-ci.yml
+on:
+  workflow_call:
+    inputs:
+      package:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - run: npm test --workspace ${{ inputs.package }}</code></pre><p>A caller then declares one job per package:</p><pre><code>jobs:
+  api:
+    uses: ./.github/workflows/package-ci.yml
+    with:
+      package: api</code></pre>
+
+<h2 id="how-to-choose">How to choose</h2>
+<table><thead><tr><th>Need</th><th>Use</th></tr></thead><tbody><tr><td>Share setup steps</td><td>Composite action</td></tr><tr><td>Share a full job with its own runner</td><td>Reusable workflow</td></tr><tr><td>Different permissions per job</td><td>Reusable workflow</td></tr><tr><td>Show each step in the caller's log</td><td>Composite action</td></tr></tbody></table><p>Reusable workflows appear as one job per called job in the UI, while composite action steps are collapsed under a single step.</p>
+
+<h2 id="secrets-permissions-and-limits">Secrets, permissions and limits</h2>
+<ul><li>Secrets are not passed automatically. Use <code>secrets: inherit</code> for the same organisation or list them. Pass only what the called workflow needs.</li><li>A called workflow can keep or reduce the caller's token permissions, never raise them. See <a href='/@odykyi/github-actions-permissions-least-privilege/'>least privilege</a>.</li><li>Reusable workflows can be nested, but only to a limited depth. Check the current limit in GitHub's docs.</li><li>Reference reusable workflows in other repositories by a pinned SHA.</li></ul>
+
+<h2 id="keep-it-readable">Keep it readable</h2>
+<p>Do not abstract too early. Copy once, abstract at the third copy. Give inputs clear names and defaults, document them in a comment at the top of the file, and keep the number of layers small, since a failure three calls deep is slow to trace. When a job fails, <a href='/@odykyi/debugging-ci-failures/'>debugging routine</a> is easier if names in the logs map to files you can find.</p><p>Version the shared pieces like code. When you change a reusable workflow that many packages call, change one package first, watch the run, then roll the change to the rest. If the workflow lives in another repository, tag releases and pin callers to a tag or SHA, so a bad change does not break every pipeline at once. Document each input in a comment at the top of the file, with an example call, so people do not copy a stale caller.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can a composite action call another action?</summary><p>Yes, it can use other actions and run shell steps. It cannot define its own jobs, runner or permissions, which belong to the calling job.</p></details><details><summary>Do local reusable workflows need a pinned version?</summary><p>A reference with ./ in the same repository uses the code at the same commit as the caller, so no pin is needed. Pin references to other repositories.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it locally</div><h3>Run the same multi-service stack on your laptop that CI tests.</h3><p>Flisk is an open-source (MIT) CLI that runs services, databases, queues and agents locally from one <code>service.json</code> per service. It is a local development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Monorepo CI</span></div>
+<div class="rgrid"><a href="/@odykyi/monorepo-ci/monorepo-ci-slow-find-the-bottleneck/"><span class="lbl">Guide</span><b>Monorepo CI Is Slow: How to Find the Bottleneck</b><span>Measure before you optimise: find your slowest workflows, separate queue time from run time, and fix the biggest cost first, with a script and a public dashboard.</span></a><a href="/@odykyi/monorepo-ci/test-multi-service-monorepo-locally-and-in-ci/"><span class="lbl">Guide</span><b>Test a Multi-Service Monorepo Locally the Way CI Does</b><span>Run the same service stack on a laptop and in CI so integration tests behave the same, using Docker Compose or the Flisk CLI, and keep one command for both.</span></a><a href="/@odykyi/monorepo-ci/monorepo-codeowners-and-review-routing/"><span class="lbl">Guide</span><b>CODEOWNERS in a Monorepo: Route Reviews to the Right Team</b><span>Use a CODEOWNERS file so every directory in a monorepo has owners who are asked to review changes, and learn the pattern rules, the traps and how to enforce it with branch protection.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
