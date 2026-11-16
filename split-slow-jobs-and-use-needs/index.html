@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Split Slow GitHub Actions Jobs and Use needs and Artifacts</title>
+<meta name="description" content="Break one long job into parallel jobs, share build output with artifacts, and order cheap checks first so failures stop the pipeline early.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/faster-github-actions/split-slow-jobs-and-use-needs/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Split Slow GitHub Actions Jobs and Use needs and Artifacts">
+<meta property="og:description" content="Break one long job into parallel jobs, share build output with artifacts, and order cheap checks first so failures stop the pipeline early.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/faster-github-actions/split-slow-jobs-and-use-needs/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Split Slow GitHub Actions Jobs and Use needs and Artifacts","description":"Break one long job into parallel jobs, share build output with artifacts, and order cheap checks first so failures stop the pipeline early.","url":"https://pages.flisk.si/@odykyi/faster-github-actions/split-slow-jobs-and-use-needs/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Faster GitHub Actions","url":"https://pages.flisk.si/@odykyi/faster-github-actions/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do parallel jobs share files?","acceptedAnswer":{"@type":"Answer","text":"No. Each job runs on a fresh machine. Pass files between jobs with artifacts or caches."}},{"@type":"Question","name":"How many jobs can run at once?","acceptedAnswer":{"@type":"Answer","text":"The limit depends on your plan. Check GitHub's documentation for the current concurrency limits."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/faster-github-actions/">Faster GitHub Actions</a></div>
+<section class="hero"><div><div class="lbl">Faster GitHub Actions</div><h1>How to Split Slow GitHub Actions Jobs and Use needs and Artifacts</h1><p class="dek">Break one long job into parallel jobs, share build output with artifacts, and order cheap checks first so failures stop the pipeline early.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#parallel-by-default">Parallel by default</a></li><li><a href="#order-with-needs">Order with needs</a></li><li><a href="#build-once-test-many-times">Build once, test many times</a></li><li><a href="#avoid-over-splitting">Avoid over-splitting</a></li><li><a href="#fail-fast-on-cheap-checks">Fail fast on cheap checks</a></li><li><a href="#reuse-with-workflows">Reuse with workflows</a></li></ol></nav></aside>
+<article><p>Split a slow job when its steps do not depend on each other: lint, unit tests and a type check can run in parallel on separate runners. Use <code>needs</code> to order the ones that do depend on each other, and artifacts to pass files between them.</p>
+
+<h2 id="parallel-by-default">Parallel by default</h2>
+<p>Jobs in one workflow run in parallel unless you add <code>needs</code>. So one 15-minute job with three independent parts can become three 5-minute jobs.</p><pre><code>jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci &amp;&amp; npm run lint
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci &amp;&amp; npx tsc --noEmit
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci &amp;&amp; npm test</code></pre>
+
+<h2 id="order-with-needs">Order with needs</h2>
+<p>Put slow, expensive jobs after cheap ones. If lint fails in 30 seconds, do not start a 20-minute end-to-end job.</p><pre><code>  e2e:
+    needs: [lint, types, unit]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo run slow tests</code></pre><p>The trade-off: <code>needs</code> adds waiting time on green runs. Use it for jobs that are costly or that need the output of another job.</p>
+
+<h2 id="build-once-test-many-times">Build once, test many times</h2>
+<p>If several jobs need the same build output, build once and share it as an artifact.</p><pre><code>  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci &amp;&amp; npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist</code></pre><p>Uploads and downloads take time. If the build is quick, rebuilding in each job can be faster than moving files around.</p>
+
+<h2 id="avoid-over-splitting">Avoid over-splitting</h2>
+<p>Every job pays for startup, checkout and setup, often 30 to 90 seconds. Ten tiny jobs can cost more than one medium job. A rule: split when each part runs longer than a couple of minutes, or when you want separate pass and fail signals. Check the real run in the Actions UI, where each job shows its setup time separately.</p>
+
+<h2 id="fail-fast-on-cheap-checks">Fail fast on cheap checks</h2>
+<p>Order jobs so that the cheapest signal arrives first. A typical chain is lint and type check, then unit tests, then integration tests, then end-to-end tests. Only the first stage needs to be fast to give early feedback. If the earlier stages pass most of the time, <code>needs</code> adds only a small delay. If they fail often, you save a lot of runner time by not starting the later ones. Review the order every few months, since the cost of each stage changes as the code grows.</p>
+
+<h2 id="reuse-with-workflows">Reuse with workflows</h2>
+<p>When several jobs repeat the same setup, move it into a reusable workflow or a composite action so you maintain it once. Then watch the numbers over time with the steps in <a href="/@odykyi/faster-github-actions/measure-github-actions-speedups/">measuring speedups</a>. For multiple repositories, see <a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do parallel jobs share files?</summary><p>No. Each job runs on a fresh machine. Pass files between jobs with artifacts or caches.</p></details><details><summary>How many jobs can run at once?</summary><p>The limit depends on your plan. Check GitHub&#39;s documentation for the current concurrency limits.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Measure before you tune</div><h3>See which workflows are slow before you change anything.</h3><p>Cilytics is a public CI health dashboard for GitHub. It shows median and p90 run time per workflow, for an org or any public repo. It reads default-branch runs only, from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Faster GitHub Actions</span></div>
+<div class="rgrid"><a href="/@odykyi/faster-github-actions/measure-github-actions-speedups/"><span class="lbl">Guide</span><b>How to Measure Whether Your GitHub Actions Got Faster</b><span>Compare median and p90 run time before and after a change with gh and a short script, avoid noisy comparisons, and check queue time separately from run time.</span></a><a href="/@odykyi/faster-github-actions/speed-up-github-actions-workflows/"><span class="lbl">Guide</span><b>How to Speed Up GitHub Actions Workflows: A Checklist</b><span>Measure first, then apply the changes that usually pay off: caching, cancelling stale runs, path filters, parallel jobs and shallow checkouts. In priority order.</span></a><a href="/@odykyi/faster-github-actions/cache-dependencies-in-github-actions/"><span class="lbl">Guide</span><b>How to Cache Dependencies in GitHub Actions (npm, pip, Go)</b><span>Use setup actions&#39; built-in cache or actions/cache with a lockfile hash key. Includes restore keys, cache size limits to watch and when caching makes things worse.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

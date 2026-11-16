@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Cache Dependencies in GitHub Actions (npm, pip, Go)</title>
+<meta name="description" content="Use setup actions&#39; built-in cache or actions/cache with a lockfile hash key. Includes restore keys, cache size limits to watch and when caching makes things worse.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/faster-github-actions/cache-dependencies-in-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Cache Dependencies in GitHub Actions (npm, pip, Go)">
+<meta property="og:description" content="Use setup actions&#39; built-in cache or actions/cache with a lockfile hash key. Includes restore keys, cache size limits to watch and when caching makes things worse.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/faster-github-actions/cache-dependencies-in-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Cache Dependencies in GitHub Actions (npm, pip, Go)","description":"Use setup actions' built-in cache or actions/cache with a lockfile hash key. Includes restore keys, cache size limits to watch and when caching makes things worse.","url":"https://pages.flisk.si/@odykyi/faster-github-actions/cache-dependencies-in-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Faster GitHub Actions","url":"https://pages.flisk.si/@odykyi/faster-github-actions/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Why is my cache never hit?","acceptedAnswer":{"@type":"Answer","text":"Usually the key changes every run, for example because it includes a timestamp or the run id. Build the key from the lockfile hash only."}},{"@type":"Question","name":"Is a cache shared between pull requests?","acceptedAnswer":{"@type":"Answer","text":"A pull request can restore caches from its base branch, but caches saved by one pull request are not available to other pull requests."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/faster-github-actions/">Faster GitHub Actions</a></div>
+<section class="hero"><div><div class="lbl">Faster GitHub Actions</div><h1>How to Cache Dependencies in GitHub Actions (npm, pip, Go)</h1><p class="dek">Use setup actions&#39; built-in cache or actions/cache with a lockfile hash key. Includes restore keys, cache size limits to watch and when caching makes things worse.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#built-in-caching-in-setup-actions">Built-in caching in setup actions</a></li><li><a href="#manual-caching-with-actions-cache">Manual caching with actions/cache</a></li><li><a href="#cache-the-download-not-the-install">Cache the download, not the install</a></li><li><a href="#limits-and-gotchas">Limits and gotchas</a></li><li><a href="#check-that-the-cache-works">Check that the cache works</a></li><li><a href="#when-caching-does-not-help">When caching does not help</a></li></ol></nav></aside>
+<article><p>The simplest way to cache dependencies is to turn on the cache option of the setup action you already use. For anything else, use <code>actions/cache</code> with a key built from the hash of your lockfile, so the cache refreshes only when dependencies change.</p>
+
+<h2 id="built-in-caching-in-setup-actions">Built-in caching in setup actions</h2>
+<p>Setup actions for Node, Python and Go can manage the cache for you.</p><pre><code>- uses: actions/setup-node@v4
+  with:
+    node-version: 20
+    cache: npm
+- run: npm ci
+
+- uses: actions/setup-python@v5
+  with:
+    python-version: '3.12'
+    cache: pip
+- run: pip install -r requirements.txt
+
+- uses: actions/setup-go@v5
+  with:
+    go-version: stable</code></pre><p>The key comes from the lockfile, such as <code>package-lock.json</code> or <code>requirements.txt</code>. Recent setup-go versions cache modules by default. Check the action's README for the current behavior.</p>
+
+<h2 id="manual-caching-with-actions-cache">Manual caching with actions/cache</h2>
+<pre><code>- uses: actions/cache@v4
+  with:
+    path: ~/.cache/pip
+    key: pip-${{ runner.os }}-${{ hashFiles('**/requirements.txt') }}
+    restore-keys: |
+      pip-${{ runner.os }}-</code></pre><p>The <code>key</code> is an exact match. If no exact match exists, GitHub tries <code>restore-keys</code> prefixes and restores the newest cache that matches. That gives you a warm start even after a dependency bump, and the new cache is saved at the end.</p>
+
+<h2 id="cache-the-download-not-the-install">Cache the download, not the install</h2>
+<p>Cache the package manager's download cache, such as <code>~/.npm</code> or <code>~/.cache/pip</code>, rather than <code>node_modules</code>. Then run <code>npm ci</code> as usual. It is safer, since a restored <code>node_modules</code> can be stale or built for another Node version, and <code>npm ci</code> deletes it anyway.</p>
+
+<h2 id="limits-and-gotchas">Limits and gotchas</h2>
+<ul><li>Caches are scoped to branches. A pull request can read the default branch cache, but not the other way around.</li><li>GitHub keeps a limited amount of cache per repo and removes the least recently used entries. Check the docs for the current limit.</li><li>Do not cache secrets or anything you would not want another job in the repo to read.</li><li>Include <code>runner.os</code> in the key. Native modules differ between operating systems.</li></ul>
+
+<h2 id="check-that-the-cache-works">Check that the cache works</h2>
+<p>Open a run and look at the cache step. A hit prints a line like <code>Cache restored from key</code> and a miss prints that no cache was found. Run the workflow twice on the same lockfile. The second run should hit. If it does not, print the computed key and compare it between runs. Common causes are a path that differs per runner, a key with a changing value, or a lockfile that is generated during the run. Fix the key first, then compare step durations to confirm the install step got shorter.</p>
+
+<h2 id="when-caching-does-not-help">When caching does not help</h2>
+<p>Restoring and saving a cache takes time too. If your install takes 10 seconds and the cache is 800 MB, you may lose time. Compare the step times before and after. Heavy gains come from compiled languages and large dependency trees. For container builds, see <a href="/@odykyi/faster-github-actions/docker-build-cache-in-github-actions/">Docker build caching</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Why is my cache never hit?</summary><p>Usually the key changes every run, for example because it includes a timestamp or the run id. Build the key from the lockfile hash only.</p></details><details><summary>Is a cache shared between pull requests?</summary><p>A pull request can restore caches from its base branch, but caches saved by one pull request are not available to other pull requests.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Measure before you tune</div><h3>See which workflows are slow before you change anything.</h3><p>Cilytics is a public CI health dashboard for GitHub. It shows median and p90 run time per workflow, for an org or any public repo. It reads default-branch runs only, from an hourly snapshot.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk CLI on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Faster GitHub Actions</span></div>
+<div class="rgrid"><a href="/@odykyi/faster-github-actions/cancel-in-progress-runs-with-concurrency/"><span class="lbl">Guide</span><b>Cancel Old GitHub Actions Runs with Concurrency Groups</b><span>Stop wasting runner minutes on superseded pushes. Use a concurrency group with cancel-in-progress, and know when you must not cancel, like deploys and release jobs.</span></a><a href="/@odykyi/faster-github-actions/skip-workflows-with-path-filters/"><span class="lbl">Guide</span><b>GitHub Actions Path Filters: Skip Workflows When Files Did Not Change</b><span>Use paths and paths-ignore to avoid running tests on docs-only changes, and avoid the required-checks trap that leaves pull requests waiting forever.</span></a><a href="/@odykyi/faster-github-actions/matrix-builds-and-test-sharding/"><span class="lbl">Guide</span><b>GitHub Actions Matrix Builds and Test Sharding Explained</b><span>Run versions and operating systems in parallel with a matrix, split one slow test suite across jobs with shards, and avoid paying setup cost many times over.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
