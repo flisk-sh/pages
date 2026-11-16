@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Write a GitHub README That Gets Used</title>
+<meta name="description" content="The sections a README needs, in order, with a template you can copy, plus how to check yours against a score so you know what is still missing.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/open-source-repo-health/how-to-write-a-good-github-readme/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Write a GitHub README That Gets Used">
+<meta property="og:description" content="The sections a README needs, in order, with a template you can copy, plus how to check yours against a score so you know what is still missing.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/open-source-repo-health/how-to-write-a-good-github-readme/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Write a GitHub README That Gets Used","description":"The sections a README needs, in order, with a template you can copy, plus how to check yours against a score so you know what is still missing.","url":"https://pages.flisk.si/@odykyi/open-source-repo-health/how-to-write-a-good-github-readme/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Open-Source Repo Health","url":"https://pages.flisk.si/@odykyi/open-source-repo-health/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long should a README be?","acceptedAnswer":{"@type":"Answer","text":"Long enough to get a stranger from zero to a working example, and no longer. Most good READMEs fit a few screens, with detail linked to separate docs."}},{"@type":"Question","name":"Should the README include a table of contents?","acceptedAnswer":{"@type":"Answer","text":"For long READMEs, yes. GitHub also generates an outline from the headings, so a manual table is only needed when you want it visible on other sites."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/open-source-repo-health/">Open-Source Repo Health</a></div>
+<section class="hero"><div><div class="lbl">Open-Source Repo Health</div><h1>How to Write a GitHub README That Gets Used</h1><p class="dek">The sections a README needs, in order, with a template you can copy, plus how to check yours against a score so you know what is still missing.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-order-that-works">The order that works</a></li><li><a href="#a-starter-template">A starter template</a></li><li><a href="#check-it-with-a-score">Check it with a score</a></li><li><a href="#keep-it-honest-and-current">Keep it honest and current</a></li><li><a href="#maintenance-habit">Maintenance habit</a></li></ol></nav></aside>
+<article><p>A good README answers four questions in the first screen: what is this, why would I use it, how do I run it, and where do I get help. Put a working install command and a tiny example near the top, and move everything else below it.</p>
+
+<h2 id="the-order-that-works">The order that works</h2>
+<ol><li>Name and a one-sentence description that says what it does.</li><li>A short 'why' with who it is for and when not to use it.</li><li>Install or quick start with copy-paste commands.</li><li>A minimal usage example with its output.</li><li>Configuration or links to full docs.</li><li>How to contribute and how to report problems.</li><li>License.</li></ol><p>Readers decide in seconds. A screenshot or a short code sample next to the install line does more than three paragraphs of motivation.</p>
+
+<h2 id="a-starter-template">A starter template</h2>
+<pre><code># project-name
+
+One sentence: what it does and for whom.
+
+## Quick start
+
+    npm install project-name
+    npx project-name init
+
+## Example
+
+    import { run } from 'project-name'
+    console.log(run('hello'))   // prints: HELLO
+
+## Docs
+
+Full guide: https://example.com/docs
+
+## Contributing
+
+See CONTRIBUTING.md.
+
+## License
+
+MIT</code></pre><p>Test every command in a clean directory or container before you publish it. Broken quick starts are the top reason people give up.</p>
+
+<h2 id="check-it-with-a-score">Check it with a score</h2>
+<p>It is easy to forget a section. <a href='https://readme.flisk.si'>README Score</a> gives a GitHub README a score out of 100, lists the sections it found and the ones missing, and gives a fix for each. The same README always gets the same score, because it is rule-based and uses no AI. It also has an MCP server at <code>https://readme.flisk.si/mcp</code> if you want a coding agent to run it. Treat the score as a checklist, not as a measure of how good your writing is.</p>
+
+<h2 id="keep-it-honest-and-current">Keep it honest and current</h2>
+<ul><li>State what the project cannot do. Honest limits build trust and cut support questions.</li><li>Pin versions in examples or say which version you tested.</li><li>Use relative links for files in the repo, so they work on forks.</li><li>Keep badges to a few that show real state, such as CI status and the latest release.</li><li>Put long reference material in a docs folder and link to it.</li></ul>
+
+<h2 id="maintenance-habit">Maintenance habit</h2>
+<p>When you change a command, option or default, change the README in the same pull request. Add a line to your pull request template asking whether docs changed. Run the quick start from scratch before each release. See the wider <a href='/@odykyi/open-source-repo-health-checklist/'>repo health checklist</a> for what else belongs around the README. If agents will read your repo too, a short <code>AGENTS.md</code> beside the README helps, which is covered in <a href='/@odykyi/repo-ready-for-coding-agents/'>making your repo ready for coding agents</a>.</p><p>Ask someone who has never seen the project to follow your quick start while you watch, without helping. Every question they ask is a missing line in the README. Fix those lines, then repeat with another person. This is the cheapest test of documentation there is, and it finds problems that no checklist or score can see, such as a step that only works on your machine.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long should a README be?</summary><p>Long enough to get a stranger from zero to a working example, and no longer. Most good READMEs fit a few screens, with detail linked to separate docs.</p></details><details><summary>Should the README include a table of contents?</summary><p>For long READMEs, yes. GitHub also generates an outline from the headings, so a manual table is only needed when you want it visible on other sites.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your repo</div><h3>Score your README and see your repo&#39;s CI health in a minute.</h3><p>README Score gives a GitHub README a score out of 100 with the sections found and missing, and Cilytics shows the CI health of any public repo with no account.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://readme.flisk.si">Score a README</a><a class="btn" href="https://cilytics.flisk.si">Open Cilytics</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Open-Source Repo Health</span></div>
+<div class="rgrid"><a href="/@odykyi/open-source-repo-health/contributing-md-and-code-of-conduct/"><span class="lbl">Guide</span><b>CONTRIBUTING.md and Code of Conduct: What to Write</b><span>What a contributing guide must contain, how to set expectations for review time, when a code of conduct is worth adding and how DCO sign-off works.</span></a><a href="/@odykyi/open-source-repo-health/security-policy-and-vulnerability-reporting/"><span class="lbl">Guide</span><b>How to Add a SECURITY.md and Private Vulnerability Reporting</b><span>Tell researchers how to report a vulnerability privately, what you will do in return, and turn on GitHub&#39;s private reporting so reports do not land in public issues.</span></a><a href="/@odykyi/open-source-repo-health/issue-and-pull-request-templates/"><span class="lbl">Guide</span><b>GitHub Issue and Pull Request Templates That Work</b><span>Write templates that get reproducible bug reports and reviewable pull requests, including YAML issue forms, a config file and a short pull request checklist.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

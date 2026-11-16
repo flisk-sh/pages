@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CONTRIBUTING.md and Code of Conduct: What to Write</title>
+<meta name="description" content="What a contributing guide must contain, how to set expectations for review time, when a code of conduct is worth adding and how DCO sign-off works.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/open-source-repo-health/contributing-md-and-code-of-conduct/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CONTRIBUTING.md and Code of Conduct: What to Write">
+<meta property="og:description" content="What a contributing guide must contain, how to set expectations for review time, when a code of conduct is worth adding and how DCO sign-off works.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/open-source-repo-health/contributing-md-and-code-of-conduct/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"CONTRIBUTING.md and Code of Conduct: What to Write","description":"What a contributing guide must contain, how to set expectations for review time, when a code of conduct is worth adding and how DCO sign-off works.","url":"https://pages.flisk.si/@odykyi/open-source-repo-health/contributing-md-and-code-of-conduct/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Open-Source Repo Health","url":"https://pages.flisk.si/@odykyi/open-source-repo-health/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Do I need a code of conduct for a small project?","acceptedAnswer":{"@type":"Answer","text":"Not strictly. Add one when you start accepting outside contributions or building a community, because it gives you a basis for acting when someone behaves badly."}},{"@type":"Question","name":"Is DCO or CLA better?","acceptedAnswer":{"@type":"Answer","text":"DCO is lighter and needs only a sign-off line. A CLA is a signed agreement and can allow relicensing. Most small open-source projects choose DCO."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/open-source-repo-health/">Open-Source Repo Health</a></div>
+<section class="hero"><div><div class="lbl">Open-Source Repo Health</div><h1>CONTRIBUTING.md and Code of Conduct: What to Write</h1><p class="dek">What a contributing guide must contain, how to set expectations for review time, when a code of conduct is worth adding and how DCO sign-off works.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-goes-in-contributing-md">What goes in CONTRIBUTING.md</a></li><li><a href="#a-short-example">A short example</a></li><li><a href="#dco-sign-off">DCO sign-off</a></li><li><a href="#code-of-conduct">Code of conduct</a></li><li><a href="#reduce-the-load-on-yourself">Reduce the load on yourself</a></li></ol></nav></aside>
+<article><p>A <code>CONTRIBUTING.md</code> should tell a newcomer how to set up the project, run the tests, follow your style, and submit a pull request, in under a page if possible. Add a <code>CODE_OF_CONDUCT.md</code> when you invite outside contributors, so people know how disagreements are handled.</p>
+
+<h2 id="what-goes-in-contributing-md">What goes in CONTRIBUTING.md</h2>
+<ul><li><strong>Setup:</strong> the exact commands to clone, install and run.</li><li><strong>Tests:</strong> the one command that must pass before a pull request.</li><li><strong>Style:</strong> the linter or formatter, and how to run it.</li><li><strong>Workflow:</strong> branch naming, commit message format, one change per pull request.</li><li><strong>Review:</strong> who reviews, and a realistic time to expect an answer.</li><li><strong>Big changes:</strong> ask people to open an issue first, so no one wastes a weekend on a change you will decline.</li></ul><p>GitHub links to this file when someone opens an issue or pull request, so it is read at the right moment.</p>
+
+<h2 id="a-short-example">A short example</h2>
+<pre><code># Contributing
+
+## Setup
+    git clone https://github.com/owner/repo
+    cd repo &amp;&amp; npm ci
+
+## Before you open a pull request
+    npm run lint &amp;&amp; npm test
+
+## Pull requests
+- One change per pull request.
+- Add or update a test for behaviour changes.
+- Sign off your commits: git commit -s
+
+We aim to review within a week. Large changes: open an issue first.</code></pre><p>Make the claims real. If you write 'within a week' and take a month, say 'best effort' instead.</p>
+
+<h2 id="dco-sign-off">DCO sign-off</h2>
+<p>The Developer Certificate of Origin is a lightweight way for contributors to state they have the right to submit their work. It uses a <code>Signed-off-by</code> line in each commit, added by <code>git commit -s</code>. It is lighter than a contributor license agreement, which requires signing a document. You can check sign-offs in CI so missing ones fail early. Pair this with your <a href='/@odykyi/how-to-choose-an-open-source-license/'>license choice</a>.</p>
+
+<h2 id="code-of-conduct">Code of conduct</h2>
+<p>A code of conduct states what behaviour is expected and where to report problems. The Contributor Covenant is a widely used ready-made text, and you can adopt it as is. The part that matters is the contact: name a real address or a private channel that someone actually reads, and say what happens after a report. A code with no working contact is decoration. For a solo project with no outside contributors yet, you can add it when the first contributors arrive.</p>
+
+<h2 id="reduce-the-load-on-yourself">Reduce the load on yourself</h2>
+<p>Most reviewer time is spent on avoidable things: failing CI, missing tests, unclear titles. Put them in the guide, and let automation say no for you. Use a pull request template and checks, see <a href='/@odykyi/issue-and-pull-request-templates/'>issue and pull request templates</a>. When contributors are a mix of humans and coding agents, the same rules help both, and CI is the fair referee. In an organisation, a shared <code>.github</code> repository can hold default community files for every repo.</p><p>Link both files from the README and the pull request template so they are found. Review them once a year, and after any incident, to see whether the instructions still match how the project runs. Dead commands in a contributing guide are as bad as dead commands in a README, because they are the first thing a new contributor tries and the first thing that fails.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Do I need a code of conduct for a small project?</summary><p>Not strictly. Add one when you start accepting outside contributions or building a community, because it gives you a basis for acting when someone behaves badly.</p></details><details><summary>Is DCO or CLA better?</summary><p>DCO is lighter and needs only a sign-off line. A CLA is a signed agreement and can allow relicensing. Most small open-source projects choose DCO.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your repo</div><h3>Score your README and see your repo&#39;s CI health in a minute.</h3><p>README Score gives a GitHub README a score out of 100 with the sections found and missing, and Cilytics shows the CI health of any public repo with no account.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://readme.flisk.si">Score a README</a><a class="btn" href="https://cilytics.flisk.si">Open Cilytics</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Open-Source Repo Health</span></div>
+<div class="rgrid"><a href="/@odykyi/open-source-repo-health/security-policy-and-vulnerability-reporting/"><span class="lbl">Guide</span><b>How to Add a SECURITY.md and Private Vulnerability Reporting</b><span>Tell researchers how to report a vulnerability privately, what you will do in return, and turn on GitHub&#39;s private reporting so reports do not land in public issues.</span></a><a href="/@odykyi/open-source-repo-health/issue-and-pull-request-templates/"><span class="lbl">Guide</span><b>GitHub Issue and Pull Request Templates That Work</b><span>Write templates that get reproducible bug reports and reviewable pull requests, including YAML issue forms, a config file and a short pull request checklist.</span></a><a href="/@odykyi/open-source-repo-health/branch-protection-and-rulesets/"><span class="lbl">Guide</span><b>Branch Protection and Rulesets for the Default Branch</b><span>Which rules to set on main: required checks, reviews, no force pushes, and how rulesets differ from classic branch protection. Includes the traps with required status checks.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
