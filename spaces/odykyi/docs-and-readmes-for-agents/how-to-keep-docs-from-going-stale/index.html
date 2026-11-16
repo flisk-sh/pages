@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to keep README and docs from going stale: test them in CI</title>
+<meta name="description" content="Stale docs mislead people and agents. Use CI to run the commands in your docs, check links and fail the build when a documented step no longer works.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-keep-docs-from-going-stale/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to keep README and docs from going stale: test them in CI">
+<meta property="og:description" content="Stale docs mislead people and agents. Use CI to run the commands in your docs, check links and fail the build when a documented step no longer works.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-keep-docs-from-going-stale/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to keep README and docs from going stale: test them in CI","description":"Stale docs mislead people and agents. Use CI to run the commands in your docs, check links and fail the build when a documented step no longer works.","url":"https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/how-to-keep-docs-from-going-stale/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Docs and READMEs for humans and agents","url":"https://pages.flisk.si/@odykyi/docs-and-readmes-for-agents/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can an AI update my docs automatically?","acceptedAnswer":{"@type":"Answer","text":"It can draft changes, but have CI run the commands and a person review the result. A model can write a confident, wrong command."}},{"@type":"Question","name":"How often should link checks run?","acceptedAnswer":{"@type":"Answer","text":"On every pull request that touches docs, plus a weekly scheduled run to catch external links that died."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/docs-and-readmes-for-agents/">Docs and READMEs for humans and agents</a></div>
+<section class="hero"><div><div class="lbl">Docs and READMEs for humans and agents</div><h1>How to keep README and docs from going stale: test them in CI</h1><p class="dek">Stale docs mislead people and agents. Use CI to run the commands in your docs, check links and fail the build when a documented step no longer works.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-docs-go-stale">Why docs go stale</a></li><li><a href="#run-the-quick-start-in-ci">Run the quick start in CI</a></li><li><a href="#check-links">Check links</a></li><li><a href="#check-that-documented-paths-and-scripts-exist">Check that documented paths and scripts exist</a></li><li><a href="#test-code-samples-not-just-commands">Test code samples, not just commands</a></li><li><a href="#make-staleness-a-review-item">Make staleness a review item</a></li></ol></nav></aside>
+<article><p>Treat commands and links in your docs as code and test them in CI. A docs page whose commands are run on every pull request cannot silently rot, and that matters more now that agents run what the docs say without questioning it.</p>
+
+<h2 id="why-docs-go-stale">Why docs go stale</h2>
+<p>Code changes in a pull request and the docs do not. Nobody notices until a new user or an agent follows a command that no longer exists. The fix is not discipline but a check that fails.</p>
+
+<h2 id="run-the-quick-start-in-ci">Run the quick start in CI</h2>
+<p>Put the quick start steps in a script and run that script in CI. If the README says three commands, the job runs those three commands.</p><pre><code>name: docs
+on: [pull_request]
+jobs:
+  quickstart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: bash scripts/quickstart.sh</code></pre><p>To avoid keeping the script and the README apart, extract the code block from the README in the script, or have the README link to the script. One source is the goal.</p>
+
+<h2 id="check-links">Check links</h2>
+<p>Broken links are the cheapest staleness to find. A link checker such as lychee runs fine in CI. Check its own docs for current flags.</p><pre><code>lychee --no-progress README.md docs/</code></pre><p>Run it on pull requests that touch docs and on a weekly schedule, because external pages die even when you change nothing.</p>
+
+<h2 id="check-that-documented-paths-and-scripts-exist">Check that documented paths and scripts exist</h2>
+<p>A small script can catch most drift. Search the docs for npm script names and file paths, and verify each exists.</p><pre><code>grep -o 'npm run [a-z:-]*' README.md AGENTS.md | sort -u |
+while read -r _ _ name; do
+  grep -q "\"$name\"" package.json || echo "missing script: $name"
+done</code></pre><p>It is crude, but it catches a renamed script in seconds. Make the job exit non-zero when it prints anything.</p>
+
+<h2 id="test-code-samples-not-just-commands">Test code samples, not just commands</h2>
+<p>Code samples in docs rot faster than shell commands, because a changed function signature breaks them without any visible failure. Keep samples as real files in an examples folder, run them in CI, and include them in the docs from there. If a sample must live inline, extract fenced blocks with a small script and run them.</p><pre><code>node examples/basic.js
+python examples/basic.py</code></pre><p>Pin the versions your samples use in the example itself. A sample that says "latest" is a sample that will break on a day you did not choose.</p>
+
+<h2 id="make-staleness-a-review-item">Make staleness a review item</h2>
+<ul><li>Add a pull request checklist line: "Docs updated if behaviour changed".</li><li>Put the rule in AGENTS.md so agents update the docs with the code.</li><li>Fail CI if the README score or required sections regress, using a fixed checker such as <a href="https://readme.flisk.si">README Score</a>.</li></ul><p>For the idea behind deterministic gates, see <a href="/@odykyi/ci-guards-and-ai-code-review/">CI guards and AI code review</a>. For the instruction file itself, see <a href="/@odykyi/docs-and-readmes-for-agents/what-is-agents-md-and-how-to-write-one/">What is AGENTS.md</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can an AI update my docs automatically?</summary><p>It can draft changes, but have CI run the commands and a person review the result. A model can write a confident, wrong command.</p></details><details><summary>How often should link checks run?</summary><p>On every pull request that touches docs, plus a weekly scheduled run to catch external links that died.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Check your README</div><h3>Find out which sections your README is missing.</h3><p>README Score gives a GitHub README a score out of 100 with the sections found and missing. It uses fixed rules and no AI, so the same README gets the same score. Free to try.</p><pre><code>npx -y @flisk-sh/pages publish README.md --wait</code></pre></div><div class="btns"><a class="btn primary" href="https://readme.flisk.si">Score a README</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Docs and READMEs for humans and agents</span></div>
+<div class="rgrid"><a href="/@odykyi/docs-and-readmes-for-agents/how-to-write-docs-for-an-mcp-server/"><span class="lbl">Guide</span><b>How to write docs for an MCP server</b><span>Document an MCP server for two readers: the developer who installs it and the model that picks its tools. Covers install, config, tool descriptions and auth.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/how-to-publish-docs-as-markdown-and-share-a-link/"><span class="lbl">Guide</span><b>How to publish docs as Markdown and share a link</b><span>Markdown is the format both people and agents read best. Learn how to serve docs as .md next to HTML, share a quick page for review and check what you publish.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/how-to-write-a-readme-that-coding-agents-can-use/"><span class="lbl">Guide</span><b>How to write a README that coding agents can use</b><span>A README that works for people and for coding agents: what to put first, which commands to list, and which habits make an agent guess wrong.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
