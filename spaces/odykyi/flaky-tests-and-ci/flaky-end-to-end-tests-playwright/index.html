@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Stabilize Flaky End-to-End Tests With Playwright</title>
+<meta name="description" content="Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-end-to-end-tests-playwright/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Stabilize Flaky End-to-End Tests With Playwright">
+<meta property="og:description" content="Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-end-to-end-tests-playwright/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Stabilize Flaky End-to-End Tests With Playwright","description":"Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-end-to-end-tests-playwright/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many retries should end-to-end tests have?","acceptedAnswer":{"@type":"Answer","text":"One or two on CI, none locally. Use the retry report to find and fix the tests that need it."}},{"@type":"Question","name":"Should I run browser tests against production?","acceptedAnswer":{"@type":"Answer","text":"Avoid it for blocking checks. A local or preview environment with controlled data fails less for reasons you do not own."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>How to Stabilize Flaky End-to-End Tests With Playwright</h1><p class="dek">Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#use-web-first-assertions">Use web-first assertions</a></li><li><a href="#wait-for-the-network-not-the-clock">Wait for the network, not the clock</a></li><li><a href="#control-the-data">Control the data</a></li><li><a href="#get-a-trace-from-ci">Get a trace from CI</a></li><li><a href="#parallel-workers-and-shared-accounts">Parallel workers and shared accounts</a></li><li><a href="#measure-the-fix-and-know-the-limit">Measure the fix and know the limit</a></li></ol></nav></aside>
+<article><p>Stabilize a flaky Playwright test by using locators that wait for the element, asserting on visible outcomes instead of timing, resetting data before each test, and collecting a trace on the first retry so you can see what happened.</p>
+
+<h2 id="use-web-first-assertions">Use web-first assertions</h2>
+<p>Playwright assertions on locators retry until they pass or time out. Reading a value once does not.</p><pre><code>// flaky: reads the text once
+const text = await page.locator('#status').textContent();
+expect(text).toBe('Saved');
+
+// stable: retries until true
+await expect(page.locator('#status')).toHaveText('Saved');</code></pre><p>Avoid <code>page.waitForTimeout</code> except for debugging. Prefer locators by role or label, such as <code>getByRole('button', { name: 'Save' })</code>, over brittle CSS paths.</p>
+
+<h2 id="wait-for-the-network-not-the-clock">Wait for the network, not the clock</h2>
+<p>If a click triggers a request, wait for that response in the same step.</p><pre><code>const [res] = await Promise.all([
+  page.waitForResponse(r =&gt; r.url().includes('/api/save') &amp;&amp; r.ok()),
+  page.getByRole('button', { name: 'Save' }).click(),
+]);</code></pre><p>Start the wait before the click, as above, so you cannot miss a fast response.</p>
+
+<h2 id="control-the-data">Control the data</h2>
+<p>Most browser flakes are data flakes: a record another test changed, a seed that did not finish. Create the data the test needs through the API in a setup step and use a unique name per test. Do not rely on rows left by earlier tests. Mock third-party calls you do not own, using <code>page.route</code>, so a slow payment sandbox cannot fail your build.</p>
+
+<h2 id="get-a-trace-from-ci">Get a trace from CI</h2>
+<p>Set a trace to record when a test is retried. The trace shows each action, the DOM and the network.</p><pre><code>// playwright.config.ts
+export default {
+  retries: process.env.CI ? 1 : 0,
+  use: { trace: 'on-first-retry' },
+};</code></pre><pre><code>npx playwright show-trace trace.zip</code></pre><p>Upload the <code>test-results</code> folder as an artifact with <code>if: always()</code>.</p>
+
+<h2 id="parallel-workers-and-shared-accounts">Parallel workers and shared accounts</h2>
+<p>Playwright runs test files in parallel by default. If every test logs in as the same user and edits the same record, tests collide. Give each worker its own account, or create a fresh user in a fixture. If a test truly needs exclusive access to a shared resource, mark that file to run serially and keep such files few. Also check that the app under test is warm before the run starts, for example by polling its health endpoint in a setup step, so the first test does not fail on a cold start.</p>
+
+<h2 id="measure-the-fix-and-know-the-limit">Measure the fix and know the limit</h2>
+<p>Prove it: <code>npx playwright test login.spec.ts --repeat-each=30</code>. Also run with fewer CPUs and one worker. End-to-end tests are the slowest, most fragile layer. If a flow can be checked at the API or unit level, move it down, as covered in <a href="/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/">reproducing flakes locally</a>, and keep only a few browser tests for the critical journeys.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many retries should end-to-end tests have?</summary><p>One or two on CI, none locally. Use the retry report to find and fix the tests that need it.</p></details><details><summary>Should I run browser tests against production?</summary><p>Avoid it for blocking checks. A local or preview environment with controlled data fails less for reasons you do not own.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/flaky-workflows-vs-flaky-tests/"><span class="lbl">Guide</span><b>Flaky Workflows vs Flaky Tests: How to Tell Them Apart</b><span>Some CI failures are not test bugs but runner, network, cache or dependency problems. Learn how to classify a failure and what to fix in each case.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-test-policy-for-teams/"><span class="lbl">Guide</span><b>A Flaky Test Policy for Teams: Owners, Budgets and Deadlines</b><span>A simple written policy that keeps flaky tests from piling up: who owns them, how many you tolerate, how long they live and when to delete.</span></a><a href="/@odykyi/flaky-tests-and-ci/what-is-a-flaky-test/"><span class="lbl">Guide</span><b>What Is a Flaky Test and Why Does It Fail Randomly?</b><span>A flaky test passes and fails on the same code. Learn the five usual causes, how to tell flaky from broken, and why ignoring them costs more than fixing them.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
