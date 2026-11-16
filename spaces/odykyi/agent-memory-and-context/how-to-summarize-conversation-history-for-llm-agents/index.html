@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to summarize conversation history for an LLM agent</title>
+<meta name="description" content="Rolling summaries keep long sessions cheap, but they lose detail if done carelessly. A prompt, a data structure and the rules that keep exact facts safe.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/agent-memory-and-context/how-to-summarize-conversation-history-for-llm-agents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to summarize conversation history for an LLM agent">
+<meta property="og:description" content="Rolling summaries keep long sessions cheap, but they lose detail if done carelessly. A prompt, a data structure and the rules that keep exact facts safe.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/agent-memory-and-context/how-to-summarize-conversation-history-for-llm-agents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to summarize conversation history for an LLM agent","description":"Rolling summaries keep long sessions cheap, but they lose detail if done carelessly. A prompt, a data structure and the rules that keep exact facts safe.","url":"https://pages.flisk.si/@odykyi/agent-memory-and-context/how-to-summarize-conversation-history-for-llm-agents/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Agent memory and context engineering","url":"https://pages.flisk.si/@odykyi/agent-memory-and-context/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Which model should write the summaries?","acceptedAnswer":{"@type":"Answer","text":"A smaller, cheaper model is often enough for compaction, but test it on your own sessions. If key facts go missing, use the same model as the agent."}},{"@type":"Question","name":"How often should I summarize?","acceptedAnswer":{"@type":"Answer","text":"Only when history passes a token threshold. Summarizing every turn costs extra calls and compounds information loss."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/agent-memory-and-context/">Agent memory and context engineering</a></div>
+<section class="hero"><div><div class="lbl">Agent memory and context engineering</div><h1>How to summarize conversation history for an LLM agent</h1><p class="dek">Rolling summaries keep long sessions cheap, but they lose detail if done carelessly. A prompt, a data structure and the rules that keep exact facts safe.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>6 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-shape-of-the-history">The shape of the history</a></li><li><a href="#a-summarization-prompt-that-works">A summarization prompt that works</a></li><li><a href="#the-loop">The loop</a></li><li><a href="#what-to-check">What to check</a></li><li><a href="#when-not-to-summarize">When not to summarize</a></li><li><a href="#a-small-test-you-can-run-today">A small test you can run today</a></li></ol></nav></aside>
+<article><p>Keep the last few turns verbatim, replace older turns with a short summary, and store exact values (IDs, paths, decisions) in a separate list that is never summarized. Run the compaction when history crosses a token threshold, not on every turn.</p>
+
+<h2 id="the-shape-of-the-history">The shape of the history</h2>
+<p>Split history into three parts that you rebuild on each call:</p><ol><li>A <strong>pinned facts</strong> list: exact, structured, small.</li><li>A <strong>rolling summary</strong>: prose about what happened so far.</li><li>The <strong>recent turns</strong>: the last N messages as they were.</li></ol><p>Only the summary is lossy. The other two stay exact.</p>
+
+<h2 id="a-summarization-prompt-that-works">A summarization prompt that works</h2>
+<pre><code>You compress an agent session. Input: the previous summary and new turns.
+Output JSON with two keys:
+"summary": under 200 words. What the user wants, what was done, what is in progress.
+"facts": list of exact strings to keep verbatim (IDs, file paths, URLs,
+         numbers, decisions, user corrections, error messages).
+Do not invent. If unsure whether something matters, put it in "facts".</code></pre><p>Asking for JSON lets you store the two parts separately. See <a href="/@odykyi/structured-outputs-and-prompts/">prompts and structured outputs</a> for getting that output reliably.</p>
+
+<h2 id="the-loop">The loop</h2>
+<pre><code>def maybe_compact(state, count_tokens, limit=8000, keep=6):
+    if count_tokens(state.messages) &lt; limit:
+        return state
+    old, recent = state.messages[:-keep], state.messages[-keep:]
+    out = llm_json(SUMMARY_PROMPT, prev=state.summary, turns=old)
+    state.summary = out["summary"]
+    state.facts = dedupe(state.facts + out["facts"])
+    state.messages = recent
+    return state</code></pre><p>Never cut in the middle of a tool call and its result. Keep each pair together or the model sees a result with no question.</p>
+
+<h2 id="what-to-check">What to check</h2>
+<ul><li>Compare answers before and after compaction on a few saved sessions. If a question that worked now fails, a fact was lost.</li><li>Watch the summary size. If it grows every round, tighten the word limit.</li><li>Summaries of summaries drift. Recompute from the facts list and the latest turns when something looks off.</li></ul>
+
+<h2 id="when-not-to-summarize">When not to summarize</h2>
+<p>For short tasks, skip it. For tasks where exact wording matters (legal text, code diffs), keep the original in storage and let the agent fetch it by reference instead of summarizing it. Summaries are for conversation flow, not for source material.</p><p>See also <a href="/@odykyi/agent-memory-and-context/how-to-manage-context-window-for-agents/">managing the context window</a> for the wider budget.</p>
+
+<h2 id="a-small-test-you-can-run-today">A small test you can run today</h2>
+<p>Pick three saved sessions of at least 30 turns. For each, write five questions whose answers appear only in the early turns, such as "which file did we decide to rename?". Ask the agent those questions with the full history, then with the compacted version. Count the matches. If compaction loses more than one answer in five, move more items into the facts list or raise the summary limit. Keep this as a regression test and rerun it each time you change the summary prompt.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Which model should write the summaries?</summary><p>A smaller, cheaper model is often enough for compaction, but test it on your own sessions. If key facts go missing, use the same model as the agent.</p></details><details><summary>How often should I summarize?</summary><p>Only when history passes a token threshold. Summarizing every turn costs extra calls and compounds information loss.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an agent with durable sessions on your own machine.</h3><p>The open-source Flisk CLI can scaffold an agent service beside a database and a queue and start the stack with one command. It is a local development tool.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Agent memory and context engineering</span></div>
+<div class="rgrid"><a href="/@odykyi/agent-memory-and-context/agent-checkpoints-and-session-persistence/"><span class="lbl">Guide</span><b>Agent checkpoints and session persistence explained</b><span>A checkpoint is the saved state of an agent run, keyed by session ID. What to save, when to write it, and how to resume safely after a crash or restart.</span></a><a href="/@odykyi/agent-memory-and-context/how-to-store-agent-memory-in-sqlite-or-postgres/"><span class="lbl">Guide</span><b>How to store agent memory in SQLite or Postgres</b><span>A plain table of small notes, scoped by user and project, gets most agents further than a vector database. Schema, queries and the upgrade path to embeddings.</span></a><a href="/@odykyi/agent-memory-and-context/how-to-write-memory-files-for-coding-agents/"><span class="lbl">Guide</span><b>How to write CLAUDE.md and AGENTS.md memory files</b><span>Coding agents read a markdown file at the start of every session. What belongs in it, what to leave out, and how to keep it short enough to be followed.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a><a href="/@odykyi/get-found-by-ai-search/"><span class="lbl">Topic 48</span><b>Get found by AI search</b><span>Make your site and README readable and citable by ChatGPT, Claude, Perplexity and Google AI answers.</span></a><a href="/@odykyi/vibe-coding-done-right/"><span class="lbl">Topic 49</span><b>Vibe coding without the mess</b><span>Build apps by describing them, then keep them maintainable: specs, tests, small steps and knowing when to read the code.</span></a><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
