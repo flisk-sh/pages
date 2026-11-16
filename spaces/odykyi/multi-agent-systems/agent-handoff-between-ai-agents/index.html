@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to hand off work between AI agents without losing context</title>
+<meta name="description" content="A handoff is a message from one agent to another. Make it a typed contract with the goal, the facts, the constraints and the expected result.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/multi-agent-systems/agent-handoff-between-ai-agents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to hand off work between AI agents without losing context">
+<meta property="og:description" content="A handoff is a message from one agent to another. Make it a typed contract with the goal, the facts, the constraints and the expected result.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/multi-agent-systems/agent-handoff-between-ai-agents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to hand off work between AI agents without losing context","description":"A handoff is a message from one agent to another. Make it a typed contract with the goal, the facts, the constraints and the expected result.","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/agent-handoff-between-ai-agents/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Multi-agent system patterns","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I pass the whole conversation to the next agent?","acceptedAnswer":{"@type":"Answer","text":"Usually not. Pass a short summary and the facts it needs. Full history costs tokens and distracts the model."}},{"@type":"Question","name":"How do I stop agents handing work back and forth?","acceptedAnswer":{"@type":"Answer","text":"Put a hop counter in each handoff and refuse to continue past a fixed limit, then escalate to a person or fail the task."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/multi-agent-systems/">Multi-agent system patterns</a></div>
+<section class="hero"><div><div class="lbl">Multi-agent system patterns</div><h1>How to hand off work between AI agents without losing context</h1><p class="dek">A handoff is a message from one agent to another. Make it a typed contract with the goal, the facts, the constraints and the expected result.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#what-a-handoff-must-carry">What a handoff must carry</a></li><li><a href="#write-it-as-a-typed-contract">Write it as a typed contract</a></li><li><a href="#summarize-do-not-forward">Summarize, do not forward</a></li><li><a href="#handoff-pitfalls">Handoff pitfalls</a></li><li><a href="#log-every-handoff">Log every handoff</a></li></ol></nav></aside>
+<article><p>A good handoff is a structured message, not a chat transcript: it states the goal, the facts the next agent needs, the constraints, and the format of the answer you expect. Dumping the full history into the next agent wastes tokens and buries the important parts.</p>
+
+<h2 id="what-a-handoff-must-carry">What a handoff must carry</h2>
+<p>The receiving agent starts with an empty head. Everything it needs has to be in the message.</p><ul><li><strong>Goal:</strong> what done looks like, in one or two sentences.</li><li><strong>Inputs:</strong> the data, file paths or ids to work on.</li><li><strong>Decisions already made:</strong> so the next agent does not reopen them.</li><li><strong>Constraints:</strong> time, budget, forbidden actions.</li><li><strong>Output schema:</strong> the exact shape you will parse.</li></ul><p>Think of the handoff as an API between two teammates who cannot ask follow-up questions. If a human colleague could not do the job from your message alone, neither can the model. Read your handoff once as if you had never seen the project, and add whatever you would have to guess.</p>
+
+<h2 id="write-it-as-a-typed-contract">Write it as a typed contract</h2>
+<p>Define the handoff as a schema and validate it on both sides. A missing field then fails loudly instead of causing a vague wrong answer later.</p><pre><code>from pydantic import BaseModel
+
+class Handoff(BaseModel):
+    task_id: str
+    goal: str
+    inputs: dict
+    decisions: list[str] = []
+    constraints: list[str] = []
+    reply_schema: dict
+
+class Reply(BaseModel):
+    task_id: str
+    status: str  # "ok" or "failed"
+    output: dict
+    notes: str = ""</code></pre><p>The sender builds a <code>Handoff</code>, the receiver returns a <code>Reply</code>. Reject anything that does not parse.</p>
+
+<h2 id="summarize-do-not-forward">Summarize, do not forward</h2>
+<p>If earlier work matters, summarize it into the <code>decisions</code> list. Pass pointers to big artifacts, such as a file path or a database row id, instead of pasting them. The receiver can read the artifact if it needs to.</p><p>A useful rule: a handoff message should fit on one screen. If it does not, the task is probably too large for one worker.</p>
+
+<h2 id="handoff-pitfalls">Handoff pitfalls</h2>
+<p><strong>Lost constraints.</strong> A rule given to agent A, like "never delete files", must be repeated in the handoff to agent B. Do not assume it is inherited.</p><p><strong>Ping-pong.</strong> Two agents handing a task back and forth forever. Add a hop counter to the message and stop at a limit. See <a href="/@odykyi/multi-agent-systems/multi-agent-loops-cost-limits/">limits on loops and cost</a>.</p><p><strong>Silent partial results.</strong> Always include a status field so a failure is data the sender can act on.</p>
+
+<h2 id="log-every-handoff">Log every handoff</h2>
+<p>Write each handoff and reply, with the task id, to a log or database. When a final answer is wrong, you can follow the task id back through each hop and find where the information changed. More on this in <a href="/@odykyi/multi-agent-systems/trace-and-debug-multi-agent-runs/">tracing and debugging multi-agent runs</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I pass the whole conversation to the next agent?</summary><p>Usually not. Pass a short summary and the facts it needs. Full history costs tokens and distracts the model.</p></details><details><summary>How do I stop agents handing work back and forth?</summary><p>Put a hop counter in each handoff and refuse to continue past a fixed limit, then escalate to a person or fail the task.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an agent stack on your own computer first.</h3><p>Flisk is an open-source CLI that starts agents, tool servers, a database and a queue locally, so you can watch a multi-agent system work before you deploy it.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a><a class="btn" href="https://github.com/flisk-sh/flisk-agent-stack">Flisk Agent Stack</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Multi-agent system patterns</span></div>
+<div class="rgrid"><a href="/@odykyi/multi-agent-systems/message-queue-between-ai-agents/"><span class="lbl">Guide</span><b>How to connect AI agents with a message queue</b><span>A queue lets agents work at their own pace, survive restarts and retry failed tasks. Here is a simple design with a database table you already have.</span></a><a href="/@odykyi/multi-agent-systems/shared-state-for-multiple-agents/"><span class="lbl">Guide</span><b>Where should multiple AI agents keep shared state?</b><span>Agents should not share memory by reading each other&#39;s prompts. Use a store with clear owners, versions and small typed records.</span></a><a href="/@odykyi/multi-agent-systems/multi-agent-failure-modes/"><span class="lbl">Guide</span><b>Why multi-agent systems fail, and how to plan for it</b><span>The common failures are loops, lost context, conflicting writes and runaway cost. Know them early and design guards for each.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

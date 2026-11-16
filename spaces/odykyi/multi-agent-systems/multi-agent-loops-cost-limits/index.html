@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to put limits on agent loops, steps and cost</title>
+<meta name="description" content="Every agent loop needs a step cap, a token budget, a time limit and a clear stop condition. Here is how to add them in a few lines.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/multi-agent-systems/multi-agent-loops-cost-limits/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to put limits on agent loops, steps and cost">
+<meta property="og:description" content="Every agent loop needs a step cap, a token budget, a time limit and a clear stop condition. Here is how to add them in a few lines.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/multi-agent-systems/multi-agent-loops-cost-limits/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to put limits on agent loops, steps and cost","description":"Every agent loop needs a step cap, a token budget, a time limit and a clear stop condition. Here is how to add them in a few lines.","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/multi-agent-loops-cost-limits/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Multi-agent system patterns","url":"https://pages.flisk.si/@odykyi/multi-agent-systems/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can I just tell the agent to stop after 10 steps in the prompt?","acceptedAnswer":{"@type":"Answer","text":"No. Prompts are advice. Enforce the limit in code, where a stuck model cannot ignore it."}},{"@type":"Question","name":"What is a good default step limit?","acceptedAnswer":{"@type":"Answer","text":"Measure normal runs and set the cap slightly above the 95th percentile. Many tasks finish well under 20 steps."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/multi-agent-systems/">Multi-agent system patterns</a></div>
+<section class="hero"><div><div class="lbl">Multi-agent system patterns</div><h1>How to put limits on agent loops, steps and cost</h1><p class="dek">Every agent loop needs a step cap, a token budget, a time limit and a clear stop condition. Here is how to add them in a few lines.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#the-four-limits">The four limits</a></li><li><a href="#a-guard-around-the-loop">A guard around the loop</a></li><li><a href="#share-the-budget-across-agents">Share the budget across agents</a></li><li><a href="#what-to-do-when-a-limit-hits">What to do when a limit hits</a></li><li><a href="#pitfalls">Pitfalls</a></li></ol></nav></aside>
+<article><p>Give every agent run four limits: a maximum number of steps, a token or money budget, a wall-clock timeout and an explicit stop condition. Enforce them in your code, not in the prompt, because a model that is stuck will not reliably stop itself.</p>
+
+<h2 id="the-four-limits">The four limits</h2>
+<ul><li><strong>Max steps:</strong> the number of model calls or tool calls in one run, for example 20.</li><li><strong>Token budget:</strong> total input plus output tokens across the run.</li><li><strong>Timeout:</strong> wall-clock time, so a hung tool does not block forever.</li><li><strong>Stop condition:</strong> a check that says the goal is met, such as tests passing or a valid result schema.</li></ul><p>Pick numbers from real runs. Look at the 95th percentile of a normal run and set the cap a little above it.</p>
+
+<h2 id="a-guard-around-the-loop">A guard around the loop</h2>
+<pre><code>import time
+
+class Budget:
+    def __init__(self, steps=20, tokens=200_000, seconds=300):
+        self.steps, self.tokens = steps, tokens
+        self.deadline = time.monotonic() + seconds
+
+    def spend(self, used_tokens):
+        self.steps -= 1
+        self.tokens -= used_tokens
+        if self.steps &lt; 0 or self.tokens &lt; 0 or time.monotonic() &gt; self.deadline:
+            raise RuntimeError("budget exceeded")
+
+budget = Budget()
+while not done(state):
+    reply = call_model(state)
+    budget.spend(reply.usage_total)
+    state = apply(reply, state)</code></pre><p>Read the usage numbers from your provider's response. Field names differ between providers, so check the client docs.</p>
+
+<h2 id="share-the-budget-across-agents">Share the budget across agents</h2>
+<p>In a multi-agent run, one budget object should cover the whole job, not each agent. Pass a shared counter, or divide the budget when the orchestrator creates tasks: if the run has 200,000 tokens and 5 tasks, each worker gets a slice and the orchestrator keeps a reserve for merging.</p><p>Put a hop counter in each message too, as in <a href="/@odykyi/multi-agent-systems/agent-handoff-between-ai-agents/">the handoff guide</a>, so handoff loops stop.</p>
+
+<h2 id="what-to-do-when-a-limit-hits">What to do when a limit hits</h2>
+<p>Do not just crash. Return what you have, mark the result as partial, and say which limit stopped it. For long jobs, save a checkpoint so a person or a retry can continue from there rather than start over.</p><ul><li>Log every limit hit. A rise in hits means prompts or tools have drifted.</li><li>Alert on unusual spend per run, not only on the monthly total.</li></ul><p>Add a per-run cost line to your logs: model, tokens in, tokens out, and the estimated money using the price from your provider's current price page. Review the most expensive runs each week. They almost always show one of three things: a loop, an oversized context, or a retry storm.</p>
+
+<h2 id="pitfalls">Pitfalls</h2>
+<p>Retries hide cost. A call that fails and retries three times is four calls, so count attempts, not just successes. Do not set limits so tight that a normal run is cut off, since a half-finished run often costs more than a finished one. For wider cost tactics see <a href="/@odykyi/llm-cost-and-latency/">cutting LLM cost and latency</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can I just tell the agent to stop after 10 steps in the prompt?</summary><p>No. Prompts are advice. Enforce the limit in code, where a stuck model cannot ignore it.</p></details><details><summary>What is a good default step limit?</summary><p>Measure normal runs and set the cap slightly above the 95th percentile. Many tasks finish well under 20 steps.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run an agent stack on your own computer first.</h3><p>Flisk is an open-source CLI that starts agents, tool servers, a database and a queue locally, so you can watch a multi-agent system work before you deploy it.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a><a class="btn" href="https://github.com/flisk-sh/flisk-agent-stack">Flisk Agent Stack</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Multi-agent system patterns</span></div>
+<div class="rgrid"><a href="/@odykyi/multi-agent-systems/parallel-coding-agents-git-worktrees/"><span class="lbl">Guide</span><b>How to run parallel coding agents with git worktrees</b><span>Give each agent its own working directory and branch so they never edit the same files. A few git commands set it up and tear it down.</span></a><a href="/@odykyi/multi-agent-systems/test-multi-agent-system-locally/"><span class="lbl">Guide</span><b>How to run and test a multi-agent system on your laptop</b><span>Run the agents, the queue, the database and the tools together locally, with fake models in tests and real ones when you want to see behaviour.</span></a><a href="/@odykyi/multi-agent-systems/trace-and-debug-multi-agent-runs/"><span class="lbl">Guide</span><b>How to trace and debug a multi-agent run</b><span>Give every run an id, log each model call and handoff as a structured event, and you can replay what happened when the final answer is wrong.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
