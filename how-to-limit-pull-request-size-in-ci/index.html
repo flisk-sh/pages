@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Limit Pull Request Size in CI</title>
+<meta name="description" content="Agents can write thousands of lines in one go. A small size check in CI keeps pull requests reviewable and easy to revert, with a labelled escape hatch.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-for-agent-pull-requests/how-to-limit-pull-request-size-in-ci/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Limit Pull Request Size in CI">
+<meta property="og:description" content="Agents can write thousands of lines in one go. A small size check in CI keeps pull requests reviewable and easy to revert, with a labelled escape hatch.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-for-agent-pull-requests/how-to-limit-pull-request-size-in-ci/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Limit Pull Request Size in CI","description":"Agents can write thousands of lines in one go. A small size check in CI keeps pull requests reviewable and easy to revert, with a labelled escape hatch.","url":"https://pages.flisk.si/@odykyi/ci-for-agent-pull-requests/how-to-limit-pull-request-size-in-ci/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI for Agent-Written Pull Requests","url":"https://pages.flisk.si/@odykyi/ci-for-agent-pull-requests/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What limit should I use?","acceptedAnswer":{"@type":"Answer","text":"There is no universal number. Many teams start between 400 and 800 changed lines excluding generated files, then adjust from their review history."}},{"@type":"Question","name":"Should tests count toward the limit?","acceptedAnswer":{"@type":"Answer","text":"You can count them, but many teams exclude test files so the check does not discourage writing tests."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-for-agent-pull-requests/">CI for Agent-Written Pull Requests</a></div>
+<section class="hero"><div><div class="lbl">CI for Agent-Written Pull Requests</div><h1>How to Limit Pull Request Size in CI</h1><p class="dek">Agents can write thousands of lines in one go. A small size check in CI keeps pull requests reviewable and easy to revert, with a labelled escape hatch.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>3 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-size-matters-more-with-agents">Why size matters more with agents</a></li><li><a href="#a-simple-size-check">A simple size check</a></li><li><a href="#wire-it-into-a-workflow">Wire it into a workflow</a></li><li><a href="#allow-a-labelled-exception">Allow a labelled exception</a></li><li><a href="#ask-the-agent-for-stacked-changes">Ask the agent for stacked changes</a></li><li><a href="#beyond-line-counts">Beyond line counts</a></li></ol></nav></aside>
+<article><p>Add a CI step that counts changed lines against the base branch and fails above a limit, with an explicit label to override. Small pull requests get reviewed properly; large ones get skimmed and approved.</p>
+
+<h2 id="why-size-matters-more-with-agents">Why size matters more with agents</h2>
+<p>People rarely write a 3,000-line change in an afternoon. An agent can. Reviewers then approve without reading, and the bugs show up in production. A hard limit changes the agent's behaviour: it splits the task, which is what you want.</p>
+
+<h2 id="a-simple-size-check">A simple size check</h2>
+<p>Count added plus deleted lines, ignoring generated files and lockfiles.</p><pre><code>git fetch origin main
+CHANGED=$(git diff --numstat origin/main...HEAD -- . ':!*.lock' ':!package-lock.json' ':!dist' \
+  | awk '{s+=$1+$2} END {print s+0}')
+echo "changed lines: $CHANGED"
+[ "$CHANGED" -le 600 ] || { echo 'PR too large, split it'; exit 1; }</code></pre><p>Pick a limit from your own history. Look at the median size of pull requests that were reviewed well and set the limit a bit above it.</p>
+
+<h2 id="wire-it-into-a-workflow">Wire it into a workflow</h2>
+<pre><code>jobs:
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: bash scripts/pr-size.sh</code></pre><p>The full history fetch is needed so the diff against the base works. Make this check required once you trust it.</p>
+
+<h2 id="allow-a-labelled-exception">Allow a labelled exception</h2>
+<p>Some changes are big and fine: a rename, a vendored file, a generated client. Let a maintainer add a label such as <code>size-override</code> and skip the check when the label is present. Only maintainers should be able to add labels, otherwise the agent can add it itself.</p>
+
+<h2 id="ask-the-agent-for-stacked-changes">Ask the agent for stacked changes</h2>
+<p>In AGENTS.md, say that large tasks should be split into a sequence of small pull requests, each passing CI. Smaller changes also revert cleanly and make a merge queue more efficient; see <a href='/@odykyi/ci-for-agent-pull-requests/how-to-set-up-a-merge-queue-on-github/'>setting up a merge queue</a>.</p>
+
+<h2 id="beyond-line-counts">Beyond line counts</h2>
+<p>Lines changed is a blunt measure. Files touched and directories touched are often better signals of review difficulty. A 200-line change across 25 files in six folders is harder to review than 400 lines in one file. Add a second limit on the number of top-level folders changed, and ask for a split when a pull request spans unrelated areas.</p><pre><code>git diff --name-only origin/main...HEAD | cut -d/ -f1 | sort -u | wc -l</code></pre><p>Report the numbers in the pull request as a comment rather than only failing, so the agent and the reviewer see them: files, lines, folders. Make the message actionable by telling the agent what to do, for example to split into one pull request per folder.</p><p>Review the limits twice a year against your real data. If everything passes easily, lower the limit. If people constantly use the override, raise it or fix the underlying reason, such as a large generated file that should be excluded.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>What limit should I use?</summary><p>There is no universal number. Many teams start between 400 and 800 changed lines excluding generated files, then adjust from their review history.</p></details><details><summary>Should tests count toward the limit?</summary><p>You can count them, but many teams exclude test files so the check does not discourage writing tests.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Go further</div><h3>Let a model propose and a deterministic score decide.</h3><p>GEL is Flisk's approach and tooling for CI guards, evals and nightly loops where the model proposes changes and a fixed score accepts or rejects them.</p></div><div class="btns"><a class="btn primary" href="https://gel.flisk.si">Explore GEL</a><a class="btn" href="https://github.com/flisk-sh/gel">GEL on GitHub</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI for Agent-Written Pull Requests</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-for-agent-pull-requests/how-to-run-agent-prs-safely-in-github-actions/"><span class="lbl">Guide</span><b>How to Run Agent PRs Safely in GitHub Actions</b><span>Pull requests from agents and forks run untrusted code in your CI. Use the right trigger, minimal token permissions and no secrets.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/how-to-label-agent-written-pull-requests/"><span class="lbl">Guide</span><b>How to Label Agent-Written Pull Requests Automatically</b><span>A branch prefix, a commit trailer and an automatic label make agent work visible, filterable and measurable. Here is the setup, with a workflow you can copy.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/how-to-require-tests-for-agent-changes/"><span class="lbl">Guide</span><b>How to Require Tests for Agent-Written Changes</b><span>Check that source changes come with test changes, and that new code is actually covered, without turning CI into a coverage game.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
