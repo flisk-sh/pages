@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to write a spec before you ask an AI to build your app</title>
+<meta name="description" content="A one-page spec gives the agent the constraints it would otherwise guess. Here is a short template, a worked example, and the parts that matter most.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/vibe-coding-done-right/write-a-spec-before-you-vibe-code/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to write a spec before you ask an AI to build your app">
+<meta property="og:description" content="A one-page spec gives the agent the constraints it would otherwise guess. Here is a short template, a worked example, and the parts that matter most.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/vibe-coding-done-right/write-a-spec-before-you-vibe-code/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to write a spec before you ask an AI to build your app","description":"A one-page spec gives the agent the constraints it would otherwise guess. Here is a short template, a worked example, and the parts that matter most.","url":"https://pages.flisk.si/@odykyi/vibe-coding-done-right/write-a-spec-before-you-vibe-code/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Vibe coding without the mess","url":"https://pages.flisk.si/@odykyi/vibe-coding-done-right/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long should a spec be?","acceptedAnswer":{"@type":"Answer","text":"One page is enough for a small app. If it runs past two pages, split the project into parts and write one spec per part."}},{"@type":"Question","name":"Should I let the AI write the spec?","acceptedAnswer":{"@type":"Answer","text":"Yes for a first draft, but read and cut it. Remove anything you did not ask for, then add the constraints only you know."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/vibe-coding-done-right/">Vibe coding without the mess</a></div>
+<section class="hero"><div><div class="lbl">Vibe coding without the mess</div><h1>How to write a spec before you ask an AI to build your app</h1><p class="dek">A one-page spec gives the agent the constraints it would otherwise guess. Here is a short template, a worked example, and the parts that matter most.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-a-spec-beats-a-longer-prompt">Why a spec beats a longer prompt</a></li><li><a href="#a-template-that-fits-on-one-page">A template that fits on one page</a></li><li><a href="#write-the-out-of-scope-list-first">Write the out of scope list first</a></li><li><a href="#turn-done-means-into-checks">Turn &quot;done means&quot; into checks</a></li><li><a href="#hand-it-over-in-slices">Hand it over in slices</a></li></ol></nav></aside>
+<article><p>Write a one-page spec before the first prompt: what the app does, who uses it, the data it stores, what it must not do, and how you will know it works. Then paste it into the agent and ask it to implement only the first slice.</p>
+
+<h2 id="why-a-spec-beats-a-longer-prompt">Why a spec beats a longer prompt</h2>
+<p>A prompt is a request. A spec is a contract you can check the result against. When the agent drifts, you can point at a line and say "this violates item 4" instead of rewording your wish.</p><p>It also survives the session. Save it in the repo as <code>SPEC.md</code> and every new session starts from the same facts.</p>
+
+<h2 id="a-template-that-fits-on-one-page">A template that fits on one page</h2>
+<pre><code># SPEC: Habit tracker
+
+## Goal
+One sentence on what this app does and for whom.
+
+## Users and flows
+1. User signs in with email.
+2. User adds a habit.
+3. User ticks it done for today.
+
+## Data
+habit(id, user_id, name, created_at)
+checkin(id, habit_id, day)  -- unique per habit and day
+
+## Out of scope
+No teams, no notifications, no mobile app.
+
+## Constraints
+SQLite, one process, no external services.
+
+## Done means
+- A user can only see their own habits.
+- Ticking twice on one day does not create two rows.
+- `npm test` passes.</code></pre><p>Keep the headings, change the content. The "Data" section is the one people skip and regret: if you do not name the tables and the unique rules, the agent will invent them, and a wrong data model is the most expensive thing to change later.</p>
+
+<h2 id="write-the-out-of-scope-list-first">Write the out of scope list first</h2>
+<p>Agents love adding features. Every extra feature is more code to be wrong. A short "out of scope" list is the cheapest control you have. Be blunt: no admin panel, no analytics, no new dependencies without asking.</p>
+
+<h2 id="turn-done-means-into-checks">Turn &quot;done means&quot; into checks</h2>
+<p>Each line under "Done means" should be something a test or a command can confirm. "Fast" is not checkable. "The list page returns in under one second with 1,000 rows" is. If you cannot phrase a line that way, leave it out or mark it as a goal.</p><p>These lines become your first tests. See <a href="/@odykyi/vibe-coding-done-right/add-tests-to-vibe-coded-app/">how to add tests to a vibe-coded app</a>.</p>
+
+<h2 id="hand-it-over-in-slices">Hand it over in slices</h2>
+<p>Do not say "build the whole spec". Say: "Read SPEC.md. Implement only flow 1 and its data. Stop and show me how to run it." Then continue slice by slice, committing between them (<a href="/@odykyi/vibe-coding-done-right/vibe-coding-small-steps-with-git-checkpoints/">small steps with git checkpoints</a>).</p><p>Update the spec when you change your mind. A spec that disagrees with the code is worse than none.</p><p>A good first slice is the thinnest path through the whole app: one screen, one endpoint, one table. It proves the pieces connect. Adding features to a working skeleton is much easier than debugging a large first draft that was never run.</p><p>If you only have a rough idea, <a href="https://build.flisk.si/">Build Me an App</a> turns a plain description into the Flisk commands to run it on your own computer. It is a way to get a skeleton to react to, not a replacement for the spec.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How long should a spec be?</summary><p>One page is enough for a small app. If it runs past two pages, split the project into parts and write one spec per part.</p></details><details><summary>Should I let the AI write the spec?</summary><p>Yes for a first draft, but read and cut it. Remove anything you did not ask for, then add the constraints only you know.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run the app you just built, with its database, on your own machine.</h3><p>Flisk is an open-source CLI that starts your services, databases and agents locally from one <code>service.json</code> per service. It is a local development tool, not a production orchestrator.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://flisk.sh/docs/">Flisk docs</a><a class="btn" href="https://build.flisk.si/">Build Me an App</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Vibe coding without the mess</span></div>
+<div class="rgrid"><a href="/@odykyi/vibe-coding-done-right/vibe-coding-small-steps-with-git-checkpoints/"><span class="lbl">Guide</span><b>How to vibe code in small steps with git checkpoints</b><span>Commit after every working slice so a bad prompt costs you one command, not an afternoon. A simple loop with the exact git commands.</span></a><a href="/@odykyi/vibe-coding-done-right/add-tests-to-vibe-coded-app/"><span class="lbl">Guide</span><b>How to add tests to a vibe-coded app without slowing down</b><span>Tests are what let you keep prompting without breaking old features. Start with a handful of checks on the behaviour that matters, and let the agent write them from your spec.</span></a><a href="/@odykyi/vibe-coding-done-right/when-to-read-the-code-ai-wrote/"><span class="lbl">Guide</span><b>When should you read the code an AI wrote?</b><span>You do not have to read every line, but some parts deserve a careful look every time. A checklist of what to read, what to skim and what to ignore.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/self-hosting-open-models/"><span class="lbl">Topic 50</span><b>Open models and self-hosted inference</b><span>Pick, quantize, serve and monitor open-weight models, and know when a hosted endpoint is the better choice.</span></a><a href="/@odykyi/multi-agent-systems/"><span class="lbl">Topic 51</span><b>Multi-agent system patterns</b><span>Orchestrators, workers, queues, handoffs and shared state: patterns for agents that cooperate, and the failure modes to plan for.</span></a><a href="/@odykyi/ai-security-for-builders/"><span class="lbl">Topic 52</span><b>AI security for builders</b><span>Prompt injection, secret handling, tool permissions and output validation for apps that give a model real capabilities.</span></a><a href="/@odykyi/publish-and-host-small-apps/"><span class="lbl">Topic 53</span><b>Publish pages and host small apps</b><span>Get an agent-built page or small app online for free: static hosting, previews, custom domains and what to avoid publishing.</span></a><a href="/@odykyi/cloudflare-workers-for-small-apps/"><span class="lbl">Topic 54</span><b>Cloudflare Workers for small apps</b><span>Build APIs, bots and AI features on Workers, D1, KV and Workers AI: limits, patterns, local dev and deployment.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/"><span class="lbl">Topic 55</span><b>CI guards and AI code review</b><span>Deterministic checks first, model review second: guards, ratchets, scoreboards and review bots that earn trust.</span></a><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
