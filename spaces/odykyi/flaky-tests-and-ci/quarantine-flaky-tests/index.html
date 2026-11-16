@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Quarantine Flaky Tests Without Losing Coverage</title>
+<meta name="description" content="Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Quarantine Flaky Tests Without Losing Coverage">
+<meta property="og:description" content="Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Quarantine Flaky Tests Without Losing Coverage","description":"Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is quarantine the same as skipping a test?","acceptedAnswer":{"@type":"Answer","text":"No. A skipped test does not run. A quarantined test still runs in a non-blocking job so you keep collecting results."}},{"@type":"Question","name":"How long should a test stay quarantined?","acceptedAnswer":{"@type":"Answer","text":"Set a fixed limit, commonly one to two weeks. After that, fix it or delete it."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>How to Quarantine Flaky Tests Without Losing Coverage</h1><p class="dek">Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#tag-the-test">Tag the test</a></li><li><a href="#split-the-jobs">Split the jobs</a></li><li><a href="#rules-that-keep-it-honest">Rules that keep it honest</a></li><li><a href="#know-what-you-give-up">Know what you give up</a></li><li><a href="#un-quarantine-on-evidence">Un-quarantine on evidence</a></li><li><a href="#track-the-list">Track the list</a></li></ol></nav></aside>
+<article><p>Quarantining means taking a flaky test out of the set that blocks merges while still running it and recording the result. The test is not deleted and not ignored. It moves to a non-blocking lane with an owner and a deadline.</p>
+
+<h2 id="tag-the-test">Tag the test</h2>
+<p>Use a marker your runner understands, and put the reason and ticket in the tag.</p><pre><code># pytest.ini
+[pytest]
+markers =
+    quarantine: known flaky, tracked in an issue
+
+# test file
+import pytest
+
+@pytest.mark.quarantine
+def test_job_finishes():
+    ...</code></pre><p>In Jest or Playwright, a title tag such as <code>@quarantine</code> works with the grep option. In Go, use a build tag or an environment check with <code>t.Skip</code> in the quarantine lane.</p>
+
+<h2 id="split-the-jobs">Split the jobs</h2>
+<p>Run the main suite without quarantined tests and a second job for them that is allowed to fail.</p><pre><code>jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -m 'not quarantine'
+  quarantine:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: pytest -m quarantine</code></pre><p>Only <code>test</code> should be a required check. The quarantine job gives you data: if it goes green fifty times in a row, the test may be fixed.</p>
+
+<h2 id="rules-that-keep-it-honest">Rules that keep it honest</h2>
+<ul><li>Every quarantined test has an issue and an owner.</li><li>Every quarantined test has a deadline, such as 14 days. After that it is fixed or deleted.</li><li>The list has a size cap. If it hits the cap, new quarantines are not allowed until someone fixes one.</li><li>A pull request that adds a quarantine marker needs a reviewer to approve it.</li></ul><p>Without a cap and a deadline, quarantine becomes a graveyard where coverage quietly disappears.</p>
+
+<h2 id="know-what-you-give-up">Know what you give up</h2>
+<p>A quarantined test no longer protects merges. If it covers important behavior, that behavior is now unguarded. For critical paths, fix first and quarantine only as a last resort. For low-value tests, deleting is often better than quarantining.</p><p>A test that cannot be made reliable is usually testing too much. Consider a smaller unit test for the same logic.</p>
+
+<h2 id="un-quarantine-on-evidence">Un-quarantine on evidence</h2>
+<p>Moving a test back should need proof, not a feeling. A simple rule: the test must pass in the quarantine job for a set number of consecutive runs, such as 30, after a fix merged. Then a pull request removes the marker. If the test fails again in that window, the counter resets. This gives you a clear exit that is not a debate.</p><p>If the quarantine job is allowed to fail, add a step that prints the pass count to the run summary so the number is visible to everyone.</p>
+
+<h2 id="track-the-list">Track the list</h2>
+<p>Print the quarantine count in the run summary, so it is always visible. Then review it weekly with the <a href="/@odykyi/flaky-tests-and-ci/flaky-test-policy-for-teams/">team flaky test policy</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is quarantine the same as skipping a test?</summary><p>No. A skipped test does not run. A quarantined test still runs in a non-blocking job so you keep collecting results.</p></details><details><summary>How long should a test stay quarantined?</summary><p>Set a fixed limit, commonly one to two weeks. After that, fix it or delete it.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/fix-timing-and-race-condition-flakes/"><span class="lbl">Guide</span><b>How to Fix Timing and Race Condition Flaky Tests</b><span>Replace fixed sleeps with waits on real conditions, inject the clock, and find races between your test and the code it checks. Examples in Python and JavaScript.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-tests-shared-state-and-test-order/"><span class="lbl">Guide</span><b>Fix Flaky Tests Caused by Shared State and Test Order</b><span>Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-end-to-end-tests-playwright/"><span class="lbl">Guide</span><b>How to Stabilize Flaky End-to-End Tests With Playwright</b><span>Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retry Failed Tests in GitHub Actions Without Hiding Bugs</title>
+<meta name="description" content="Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/rerun-failed-tests-in-github-actions/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Retry Failed Tests in GitHub Actions Without Hiding Bugs">
+<meta property="og:description" content="Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/rerun-failed-tests-in-github-actions/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Retry Failed Tests in GitHub Actions Without Hiding Bugs","description":"Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/rerun-failed-tests-in-github-actions/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does gh run rerun --failed rerun passing jobs?","acceptedAnswer":{"@type":"Answer","text":"No. It reruns the failed jobs and the jobs that depend on them, and reuses the results of jobs that passed."}},{"@type":"Question","name":"Should CI auto-retry on every failure?","acceptedAnswer":{"@type":"Answer","text":"No. Retry single tests with a low limit and record each retry. Auto-retrying everything hides real regressions."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>Retry Failed Tests in GitHub Actions Without Hiding Bugs</h1><p class="dek">Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#rerun-failed-jobs">Rerun failed jobs</a></li><li><a href="#retry-inside-the-test-runner">Retry inside the test runner</a></li><li><a href="#make-retries-visible">Make retries visible</a></li><li><a href="#do-not-retry-whole-workflows-blindly">Do not retry whole workflows blindly</a></li><li><a href="#count-your-retries">Count your retries</a></li><li><a href="#retries-are-a-bridge">Retries are a bridge</a></li></ol></nav></aside>
+<article><p>You can rerun only the failed jobs of a run with <code>gh run rerun --failed</code>, or retry single tests inside the test runner. Both are useful as a bridge, but a retry that passes must still be counted as a flake, or the problem grows silently.</p>
+
+<h2 id="rerun-failed-jobs">Rerun failed jobs</h2>
+<p>In the GitHub UI, choose "Re-run failed jobs". From a terminal:</p><pre><code>gh run rerun 1234567890 --failed
+gh run view 1234567890 --json attempt,conclusion</code></pre><p>The run keeps one id but gets a higher attempt number. That number is your signal: a green run with attempt 2 is a flake that was forgiven.</p>
+
+<h2 id="retry-inside-the-test-runner">Retry inside the test runner</h2>
+<p>Runners can retry a single failing test, which is cheaper than rerunning a whole job.</p><pre><code># pytest (pip install pytest-rerunfailures)
+pytest --reruns 2 --reruns-delay 1
+
+// Playwright config
+export default { retries: process.env.CI ? 2 : 0 };
+
+// Jest
+jest.retryTimes(2);</code></pre><p>Keep retries low, one or two. A test that needs five tries is not flaky, it is broken. Do not set retries locally, so you still see flakes while you develop.</p>
+
+<h2 id="make-retries-visible">Make retries visible</h2>
+<p>The danger is a suite that is always green because everything is retried. Playwright marks tests that passed on retry as flaky in its report. For pytest, the rerun plugin lists reruns in the summary. Either way, write the list somewhere people see it.</p><pre><code>- name: Report flaky tests
+  if: always()
+  run: |
+    echo '### Retried tests' &gt;&gt; "$GITHUB_STEP_SUMMARY"
+    grep -i 'rerun\|flaky' test.log &gt;&gt; "$GITHUB_STEP_SUMMARY" || true</code></pre><p><code>GITHUB_STEP_SUMMARY</code> shows Markdown on the run page.</p>
+
+<h2 id="do-not-retry-whole-workflows-blindly">Do not retry whole workflows blindly</h2>
+<p>Some teams add a retry action around the test step or a bash loop. That works, but it hides the failure from the run history, so your pass rate looks better than the truth. Prefer the runner-level retry, which logs which test retried.</p><ul><li>Retry tests, not builds or deploys.</li><li>Never retry steps that are not idempotent.</li><li>Set <code>timeout-minutes</code> so a hung retry does not eat the budget.</li></ul>
+
+<h2 id="count-your-retries">Count your retries</h2>
+<p>You can see how often retries save you by listing runs and checking the attempt number. Run <code>gh run list --json databaseId,attempt,conclusion --limit 100</code> and count runs where <code>attempt</code> is above 1 and the conclusion is success. If that count is more than a few per week on the default branch, your pipeline depends on retries to look healthy.</p><p>Put that count next to your pass rate. A pass rate of 99 percent with retries on is a different story from 99 percent without them.</p>
+
+<h2 id="retries-are-a-bridge">Retries are a bridge</h2>
+<p>Treat a retry as a ticket: it buys time until the fix lands. Pair it with <a href="/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/">a quarantine list</a> and a deadline. See also the <a href="/@odykyi/flaky-tests-and-ci/flaky-test-policy-for-teams/">team policy</a> for who owns each one.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Does gh run rerun --failed rerun passing jobs?</summary><p>No. It reruns the failed jobs and the jobs that depend on them, and reuses the results of jobs that passed.</p></details><details><summary>Should CI auto-retry on every failure?</summary><p>No. Retry single tests with a low limit and record each retry. Auto-retrying everything hides real regressions.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/"><span class="lbl">Guide</span><b>How to Quarantine Flaky Tests Without Losing Coverage</b><span>Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.</span></a><a href="/@odykyi/flaky-tests-and-ci/fix-timing-and-race-condition-flakes/"><span class="lbl">Guide</span><b>How to Fix Timing and Race Condition Flaky Tests</b><span>Replace fixed sleeps with waits on real conditions, inject the clock, and find races between your test and the code it checks. Examples in Python and JavaScript.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-tests-shared-state-and-test-order/"><span class="lbl">Guide</span><b>Fix Flaky Tests Caused by Shared State and Test Order</b><span>Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

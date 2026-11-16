@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fix Flaky Tests Caused by Shared State and Test Order</title>
+<meta name="description" content="Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-tests-shared-state-and-test-order/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Fix Flaky Tests Caused by Shared State and Test Order">
+<meta property="og:description" content="Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-tests-shared-state-and-test-order/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Fix Flaky Tests Caused by Shared State and Test Order","description":"Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/flaky-tests-shared-state-and-test-order/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Should I run tests in parallel to find these bugs?","acceptedAnswer":{"@type":"Answer","text":"Parallel runs expose shared state fast, but they also add noise. Random order on a single worker is the cleaner first step."}},{"@type":"Question","name":"What is the cheapest isolation for database tests?","acceptedAnswer":{"@type":"Answer","text":"Wrap each test in a transaction and roll back at the end. It is fast and needs no cleanup code."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>Fix Flaky Tests Caused by Shared State and Test Order</h1><p class="dek">Find tests that only pass in a certain order, isolate databases, files and ports per test, and use random order to expose leaks before CI does.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#prove-it-is-order">Prove it is order</a></li><li><a href="#the-usual-shared-things">The usual shared things</a></li><li><a href="#isolate-by-default">Isolate by default</a></li><li><a href="#databases">Databases</a></li><li><a href="#a-bisect-example">A bisect example</a></li><li><a href="#keep-order-random-in-ci">Keep order random in CI</a></li></ol></nav></aside>
+<article><p>If a test passes alone but fails in the full suite, or fails only when another test runs first, it shares state with that test. Find the shared thing, then give each test its own copy or reset it after every test.</p>
+
+<h2 id="prove-it-is-order">Prove it is order</h2>
+<p>Run the suite in random order a few times. Order-dependent tests show up fast.</p><pre><code>pip install pytest-randomly
+pytest -p randomly
+
+go test -shuffle=on -count=5 ./...</code></pre><p>When you have a failing order, shrink it. Run the failing test with one suspected partner. Bisect the list of tests that ran before it until two remain: the one that leaks and the one that suffers.</p>
+
+<h2 id="the-usual-shared-things">The usual shared things</h2>
+<ul><li><strong>Database rows.</strong> One test inserts a user with a unique email, another inserts the same email.</li><li><strong>Files and temp dirs.</strong> Tests write to a fixed path.</li><li><strong>Ports.</strong> Two tests start a server on the same port.</li><li><strong>Globals and singletons.</strong> A cached config, a patched function that is never restored.</li><li><strong>Environment variables.</strong> Set in one test, never unset.</li></ul>
+
+<h2 id="isolate-by-default">Isolate by default</h2>
+<p>Give each test its own resources. Use temp directories and port 0, which makes the OS pick a free port.</p><pre><code>import os
+
+def test_writes_report(tmp_path):
+    out = tmp_path / 'report.txt'
+    write_report(out)
+    assert out.exists()
+
+def test_env(monkeypatch):
+    monkeypatch.setenv('MODE', 'test')   # restored automatically</code></pre><p>The <code>tmp_path</code> and <code>monkeypatch</code> fixtures clean up after the test. Other frameworks have the same idea: temp directory helpers and setup/teardown hooks.</p>
+
+<h2 id="databases">Databases</h2>
+<p>The common pattern is to wrap each test in a transaction and roll it back. Another is to truncate tables after each test. Generate unique values for anything with a unique constraint.</p><pre><code>import uuid
+
+email = f'user-{uuid.uuid4().hex[:8]}@example.test'</code></pre><p>If tests run in parallel, use one database per worker, named by worker id. To run a real database locally the same way as CI, see <a href="/@odykyi/ci-for-multi-service-apps/">CI for multi-service apps</a>.</p>
+
+<h2 id="a-bisect-example">A bisect example</h2>
+<p>Say <code>test_report</code> fails only in the full run. List the tests that ran before it, split the list in half and run each half followed by <code>test_report</code>. The half that still fails contains the leak. Repeat until one test remains. Many runners can print the order they used, which makes this mechanical rather than guesswork. Once you find the leaking test, look for what it creates and does not remove: rows, files, patches, threads or environment variables.</p><p>Fix the leak in the test that causes it, and also make the victim test create its own data, so one bad neighbor cannot hurt it again.</p>
+
+<h2 id="keep-order-random-in-ci">Keep order random in CI</h2>
+<p>Leave random order on permanently. It turns a hidden dependency into a visible failure the first time someone introduces it, with a seed in the log for replay. For the broader picture, see <a href="/@odykyi/flaky-tests-and-ci/what-is-a-flaky-test/">what causes flaky tests</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Should I run tests in parallel to find these bugs?</summary><p>Parallel runs expose shared state fast, but they also add noise. Random order on a single worker is the cleaner first step.</p></details><details><summary>What is the cheapest isolation for database tests?</summary><p>Wrap each test in a transaction and roll back at the end. It is fast and needs no cleanup code.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/flaky-end-to-end-tests-playwright/"><span class="lbl">Guide</span><b>How to Stabilize Flaky End-to-End Tests With Playwright</b><span>Use auto-waiting locators, stable test data, traces on retry and a repeat loop to turn a flaky browser test into a reliable one. Honest limits included.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-workflows-vs-flaky-tests/"><span class="lbl">Guide</span><b>Flaky Workflows vs Flaky Tests: How to Tell Them Apart</b><span>Some CI failures are not test bugs but runner, network, cache or dependency problems. Learn how to classify a failure and what to fix in each case.</span></a><a href="/@odykyi/flaky-tests-and-ci/flaky-test-policy-for-teams/"><span class="lbl">Guide</span><b>A Flaky Test Policy for Teams: Owners, Budgets and Deadlines</b><span>A simple written policy that keeps flaky tests from piling up: who owns them, how many you tolerate, how long they live and when to delete.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Find Flaky Tests in CI Using Run History</title>
+<meta name="description" content="Use the GitHub API and plain scripts to find tests and workflows that flip between pass and fail, then rank them so you fix the worst first.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/find-flaky-tests-in-ci/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Find Flaky Tests in CI Using Run History">
+<meta property="og:description" content="Use the GitHub API and plain scripts to find tests and workflows that flip between pass and fail, then rank them so you fix the worst first.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/flaky-tests-and-ci/find-flaky-tests-in-ci/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Find Flaky Tests in CI Using Run History","description":"Use the GitHub API and plain scripts to find tests and workflows that flip between pass and fail, then rank them so you fix the worst first.","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/find-flaky-tests-in-ci/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Flaky Tests and Flaky CI","url":"https://pages.flisk.si/@odykyi/flaky-tests-and-ci/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How many runs do I need to call something flaky?","acceptedAnswer":{"@type":"Answer","text":"Look at the last 50 to 100 runs on the default branch. A few flips in that window is enough to investigate."}},{"@type":"Question","name":"Do pull request runs count?","acceptedAnswer":{"@type":"Answer","text":"They are noisier because code changes. Use default-branch runs or same-commit reruns for a clean signal."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/flaky-tests-and-ci/">Flaky Tests and Flaky CI</a></div>
+<section class="hero"><div><div class="lbl">Flaky Tests and Flaky CI</div><h1>How to Find Flaky Tests in CI Using Run History</h1><p class="dek">Use the GitHub API and plain scripts to find tests and workflows that flip between pass and fail, then rank them so you fix the worst first.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#start-with-workflow-runs">Start with workflow runs</a></li><li><a href="#same-sha-different-result">Same SHA, different result</a></li><li><a href="#go-down-to-the-test-level">Go down to the test level</a></li><li><a href="#use-a-dashboard-for-the-first-look">Use a dashboard for the first look</a></li><li><a href="#what-to-record">What to record</a></li><li><a href="#rank-before-you-fix">Rank before you fix</a></li></ol></nav></aside>
+<article><p>To find flaky tests, look for the same commit or the same workflow flipping between pass and fail across runs. You do not need a paid tool: the GitHub CLI gives you run history, and test reports give you per-test results.</p>
+
+<h2 id="start-with-workflow-runs">Start with workflow runs</h2>
+<p>Pull the last 100 runs of one workflow on the default branch. A workflow on the default branch should almost always be green, so a mixed history is a signal.</p><pre><code>gh run list --workflow ci.yml --branch main --limit 100 \
+  --json conclusion,headSha,createdAt \
+  &gt; runs.json</code></pre><p>Count the flips: how many times did the conclusion change from success to failure or back, when ordered by time?</p><pre><code>node -e '
+const r=require("./runs.json").filter(x=&gt;x.conclusion==="success"||x.conclusion==="failure")
+  .sort((a,b)=&gt;a.createdAt&lt;b.createdAt?-1:1);
+let f=0;for(let i=1;i&lt;r.length;i++)if(r[i].conclusion!==r[i-1].conclusion)f++;
+console.log("flips:",f,"of",r.length);
+'</code></pre>
+
+<h2 id="same-sha-different-result">Same SHA, different result</h2>
+<p>The strongest proof is two runs on one commit with different outcomes. Group by <code>headSha</code> and look for groups that contain both a success and a failure. That means the code did not change and the result did.</p><p>Retried jobs count too. When someone reruns a failed job and it passes, the run has more than one attempt. That run is a flake candidate even if the final status is green.</p>
+
+<h2 id="go-down-to-the-test-level">Go down to the test level</h2>
+<p>Workflow history tells you which pipeline is noisy. To find the test, make your runner write a machine-readable report and upload it as an artifact.</p><pre><code>pytest --junitxml=report.xml
+
+- uses: actions/upload-artifact@v4
+  if: always()
+  with:
+    name: junit-${{ github.run_id }}
+    path: report.xml</code></pre><p>Download a batch of reports with <code>gh run download</code> and count failing test names across runs. Names that fail in some runs and pass in others are your flaky list.</p>
+
+<h2 id="use-a-dashboard-for-the-first-look">Use a dashboard for the first look</h2>
+<p>If you want the workflow-level view without writing a script, <a href="https://cilytics.flisk.si">Cilytics</a> is a public CI health dashboard for GitHub. Open <code>https://cilytics.flisk.si/?repo=owner/name</code> and it shows flaky workflows, defined as flipping between pass and fail at least 3 times in the last 100 runs. Limits: it reads default-branch runs only, takes an hourly snapshot, and leaves out repos inactive for 90 days. It finds noisy workflows, not individual tests.</p>
+
+<h2 id="what-to-record">What to record</h2>
+<p>Whatever method you use, keep a small log with the date, the test or workflow name, the commit, the error text and the run link. Patterns appear quickly: the same error on the same step, failures clustered at certain hours when the runner pool is busy, or failures only on one operating system in the matrix. The error text is the most useful field, because identical messages across different commits usually mean one root cause.</p><p>Keep the log in an issue or a spreadsheet. The format matters less than the habit of writing every flake down instead of just clicking rerun.</p>
+
+<h2 id="rank-before-you-fix">Rank before you fix</h2>
+<p>Make a table: test or workflow, failures in the last 100 runs, minutes lost per failure. Multiply the last two. Fix the top three first. Then look at <a href="/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/">reproducing a flaky test locally</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>How many runs do I need to call something flaky?</summary><p>Look at the last 50 to 100 runs on the default branch. A few flips in that window is enough to investigate.</p></details><details><summary>Do pull request runs count?</summary><p>They are noisier because code changes. Use default-branch runs or same-commit reruns for a clean signal.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">See your flaky workflows</div><h3>Check which of your workflows flip between pass and fail.</h3><p>Cilytics is a public CI health dashboard for GitHub. Open any public repo and it lists workflows that flipped between pass and fail at least 3 times in the last 100 runs. No account needed.</p><pre><code>https://cilytics.flisk.si/?repo=owner/name</code></pre></div><div class="btns"><a class="btn primary" href="https://cilytics.flisk.si">Open Cilytics</a><a class="btn" href="https://flisk.sh/docs/">Flisk docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Flaky Tests and Flaky CI</span></div>
+<div class="rgrid"><a href="/@odykyi/flaky-tests-and-ci/reproduce-a-flaky-test-locally/"><span class="lbl">Guide</span><b>How to Reproduce a Flaky Test Locally</b><span>Run the suspect test in a loop, in random order, under CPU load and with the CI seed, until it fails on your machine. Commands for pytest, Jest, Go and Playwright.</span></a><a href="/@odykyi/flaky-tests-and-ci/rerun-failed-tests-in-github-actions/"><span class="lbl">Guide</span><b>Retry Failed Tests in GitHub Actions Without Hiding Bugs</b><span>Rerun failed jobs and retry single tests safely: gh run rerun, test-runner retries, and how to record every retry so flakes stay visible.</span></a><a href="/@odykyi/flaky-tests-and-ci/quarantine-flaky-tests/"><span class="lbl">Guide</span><b>How to Quarantine Flaky Tests Without Losing Coverage</b><span>Move a flaky test out of the blocking suite, keep running it, and put a deadline on it. A practical pattern with markers, tags and a separate non-blocking job.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">More topics</span></div><div class="rgrid"><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a><a href="/@odykyi/release-automation/"><span class="lbl">Topic 65</span><b>Release Automation</b><span>Versioning, changelogs, tags, publishing to npm and registries, and verifying a release from a workflow you can trust.</span></a><a href="/@odykyi/dependency-updates/"><span class="lbl">Topic 66</span><b>Dependency Updates Without Chaos</b><span>Run Dependabot or Renovate so updates arrive in reviewable batches, CI proves them, and security fixes land fast.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/"><span class="lbl">Topic 67</span><b>Make Your Repo Ready for Coding Agents</b><span>AGENTS.md, fast checks, clear commands and guard rails that let a coding agent work in your repository safely.</span></a><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
