@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Flaky tests in CI: find them, quarantine them, fix them</title>
+<meta name="description" content="A flaky test trains your team to ignore red builds. Here is how to detect flakes, move them out of the blocking path, and fix the usual causes.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/ci-guards-and-ai-code-review/flaky-tests-ci-quarantine/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Flaky tests in CI: find them, quarantine them, fix them">
+<meta property="og:description" content="A flaky test trains your team to ignore red builds. Here is how to detect flakes, move them out of the blocking path, and fix the usual causes.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/ci-guards-and-ai-code-review/flaky-tests-ci-quarantine/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"Flaky tests in CI: find them, quarantine them, fix them","description":"A flaky test trains your team to ignore red builds. Here is how to detect flakes, move them out of the blocking path, and fix the usual causes.","url":"https://pages.flisk.si/@odykyi/ci-guards-and-ai-code-review/flaky-tests-ci-quarantine/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"CI guards and AI code review","url":"https://pages.flisk.si/@odykyi/ci-guards-and-ai-code-review/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is deleting a flaky test acceptable?","acceptedAnswer":{"@type":"Answer","text":"Yes, if it tests nothing important or duplicates other coverage. A deleted test is better than one everyone ignores, but write down why."}},{"@type":"Question","name":"How many reruns should CI do?","acceptedAnswer":{"@type":"Answer","text":"At most one automatic retry for slow end-to-end tests, none for unit tests, and always report that a retry happened."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/ci-guards-and-ai-code-review/">CI guards and AI code review</a></div>
+<section class="hero"><div><div class="lbl">CI guards and AI code review</div><h1>Flaky tests in CI: find them, quarantine them, fix them</h1><p class="dek">A flaky test trains your team to ignore red builds. Here is how to detect flakes, move them out of the blocking path, and fix the usual causes.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>5 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#detect-them-with-data">Detect them with data</a></li><li><a href="#quarantine-do-not-ignore">Quarantine, do not ignore</a></li><li><a href="#the-usual-causes">The usual causes</a></li><li><a href="#retries-a-short-honest-rule">Retries: a short, honest rule</a></li><li><a href="#ai-written-tests-and-flakiness">AI-written tests and flakiness</a></li></ol></nav></aside>
+<article><p>Find flaky tests by re-running failures and recording which ones pass on retry, move them to a non-blocking quarantine job with an owner and a deadline, then fix the cause. Do not just add retries to everything.</p>
+
+<h2 id="detect-them-with-data">Detect them with data</h2>
+<p>You cannot fix what you cannot name. Run the suite several times on the same commit and list tests whose result differs. With pytest you can repeat a test to expose a flake:</p><pre><code>pip install pytest-repeat
+pytest tests/test_orders.py --count 30 -x
+</code></pre><p>Many frameworks have a similar option or a retry plugin. In CI, log every test that failed and then passed on retry. That list is your backlog.</p>
+
+<h2 id="quarantine-do-not-ignore">Quarantine, do not ignore</h2>
+<p>Move the flaky test out of the required job but keep running it so it stays visible:</p><pre><code># pytest
+@pytest.mark.flaky_quarantine
+def test_checkout_timeout(): ...
+
+# required job
+pytest -m "not flaky_quarantine"
+
+# non-blocking job
+pytest -m flaky_quarantine
+</code></pre><p>Give every quarantined test an owner and a date. A quarantine without a deadline is a graveyard. See <a href="/@odykyi/ci-guards-and-ai-code-review/github-actions-required-checks-branch-protection/">required checks</a> for making only the right job blocking.</p>
+
+<h2 id="the-usual-causes">The usual causes</h2>
+<ul><li><strong>Time.</strong> Tests that depend on the clock, time zones or sleep. Inject a fake clock.</li><li><strong>Order and shared state.</strong> One test leaves data behind. Isolate databases per test or per worker.</li><li><strong>Races.</strong> Waiting a fixed time for async work. Wait for a condition with a timeout instead.</li><li><strong>Network.</strong> Real calls to third parties. Stub them or use a recorded fixture.</li><li><strong>Ports and files.</strong> Two tests bind the same port. Use ephemeral ports and temporary directories.</li></ul>
+
+<h2 id="retries-a-short-honest-rule">Retries: a short, honest rule</h2>
+<p>One retry for end-to-end tests that touch a browser is a reasonable trade-off. Retries on unit tests hide real bugs. Whenever a test passes on retry, report it; a silent retry is a flake you will never see. Set a ratchet on the count of retried tests so the number only goes down (see <a href="/@odykyi/ci-guards-and-ai-code-review/ratchet-checks-in-ci/">ratchet checks</a>).</p>
+
+<h2 id="ai-written-tests-and-flakiness">AI-written tests and flakiness</h2>
+<p>A flake is a bug in the test or in the code under test, and sometimes the second is the real finding: a race condition in production code shows up first as a test that fails one run in fifty. Check before you blame the test. Tests produced by a coding agent are often flaky, because they pass once on the author's machine and assume timing. Ask for deterministic tests explicitly, run new tests several times before merging, and read the waiting and cleanup code. For working with agents in general see <a href="/@odykyi/coding-agents-in-practice/">coding agents in practice</a>.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Is deleting a flaky test acceptable?</summary><p>Yes, if it tests nothing important or duplicates other coverage. A deleted test is better than one everyone ignores, but write down why.</p></details><details><summary>How many reruns should CI do?</summary><p>At most one automatic retry for slow end-to-end tests, none for unit tests, and always report that a retry happened.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Run a guard, eval and loop setup on your own repo.</h3><p>GEL is Flisk's approach to CI guards, evals and nightly loops where a model proposes and a deterministic score decides. Read it, copy the parts you like.</p></div><div class="btns"><a class="btn primary" href="https://gel.flisk.si">Open GEL</a><a class="btn" href="https://github.com/flisk-sh/gel">See the repo</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">CI guards and AI code review</span></div>
+<div class="rgrid"><a href="/@odykyi/ci-guards-and-ai-code-review/secret-scanning-ci-guard/"><span class="lbl">Guide</span><b>Add a secret scanning guard to CI before a key leaks</b><span>A leaked API key is the most expensive mistake a repo can make. Add a secret scan to pull requests, know what to do on a hit, and keep agent output from committing keys.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/what-is-a-ci-guard/"><span class="lbl">Guide</span><b>What is a CI guard and which checks should you add first</b><span>A CI guard is a deterministic check that fails a pull request when a rule is broken. Here is what counts as one, which to add first, and what to leave out.</span></a><a href="/@odykyi/ci-guards-and-ai-code-review/ratchet-checks-in-ci/"><span class="lbl">Guide</span><b>Ratchet checks in CI: improve a metric without a big-bang fix</b><span>A ratchet fails the build only when a number gets worse. Use it to pay down lint warnings, missing types or untested files one pull request at a time.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">57 topics</span></div><div class="rgrid"><a href="/@odykyi/learn-ai-engineering/"><span class="lbl">Topic 56</span><b>Learn AI engineering by building</b><span>A practical path from first API call to a shipped agent: projects, practice sandboxes, portfolios and finding your first customer.</span></a><a href="/@odykyi/docs-and-readmes-for-agents/"><span class="lbl">Topic 57</span><b>Docs and READMEs for humans and agents</b><span>Write README files, llms.txt, AGENTS.md and docs that people skim and that coding agents can act on correctly.</span></a><a href="/@odykyi/ai-sandboxes-for-agents/"><span class="lbl">Topic 41</span><b>AI sandboxes for agents</b><span>Run code that an AI wrote without trusting it: containers, microVMs, network limits, snapshots and cost, from a laptop to a fleet.</span></a><a href="/@odykyi/coding-agents-in-practice/"><span class="lbl">Topic 42</span><b>Coding agents in practice</b><span>How to work with Claude Code, Codex and similar agents day to day: briefs, worktrees, review, limits and the habits that keep output good.</span></a><a href="/@odykyi/mcp-servers-in-production/"><span class="lbl">Topic 43</span><b>MCP servers in production</b><span>Authentication, transports, versioning, tool design, registries and monitoring for Model Context Protocol servers that real users depend on.</span></a><a href="/@odykyi/agent-evals-and-testing/"><span class="lbl">Topic 44</span><b>Testing and evaluating AI agents</b><span>Turn vague agent quality into test cases, graders, baselines and CI guards, without letting a model grade its own homework.</span></a><a href="/@odykyi/agent-memory-and-context/"><span class="lbl">Topic 45</span><b>Agent memory and context engineering</b><span>What to put in a context window, what to store outside it, and how sessions, checkpoints and summaries keep an agent coherent.</span></a><a href="/@odykyi/structured-outputs-and-prompts/"><span class="lbl">Topic 46</span><b>Prompts and structured outputs</b><span>Get reliable JSON, tool calls and repeatable behaviour from language models, and keep prompts in version control like code.</span></a><a href="/@odykyi/llm-cost-and-latency/"><span class="lbl">Topic 47</span><b>Cut LLM cost and latency</b><span>Caching, routing, batching, smaller models and streaming: practical ways to make an AI feature cheaper and faster.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
