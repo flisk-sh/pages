@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Use Pre-Commit Hooks With Coding Agents</title>
+<meta name="description" content="Hooks catch formatting, secrets and bad commits before they leave the agent&#39;s machine. Here is a setup that does not slow everyone down.">
+
+<link rel="canonical" href="https://pages.flisk.si/@odykyi/repo-ready-for-coding-agents/how-to-use-pre-commit-hooks-with-coding-agents/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How to Use Pre-Commit Hooks With Coding Agents">
+<meta property="og:description" content="Hooks catch formatting, secrets and bad commits before they leave the agent&#39;s machine. Here is a setup that does not slow everyone down.">
+<meta property="og:url" content="https://pages.flisk.si/@odykyi/repo-ready-for-coding-agents/how-to-use-pre-commit-hooks-with-coding-agents/">
+<meta name="twitter:card" content="summary">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="../style.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"TechArticle","headline":"How to Use Pre-Commit Hooks With Coding Agents","description":"Hooks catch formatting, secrets and bad commits before they leave the agent's machine. Here is a setup that does not slow everyone down.","url":"https://pages.flisk.si/@odykyi/repo-ready-for-coding-agents/how-to-use-pre-commit-hooks-with-coding-agents/","inLanguage":"en","dateModified":"2026-11-16","datePublished":"2026-11-16","author":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"publisher":{"@type":"Organization","name":"Flisk","url":"https://flisk.sh/"},"isPartOf":{"@type":"CollectionPage","name":"Make Your Repo Ready for Coding Agents","url":"https://pages.flisk.si/@odykyi/repo-ready-for-coding-agents/"}},{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Can an agent skip hooks?","acceptedAnswer":{"@type":"Answer","text":"Yes, with git flags like --no-verify, unless a rule or tool setting blocks it. That is why CI must repeat the checks."}},{"@type":"Question","name":"What belongs in a hook versus CI?","acceptedAnswer":{"@type":"Answer","text":"Fast checks on staged files belong in hooks. Slow suites, builds and anything needing services belong in CI."}}]}]}</script>
+</head>
+<body><div class="frame">
+<header class="top"><a class="brand" href="/@odykyi/microservices-local-dev/"><i></i>Flisk guides</a><nav><a href="/@odykyi/ai-sandboxes-for-agents/">AI sandboxes</a><a href="/@odykyi/coding-agents-in-practice/">Coding agents</a><a href="/@odykyi/mcp-servers-in-production/">MCP</a><a href="/@odykyi/get-found-by-ai-search/">AI search</a><a href="https://github.com/flisk-sh/flisk">GitHub</a></nav></header>
+<div class="crumbs"><a href="/@odykyi/">Flisk guides</a><span>/</span><a href="/@odykyi/repo-ready-for-coding-agents/">Make Your Repo Ready for Coding Agents</a></div>
+<section class="hero"><div><div class="lbl">Make Your Repo Ready for Coding Agents</div><h1>How to Use Pre-Commit Hooks With Coding Agents</h1><p class="dek">Hooks catch formatting, secrets and bad commits before they leave the agent&#39;s machine. Here is a setup that does not slow everyone down.</p></div>
+<aside><dl class="meta"><dt class="lbl">Reading time</dt><dd>4 min</dd><dt class="lbl">Updated</dt><dd>2026-11-16</dd><dt class="lbl">Tool</dt><dd><a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a></dd></dl></aside></section>
+<div class="band"></div>
+<div class="layout"><aside class="toc"><nav aria-label="On this page"><div class="lbl">On this page</div><ol><li><a href="#why-hooks-suit-agents">Why hooks suit agents</a></li><li><a href="#set-up-the-pre-commit-framework">Set up the pre-commit framework</a></li><li><a href="#keep-hooks-fast">Keep hooks fast</a></li><li><a href="#do-not-trust-hooks-alone">Do not trust hooks alone</a></li><li><a href="#agent-tool-hooks-are-a-different-thing">Agent tool hooks are a different thing</a></li><li><a href="#a-practical-starter-set">A practical starter set</a></li></ol></nav></aside>
+<article><p>Use pre-commit hooks for fast, deterministic checks like formatting, secret scanning and file-size limits, and leave slow tests to CI. When an agent commits, a failing hook gives it immediate feedback it can act on.</p>
+
+<h2 id="why-hooks-suit-agents">Why hooks suit agents</h2>
+<p>An agent that commits gets the hook output right away and can fix the problem in the same session. That is cheaper than a CI failure ten minutes later. Hooks also keep the diff clean: formatted code means reviewers see only the real change.</p>
+
+<h2 id="set-up-the-pre-commit-framework">Set up the pre-commit framework</h2>
+<p>The <code>pre-commit</code> tool keeps hooks in a versioned config file, so everyone gets the same ones.</p><pre><code>pip install pre-commit
+pre-commit install</code></pre><pre><code># .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-merge-conflict</code></pre><p>Pin <code>rev</code> to a release you have checked. Husky and lint-staged are common alternatives in JavaScript projects.</p>
+
+<h2 id="keep-hooks-fast">Keep hooks fast</h2>
+<p>A hook that takes 40 seconds teaches people, and agents, to bypass it. Run only on staged files, and keep the total under about ten seconds. Move type checking of the whole project and test runs to CI or to the explicit check command described in <a href='/@odykyi/repo-ready-for-coding-agents/how-to-give-an-agent-a-fast-check-command/'>one fast check command</a>.</p>
+
+<h2 id="do-not-trust-hooks-alone">Do not trust hooks alone</h2>
+<p>Hooks live on the developer's machine and can be skipped with <code>--no-verify</code>. Run the same checks in CI so skipping them locally changes nothing. Add a line to AGENTS.md saying that bypassing hooks is not allowed, and consider a CI check that fails when the formatting step would change files.</p>
+
+<h2 id="agent-tool-hooks-are-a-different-thing">Agent tool hooks are a different thing</h2>
+<p>Some agent tools have their own hooks that run before or after a tool call. These are configured in the tool's settings and can block risky commands. They complement git hooks and do not replace them. Check your tool's documentation for the events it supports.</p>
+
+<h2 id="a-practical-starter-set">A practical starter set</h2>
+<p>A good first set is small and fast: trailing whitespace and end-of-file fixes, a large-file check, a merge-conflict marker check, a secret scanner and your formatter in check mode. Add the linter for staged files only, using a tool such as lint-staged so it does not scan the whole project.</p><pre><code>npx husky init
+echo 'npx lint-staged' &gt; .husky/pre-commit</code></pre><p>Configure lint-staged in <code>package.json</code> to map file globs to commands, for example formatting TypeScript files and running ESLint on them. In Python projects the same role is played by the pre-commit framework shown above with ruff or black.</p><p>When a hook fails, make sure the message says how to fix it. An agent reads the output and acts on it, so "run npm run fix" is far better than a bare error code. Review the hook list yearly and remove anything nobody would miss.</p>
+<section class="faq"><h2 id="faq">Questions people ask</h2><details><summary>Can an agent skip hooks?</summary><p>Yes, with git flags like --no-verify, unless a rule or tool setting blocks it. That is why CI must repeat the checks.</p></details><details><summary>What belongs in a hook versus CI?</summary><p>Fast checks on staged files belong in hooks. Slow suites, builds and anything needing services belong in CI.</p></details></section>
+</article></div>
+<section class="cta"><div><div class="lbl">Try it</div><h3>Give your agent a repo it can run on the first try.</h3><p>Flisk is an open-source CLI that starts a project's services, databases and queues locally from one <code>service.json</code> per service, so an agent gets one command to bring the stack up.</p><pre><code>npx @flisk-sh/flisk demo</code></pre></div><div class="btns"><a class="btn primary" href="https://github.com/flisk-sh/flisk">Flisk on GitHub</a><a class="btn" href="https://flisk.sh/docs/">Read the docs</a></div></section>
+<div class="sec-h"><h2>Read next</h2><span class="lbl">Make Your Repo Ready for Coding Agents</span></div>
+<div class="rgrid"><a href="/@odykyi/repo-ready-for-coding-agents/how-to-check-if-your-repo-is-agent-ready/"><span class="lbl">Guide</span><b>How to Check If Your Repo Is Ready for Coding Agents</b><span>A short checklist and two free tools to score your repository on instructions, fast checks, CI health and README quality before you hand it to a coding agent.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/how-to-write-an-agents-md/"><span class="lbl">Guide</span><b>How to Write an AGENTS.md That Coding Agents Follow</b><span>A short AGENTS.md with exact commands, boundaries and traps beats a long essay. Here is what to put in, what to leave out and how to keep it true.</span></a><a href="/@odykyi/repo-ready-for-coding-agents/agents-md-vs-claude-md/"><span class="lbl">Guide</span><b>AGENTS.md vs CLAUDE.md: Which One Should You Keep?</b><span>Different coding agents read different instruction files. Here is how to keep one source of truth and avoid two files that drift apart.</span></a></div>
+<div class="sec-h"><h2>More guides</h2><span class="lbl">12 new guides spaces</span></div><div class="rgrid"><a href="/@odykyi/ci-for-agent-pull-requests/"><span class="lbl">Topic 68</span><b>CI for Agent-Written Pull Requests</b><span>Gates, merge queues and review habits for a flood of pull requests written by coding agents.</span></a><a href="/@odykyi/org-wide-ci-visibility/"><span class="lbl">Topic 69</span><b>Org-Wide CI Visibility</b><span>See the health of every repository in an organisation at once: dashboards, red lists, ownership and a weekly review that works.</span></a><a href="/@odykyi/flaky-tests-and-ci/"><span class="lbl">Topic 58</span><b>Flaky Tests and Flaky CI</b><span>Find, reproduce and fix tests and workflows that pass and fail without a code change, and stop them from eroding trust in CI.</span></a><a href="/@odykyi/faster-github-actions/"><span class="lbl">Topic 59</span><b>Faster GitHub Actions</b><span>Cut pipeline time with caching, matrices, concurrency, path filters and smaller jobs, and measure what actually got faster.</span></a><a href="/@odykyi/ci-metrics-that-matter/"><span class="lbl">Topic 60</span><b>CI Metrics That Matter</b><span>Pass rate, median and p90 run time, flip counts and mean time to green: what to measure, how to compute it and what to ignore.</span></a><a href="/@odykyi/github-actions-security/"><span class="lbl">Topic 61</span><b>GitHub Actions Security</b><span>Pin actions, limit token permissions, handle secrets and untrusted pull requests, and audit workflows before an attacker does.</span></a><a href="/@odykyi/open-source-repo-health/"><span class="lbl">Topic 62</span><b>Open-Source Repo Health</b><span>The files, settings and habits that make a public repository trustworthy: license, README, contributing guide, security policy and more.</span></a><a href="/@odykyi/monorepo-ci/"><span class="lbl">Topic 63</span><b>Monorepo CI</b><span>Run only what changed, share caches, split jobs and keep a monorepo pipeline fast and readable as it grows.</span></a><a href="/@odykyi/debugging-ci-failures/"><span class="lbl">Topic 64</span><b>Debugging CI Failures</b><span>A practical routine for reading logs, reproducing failures locally and telling a real regression from an environment problem.</span></a></div>
+<footer><span>Flisk guides. Written for developers building with AI and running multi-service apps locally. <a href="https://github.com/flisk-sh/flisk">flisk-sh/flisk</a> is MIT licensed.</span><span><a href="https://flisk.sh/">flisk.sh</a></span></footer>
+</div></body></html>
