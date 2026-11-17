@@ -103,8 +103,8 @@ describe("files for crawlers", () => {
 
 	it("sitemap-site.xml lists the home page, about and each publisher", async () => {
 		const xml = await page("/sitemap-site.xml");
-		expect(xml).toContain(
-			"<loc>https://tool.test/</loc><lastmod>2026-10-28</lastmod>",
+		expect(xml).toMatch(
+			/<loc>https:\/\/tool\.test\/<\/loc>(<xhtml:link[^>]+>)+<lastmod>2026-10-28<\/lastmod>/,
 		);
 		expect(xml).toContain("<loc>https://tool.test/about</loc>");
 		expect(xml).toContain("<loc>https://tool.test/@sam/</loc>");
@@ -115,7 +115,9 @@ describe("files for crawlers", () => {
 		expect(xml).toContain(
 			"<loc>https://tool.test/@sam/gpu-explainer/</loc><lastmod>2026-10-27</lastmod>",
 		);
-		expect(xml).toContain("<loc>https://tool.test/@sam/gpu-explainer/part-two/</loc>");
+		expect(xml).toContain(
+			"<loc>https://tool.test/@sam/gpu-explainer/part-two/</loc>",
+		);
 		expect((await app.request("/@nobody/sitemap.xml")).status).toBe(404);
 	});
 

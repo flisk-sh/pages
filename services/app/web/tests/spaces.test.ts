@@ -170,7 +170,10 @@ describe("the site around the spaces", () => {
 		const html = await (await get("/")).text();
 		expect(html).toContain("How GPUs work");
 		expect(html).toContain("default-src 'none'");
-		expect(html).toContain("script-src https://flisk.si https://flisk.sh;");
+		// The one inline script is the language picker, allowed by its hash and nothing else inline.
+		expect(html).toMatch(
+			/script-src 'sha256-[^']+' https:\/\/flisk\.si https:\/\/flisk\.sh;/,
+		);
 		expect(html).toContain("connect-src https://analytics.flisk.si;");
 		expect(html.match(/<script src/g)).toHaveLength(1);
 		expect(html).toContain(

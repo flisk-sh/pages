@@ -1,5 +1,6 @@
 // Search, link previews and AI answers: the <head> of every page, JSON-LD, robots.txt, sitemap.xml, llms.txt,
 // site.webmanifest and security.txt. All of it comes from SITE (site.ts) and the address the site is served at.
+import { COPY, DEFAULT_LANG, LANGS, type Lang, LOCALE, langPath } from "./i18n";
 import { SITE } from "./site";
 
 export const esc = (s: string) =>
@@ -32,6 +33,10 @@ export interface PageMeta {
 	noindex?: boolean;
 	/** Extra JSON-LD nodes for this page, added to the site's own graph. */
 	jsonLd?: object[];
+	/** The page's language; English when absent. `path` already carries the language's prefix ("hi/about"). */
+	lang?: Lang;
+	/** The same page in every language, as paths under the site, for hreflang. Absent: the page has one language. */
+	alt?: Partial<Record<Lang, string>>;
 	/** Breadcrumbs after Home, for BreadcrumbList JSON-LD. */
 	crumbs?: { name: string; path: string }[];
 }
@@ -39,7 +44,10 @@ export interface PageMeta {
 /** `base` is the site address without the trailing slash: https://example.com, or …/api/web behind Flisk's proxy. */
 export function head(base: string, page: PageMeta): string {
 	const url = `${base}/${page.path}`;
-	const title = page.path ? `${page.title} · ${SITE.name}` : page.title;
+	const lang = page.lang ?? DEFAULT_LANG;
+	const text = COPY[lang];
+	const isHome = page.path === langPath(lang, "");
+	const title = isHome ? page.title : `${page.title} · ${SITE.name}`;
 	const root = new URL(`${base}/`).pathname.replace(/\/$/, "");
 	const tags = [
 		'<meta charset="utf-8">',
@@ -47,6 +55,15 @@ export function head(base: string, page: PageMeta): string {
 		`<title>${esc(title)}</title>`,
 		`<meta name="description" content="${esc(page.description)}">`,
 		`<link rel="canonical" href="${esc(url)}">`,
+		...(page.alt
+			? [
+					...LANGS.filter((l) => page.alt?.[l] !== undefined).map(
+						(l) =>
+							`<link rel="alternate" hreflang="${l}" href="${esc(`${base}/${page.alt?.[l]}`)}">`,
+					),
+					`<link rel="alternate" hreflang="x-default" href="${esc(`${base}/${page.alt[DEFAULT_LANG] ?? ""}`)}">`,
+				]
+			: []),
 		page.noindex
 			? '<meta name="robots" content="noindex">'
 			: '<meta name="robots" content="index,follow,max-image-preview:large">',
@@ -60,14 +77,17 @@ export function head(base: string, page: PageMeta): string {
 		`<link rel="alternate" type="text/plain" href="${root}/llms.txt" title="llms.txt">`,
 		`<meta property="og:type" content="website">`,
 		`<meta property="og:site_name" content="${esc(SITE.name)}">`,
-		`<meta property="og:locale" content="${SITE.locale}">`,
+		`<meta property="og:locale" content="${LOCALE[lang]}">`,
+		...LANGS.filter((l) => l !== lang && page.alt?.[l] !== undefined).map(
+			(l) => `<meta property="og:locale:alternate" content="${LOCALE[l]}">`,
+		),
 		`<meta property="og:url" content="${esc(url)}">`,
 		`<meta property="og:title" content="${esc(title)}">`,
 		`<meta property="og:description" content="${esc(page.description)}">`,
 		`<meta property="og:image" content="${esc(`${base}/${ICONS.og}`)}">`,
 		'<meta property="og:image:width" content="1200">',
 		'<meta property="og:image:height" content="630">',
-		`<meta property="og:image:alt" content="${esc(`${SITE.name}: ${SITE.tagline}`)}">`,
+		`<meta property="og:image:alt" content="${esc(`${SITE.name}: ${text.tagline}`)}">`,
 		'<meta name="twitter:card" content="summary_large_image">',
 		SITE.twitter ? `<meta name="twitter:site" content="${SITE.twitter}">` : "",
 		`<script type="application/ld+json">${jsonLd(base, page)}</script>`,
@@ -77,6 +97,8 @@ export function head(base: string, page: PageMeta): string {
 
 /** One schema.org @graph: the WebSite, who makes it, the app itself, and the page's own nodes. */
 export function jsonLd(base: string, page: PageMeta): string {
+	const lang = page.lang ?? DEFAULT_LANG;
+	const description = COPY[lang].description;
 	const home = `${base}/`;
 	const graph: object[] = [
 		{
@@ -84,8 +106,8 @@ export function jsonLd(base: string, page: PageMeta): string {
 			"@id": `${home}#website`,
 			url: home,
 			name: SITE.name,
-			description: SITE.description,
-			inLanguage: SITE.lang,
+			description,
+			inLanguage: lang,
 			publisher: { "@id": `${home}#publisher` },
 		},
 		{
@@ -101,7 +123,7 @@ export function jsonLd(base: string, page: PageMeta): string {
 			"@id": `${home}#app`,
 			name: SITE.name,
 			url: home,
-			description: SITE.description,
+			description,
 			applicationCategory: "DeveloperApplication",
 			operatingSystem: "Any",
 			isAccessibleForFree: true,
@@ -129,9 +151,10 @@ export function jsonLd(base: string, page: PageMeta): string {
 	}).replace(/</g, "\\u003c");
 }
 
-export const faqJsonLd = () => ({
+export const faqJsonLd = (lang: Lang = DEFAULT_LANG) => ({
 	"@type": "FAQPage",
-	mainEntity: SITE.faq.map((f) => ({
+	inLanguage: lang,
+	mainEntity: COPY[lang].faq.map((f) => ({
 		"@type": "Question",
 		name: f.q,
 		acceptedAnswer: { "@type": "Answer", text: f.a },
@@ -159,19 +182,36 @@ export function robotsTxt(base: string): string {
 
 export function sitemapXml(
 	base: string,
-	entries: { path: string; lastmod: string }[],
+	entries: {
+		path: string;
+		lastmod: string;
+		/** The page in each language, including this one: written as xhtml:link alternates. */
+		alt?: Partial<Record<Lang, string>>;
+	}[],
 ) {
 	const urls = entries
-		.map(
-			(e) =>
-				`<url><loc>${esc(`${base}/${e.path}`)}</loc><lastmod>${e.lastmod}</lastmod></url>`,
-		)
+		.map((e) => {
+			const alts = e.alt
+				? [
+						...LANGS.filter((l) => e.alt?.[l] !== undefined).map(
+							(l) =>
+								`<xhtml:link rel="alternate" hreflang="${l}" href="${esc(`${base}/${e.alt?.[l]}`)}"/>`,
+						),
+						`<xhtml:link rel="alternate" hreflang="x-default" href="${esc(`${base}/${e.alt[DEFAULT_LANG] ?? ""}`)}"/>`,
+					].join("")
+				: "";
+			return `<url><loc>${esc(`${base}/${e.path}`)}</loc>${alts}<lastmod>${e.lastmod}</lastmod></url>`;
+		})
 		.join("");
-	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>\n`;
+	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${urls}</urlset>\n`;
 }
 
 /** A sitemap index: the list of sitemap files, one per publisher plus one for the site's own pages. */
-export function sitemapIndexXml(base: string, paths: string[], lastmod: string) {
+export function sitemapIndexXml(
+	base: string,
+	paths: string[],
+	lastmod: string,
+) {
 	const items = paths
 		.map(
 			(p) =>

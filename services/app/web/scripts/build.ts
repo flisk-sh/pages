@@ -9,6 +9,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { createApp, SHARE_JS_PATH } from "../src/app";
 import { validId } from "../src/check.mjs";
+import { LANGS, langPath } from "../src/i18n";
 import { DEMO } from "../src/pages";
 import { ICONS } from "../src/seo";
 import { SITE } from "../src/site";
@@ -105,6 +106,11 @@ export async function build(meta: Record<string, SpaceGit>) {
 		["/", "index.html"],
 		["/about", "about.html"],
 		["/share", "share.html"],
+		...LANGS.filter((l) => l !== "en").flatMap((l): [string, string][] => [
+			[`/${l}/`, `${l}/index.html`],
+			[`/${l}/about`, `${l}/about.html`],
+			[`/${l}/share`, `${l}/share.html`],
+		]),
 		[SHARE_JS_PATH, SHARE_JS_PATH.slice(1)],
 		["/seal.js", "seal.js"],
 
@@ -122,9 +128,13 @@ export async function build(meta: Record<string, SpaceGit>) {
 	for (const [path, file] of site) await write(path, file);
 	for (const handle of new Set(
 		spaces.filter((s) => !s.unlisted).map((s) => s.handle),
-	))
-	{
+	)) {
 		await write(`/@${handle}/`, `@${handle}/index.html`);
+		for (const l of LANGS.filter((x) => x !== "en"))
+			await write(
+				`/${langPath(l, `@${handle}/`)}`,
+				`${l}/@${handle}/index.html`,
+			);
 		await write(`/@${handle}/sitemap.xml`, `@${handle}/sitemap.xml`);
 	}
 	for (const s of spaces) {

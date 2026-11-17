@@ -18,8 +18,8 @@ describe("the share page", () => {
 
 	it("counts visits like every page, and the policy lets the script and its beacon through", async () => {
 		const html = await (await get("/share")).text();
-		expect(html).toContain(
-			"script-src 'self' https://flisk.si https://flisk.sh;",
+		expect(html).toMatch(
+			/script-src 'self' 'sha256-[^']+' https:\/\/flisk\.si https:\/\/flisk\.sh;/,
 		);
 		expect(html).toContain("connect-src https://analytics.flisk.si;");
 		expect(html).toContain(
@@ -74,7 +74,7 @@ describe("pasting instead of a file", () => {
 describe("names are optional", () => {
 	it("one file is made when no names are typed", async () => {
 		const js = await (await get(SHARE_JS_PATH)).text();
-		expect(js).toContain('"Recipient 1"');
+		expect(js).toContain('"Recipient"');
 	});
 });
 
