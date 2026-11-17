@@ -1,9 +1,0 @@
-{
-  "mode": "report",
-  "guards": {
-    "secret-scan": "report",
-    "pinned-actions": "report",
-    "dead-links": "report",
-    "done-without-green": "report"
-  }
-}
