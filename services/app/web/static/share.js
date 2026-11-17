@@ -4,6 +4,8 @@ import { normalize, sealPage } from "./seal.js";
 const form = document.getElementById("f");
 const out = document.getElementById("out");
 const msg = document.getElementById("m");
+// The words come from the page (data-* on the form, in the page's language); these are the English fallbacks.
+const say = (key, fallback) => form.dataset[key] || fallback;
 const fmt = (p) => normalize(p).replace(/(.{4})(?=.)/g, "$1-");
 
 form.addEventListener("submit", async (e) => {
@@ -20,17 +22,22 @@ form.addEventListener("submit", async (e) => {
 				.filter(Boolean),
 		),
 	];
-	if (names.length === 0) names.push("Recipient 1");
+	if (names.length === 0) names.push(`${say("recipient", "Recipient")} 1`);
 	if (!file && !pasted.trim()) {
-		msg.textContent = "Choose a .html file or paste its HTML first.";
+		msg.textContent = say(
+			"need",
+			"Choose a .html file or paste its HTML first.",
+		);
 		return;
 	}
 	if (!globalThis.crypto?.subtle) {
-		msg.textContent =
-			"This browser cannot make private files. Use a current browser on https.";
+		msg.textContent = say(
+			"nocrypto",
+			"This browser cannot make private files. Use a current browser on https.",
+		);
 		return;
 	}
-	msg.textContent = "Sealing in this browser…";
+	msg.textContent = say("sealing", "Sealing in this browser…");
 	const page = file
 		? new Uint8Array(await file.arrayBuffer())
 		: new TextEncoder().encode(pasted);
@@ -39,7 +46,12 @@ form.addEventListener("submit", async (e) => {
 		const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
 		const card = document.createElement("section");
 		card.className = "card";
-		card.innerHTML = `<h2></h2><p class="pass"></p><label><input type="checkbox"> I have saved this passphrase somewhere safe, and I will send it by a different channel than the file.</label><p><a class="btn" download="private-page.html">Download file</a></p>`;
+		card.innerHTML = `<h2></h2><p class="pass"></p><label><input type="checkbox"><span></span></label><p><a class="btn" download="private-page.html"></a></p>`;
+		card.querySelector("span").textContent = say(
+			"saved",
+			"I have saved this passphrase somewhere safe, and I will send it by a different channel than the file.",
+		);
+		card.querySelector("a").textContent = say("download", "Download file");
 		card.querySelector("h2").textContent = name;
 		card.querySelector(".pass").textContent = fmt(passphrase);
 		const link = card.querySelector("a");
@@ -54,5 +66,8 @@ form.addEventListener("submit", async (e) => {
 		);
 		out.append(card);
 	}
-	msg.textContent = "Done. The passphrase is shown once. Nothing was uploaded.";
+	msg.textContent = say(
+		"done",
+		"Done. The passphrase is shown once. Nothing was uploaded.",
+	);
 });

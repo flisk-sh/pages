@@ -6,6 +6,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { extname, join, normalize } from "node:path";
 import { Hono } from "hono";
 import { ASSETS } from "./assets.generated";
+import { LANGS, type Lang, langPath } from "./i18n";
 import {
 	aboutPage,
 	DEMO,
@@ -108,6 +109,10 @@ export function byHandle(spaces: Space[]): Map<string, Space[]> {
 	return out;
 }
 
+/** The same page in every language, for the sitemap's hreflang alternates. */
+const alt = (rel: string) =>
+	Object.fromEntries(LANGS.map((l) => [l, langPath(l, rel)]));
+
 export function createApp(options: AppOptions = {}) {
 	const served = options.spaces ?? [];
 	// Shared pages open by their link but are never listed: not on a home page, a handle, spaces.json or the sitemap.
@@ -137,6 +142,26 @@ export function createApp(options: AppOptions = {}) {
 
 	// The site's own pages
 	app.get("/", (c) => c.html(homePage(baseOf(c), spaces)));
+	// Every other language is the same pages under its code: /hi/, /hi/about, /hi/share, /hi/@handle/.
+	// English is the default and is not repeated under /en/.
+	for (const lang of LANGS.filter((l) => l !== "en") as Lang[]) {
+		app.get(`/${lang}`, (c) => c.redirect(`/${lang}/`, 301));
+		app.get(`/${lang}/`, (c) =>
+			c.html(homePage(baseOf(c), spaces, undefined, lang)),
+		);
+		app.get(`/${lang}/about`, (c) => c.html(aboutPage(baseOf(c), lang)));
+		app.get(`/${lang}/share`, (c) =>
+			c.html(
+				sharePage(baseOf(c), shareBundle.integrity, shareBundle.path, lang),
+			),
+		);
+		app.get(`/${lang}/:at{@[a-z0-9-]+}/`, (c) => {
+			const list = handles.get(c.req.param("at").slice(1));
+			return list
+				? c.html(handlePage(baseOf(c), list[0].handle, list, undefined, lang))
+				: c.html(notFoundPage(baseOf(c)), 404);
+		});
+	}
 	app.get("/about", (c) => c.html(aboutPage(baseOf(c))));
 	app.get("/share", (c) =>
 		c.html(sharePage(baseOf(c), shareBundle.integrity, shareBundle.path)),
@@ -182,12 +207,17 @@ export function createApp(options: AppOptions = {}) {
 	app.get("/sitemap-site.xml", (c) =>
 		xml(
 			sitemapXml(baseOf(c), [
-				{ path: "", lastmod },
-				{ path: "about", lastmod },
-				...[...handles].map(([h, list]) => ({
-					path: `@${h}/`,
-					lastmod: list[0].updated.slice(0, 10),
-				})),
+				...LANGS.flatMap((l) => [
+					{ path: langPath(l, ""), lastmod, alt: alt("") },
+					{ path: langPath(l, "about"), lastmod, alt: alt("about") },
+				]),
+				...[...handles].flatMap(([h, list]) =>
+					LANGS.map((l) => ({
+						path: langPath(l, `@${h}/`),
+						lastmod: list[0].updated.slice(0, 10),
+						alt: alt(`@${h}/`),
+					})),
+				),
 			]),
 		),
 	);
@@ -197,7 +227,11 @@ export function createApp(options: AppOptions = {}) {
 		if (!list) return c.html(notFoundPage(baseOf(c)), 404);
 		return xml(
 			sitemapXml(baseOf(c), [
-				{ path: `@${h}/`, lastmod: list[0].updated.slice(0, 10) },
+				...LANGS.map((l) => ({
+					path: langPath(l, `@${h}/`),
+					lastmod: list[0].updated.slice(0, 10),
+					alt: alt(`@${h}/`),
+				})),
 				...list.flatMap((s) => [
 					{ path: spacePath(s), lastmod: s.updated.slice(0, 10) },
 					...subPages(s).map((p) => ({
