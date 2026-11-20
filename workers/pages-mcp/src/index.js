@@ -47,6 +47,8 @@ const app = {
     if (hit && (request.method === "GET" || request.method === "HEAD")) {
       return new Response(request.method === "HEAD" ? null : hit[1], { headers: { "content-type": hit[0], "cache-control": "public, max-age=86400", "access-control-allow-origin": "*" } });
     }
+    // The /api/* route exists only so JSON callers get a JSON error instead of the static site's HTML 404 page.
+    if (pathname.startsWith("/api/")) return json({ error: "not found", hint: "No such API route." }, 404);
     return json({ error: "not_found", hint: "The MCP server is at /mcp" }, 404);
   },
 };

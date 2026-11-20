@@ -329,6 +329,11 @@ export function createApp(options: AppOptions = {}) {
 			});
 		});
 
-	app.notFound((c) => c.html(notFoundPage(baseOf(c)), 404));
+	// API callers get a short JSON error (as on the jobs board); browsers keep the HTML 404 page.
+	app.notFound((c) => {
+		if (c.req.path.startsWith("/api/"))
+			return c.json({ error: "not found", hint: "No such API route." }, 404);
+		return c.html(notFoundPage(baseOf(c)), 404);
+	});
 	return app;
 }
