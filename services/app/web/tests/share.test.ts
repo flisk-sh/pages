@@ -21,7 +21,7 @@ describe("the share page", () => {
 		expect(html).toMatch(
 			/script-src 'self' 'sha256-[^']+' https:\/\/flisk\.si https:\/\/flisk\.sh;/,
 		);
-		expect(html).toContain("connect-src https://analytics.flisk.si;");
+		expect(html).toContain("connect-src https://analytics.flisk.si https://flisk.si;");
 		expect(html).toContain(
 			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script>',
 		);

@@ -174,10 +174,10 @@ describe("the site around the spaces", () => {
 		expect(html).toMatch(
 			/script-src 'sha256-[^']+' https:\/\/flisk\.si https:\/\/flisk\.sh;/,
 		);
-		expect(html).toContain("connect-src https://analytics.flisk.si;");
+		expect(html).toContain("connect-src https://analytics.flisk.si https://flisk.si;");
 		expect(html.match(/<script src/g)).toHaveLength(1);
 		expect(html).toContain(
-			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script>',
+			'<script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" data-product="Pages" data-icon="put-my-page-online" data-accent="#2d4cc8" data-text="Put a page online with a public link in one step." defer></script>',
 		);
 	});
 
