@@ -12,6 +12,10 @@ compatibility_flags = ["nodejs_compat"]
 routes = [
   { pattern = "pages.flisk.si/mcp*", zone_name = "flisk.si" },
   { pattern = "pages.flisk.si/api/*", zone_name = "flisk.si" },
+  # The MCP Server Card, at its two well-known paths. Exact paths only: other /.well-known/ paths and the user pages
+  # under /@<login>/<name> stay on the static site.
+  { pattern = "pages.flisk.si/.well-known/mcp-server-card.json", zone_name = "flisk.si" },
+  { pattern = "pages.flisk.si/.well-known/mcp/server-card.json", zone_name = "flisk.si" },
 ]
 
 [vars]
