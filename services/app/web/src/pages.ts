@@ -19,7 +19,7 @@ import { links, type Space, spacePath } from "./spaces";
 // Spaces are previewed live in sandboxed frames (no allow-same-origin, so a space cannot reach this page), and
 // publishers' GitHub avatars, the DevHunt footer badge and Flisk org-bar icons are the images from elsewhere.
 const policyFor = (lang: Lang) =>
-	`default-src 'none'; script-src ${lang === DEFAULT_LANG ? `${DETECT_HASH} ` : ""}https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si; style-src 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com https://devhunt.org https://flisk.si; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'`;
+	`default-src 'none'; script-src ${lang === DEFAULT_LANG ? `${DETECT_HASH} ` : ""}https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si https://flisk.si; style-src 'unsafe-inline' https://flisk.si; font-src https://flisk.si; img-src 'self' https://avatars.githubusercontent.com https://devhunt.org https://flisk.si; media-src 'self'; frame-src 'self'; base-uri 'none'; form-action 'none'`;
 
 const STYLE = `
 :root{--bg:${SITE.themeColor.light};--fg:#141413;--muted:#66625b;--faint:#97928a;--line:#e7e2d8;--line2:#d6d0c3;--card:#fff;--soft:#f3f0e9;--accent:#2d4cc8;--accent2:#5b74ff;--mark:#ffe27a;--ink:#141413;--onink:#f4f2ec;--shadow:0 1px 2px rgba(20,20,19,.06),0 12px 40px -12px rgba(20,20,19,.18)}
@@ -136,7 +136,7 @@ function layout(
 	return `<!doctype html><html lang="${lang}"><head>
 <meta http-equiv="Content-Security-Policy" content="${policy}">
 ${head(base, meta)}
-${lang === DEFAULT_LANG ? `<script>${DETECT}</script>\n` : ""}<style>${STYLE}</style><script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" defer></script></head><body>
+${lang === DEFAULT_LANG ? `<script>${DETECT}</script>\n` : ""}<style>${STYLE}</style><script defer data-domain="pages.flisk.si" src="https://flisk.sh/a.js"></script><script src="https://flisk.si/assets/bar.js" data-product="Pages" data-icon="put-my-page-online" data-accent="#2d4cc8" data-text="Put a page online with a public link in one step." defer></script></head><body>
 <header class="top"><div class="wrap"><a class="brand" href="${home}"><img src="${root}/icon.svg" alt="" width="26" height="26">${esc(SITE.name)}<span>.flisk.si</span></a><nav aria-label="${esc(t.navLabel)}"><a class="hide-sm" href="${home}#spaces">${esc(t.navSpaces)}</a><a class="hide-sm" href="${home}#how">${esc(t.navHow)}</a><a href="${about}">${esc(t.navFaq)}</a><a class="gh" href="${SITE.repo}">GitHub</a></nav></div></header>
 <main>
 ${body}
@@ -336,7 +336,7 @@ export function aboutPage(base: string, lang: Lang = DEFAULT_LANG): string {
 
 // The share page runs one same-origin script and nothing else. It is the only page that allows scripts.
 const sharePolicyFor = (lang: Lang) =>
-	`default-src 'none'; script-src 'self' ${lang === DEFAULT_LANG ? `${DETECT_HASH} ` : ""}https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si; style-src 'unsafe-inline'; img-src 'self' https://devhunt.org https://flisk.si; base-uri 'none'; form-action 'none'`;
+	`default-src 'none'; script-src 'self' ${lang === DEFAULT_LANG ? `${DETECT_HASH} ` : ""}https://flisk.si https://flisk.sh; connect-src https://analytics.flisk.si https://flisk.si; style-src 'unsafe-inline' https://flisk.si; font-src https://flisk.si; img-src 'self' https://devhunt.org https://flisk.si; base-uri 'none'; form-action 'none'`;
 
 export function sharePage(
 	base: string,
