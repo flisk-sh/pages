@@ -52,7 +52,8 @@ jobs:
         run: |
           test -s _site/index.html && grep -q 'application/ld+json' _site/index.html
           grep -q Sitemap _site/robots.txt
-          grep -q '<urlset' _site/sitemap.xml
+          grep -q '<sitemapindex' _site/sitemap.xml
+          grep -q '<urlset' _site/sitemap-site.xml
           test -s _site/og.png && test -s _site/404.html
           test "$(cat _site/CNAME)" = pages.flisk.si
 
