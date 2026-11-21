@@ -20,6 +20,24 @@ Source: https://github.com/flisk-sh/pages/tree/main/workers/pages-mcp
 Privacy: nothing is stored or published by this server, no account, no key.
 `;
 
+// The one place the host is written for the MCP Server Card.
+const HOST = "https://pages.flisk.si";
+// Same name, title and version as initialize, and only the tools that tools/list returns.
+const SERVER_CARD = JSON.stringify(
+  {
+    $schema: "https://static.modelcontextprotocol.io/schemas/v1/server-card.schema.json",
+    name: "si.flisk/pages",
+    title: "Pages MCP",
+    description: "Check a web page before it goes online, and get the steps to put it online at a public link.",
+    version: "1.0.0",
+    websiteUrl: `${HOST}/`,
+    remotes: [{ type: "streamable-http", url: `${HOST}/mcp` }],
+  },
+  null,
+  2,
+);
+const CARD_PATHS = new Set(["/.well-known/mcp-server-card.json", "/.well-known/mcp/server-card.json"]);
+
 const STATIC = {
   "/favicon.ico": ["image/x-icon", bytesOf(FAVICON_ICO_BASE64)],
   "/apple-touch-icon.png": ["image/png", bytesOf(APPLE_TOUCH_PNG_BASE64)],
@@ -41,6 +59,11 @@ const app = {
         if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return json({ error: "too_large", hint: `Keep the request under ${MAX_BODY_BYTES} bytes.` }, 413);
       }
       return pagesMcpRoute(request, json);
+    }
+    if (CARD_PATHS.has(pathname) && (request.method === "GET" || request.method === "HEAD")) {
+      return new Response(request.method === "HEAD" ? null : SERVER_CARD, {
+        headers: { "content-type": "application/json; charset=utf-8", "cache-control": "public, max-age=3600", "access-control-allow-origin": "*" },
+      });
     }
     if (pathname === "/health") return json({ ok: true });
     const hit = STATIC[pathname];
