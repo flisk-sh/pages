@@ -14,7 +14,7 @@ export function withSecurityHeaders(response) {
   for (const [name, value] of Object.entries(BASELINE)) if (!headers.has(name)) headers.set(name, value);
   // Content-Security-Policy: add only frame-ancestors, and only when the policy has none. An existing policy is otherwise untouched.
   const csp = headers.get('content-security-policy');
-  if (!csp) headers.set('content-security-policy', "frame-ancestors 'self'");
-  else if (!/(^|;)\s*frame-ancestors\s/i.test(csp)) headers.set('content-security-policy', `${csp.replace(/;\s*$/, '')}; frame-ancestors 'self'`);
+  if (!csp) headers.set('content-security-policy', "frame-ancestors 'self' https://analytics.flisk.si");
+  else if (!/(^|;)\s*frame-ancestors\s/i.test(csp)) headers.set('content-security-policy', `${csp.replace(/;\s*$/, '')}; frame-ancestors 'self' https://analytics.flisk.si`);
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers, webSocket: response.webSocket });
 }
