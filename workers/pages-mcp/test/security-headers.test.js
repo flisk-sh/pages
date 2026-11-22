@@ -11,7 +11,7 @@ const EXPECTED = {
   "strict-transport-security": "max-age=31536000; includeSubDomains",
   "referrer-policy": "strict-origin-when-cross-origin",
   "permissions-policy": "camera=(), microphone=(), geolocation=()",
-  "content-security-policy": "frame-ancestors 'self'",
+  "content-security-policy": "frame-ancestors 'self' https://analytics.flisk.si",
 };
 
 const check = (res) => {
@@ -37,7 +37,7 @@ test("pages, health, 404 and MCP responses all carry the baseline headers", asyn
 test("existing headers are kept, not duplicated, and a CSP gains frame-ancestors", () => {
   const res = withSecurityHeaders(new Response("x", { headers: { "x-frame-options": "DENY", "content-security-policy": "default-src 'none'" } }));
   assert.equal(res.headers.get("x-frame-options"), "DENY");
-  assert.equal(res.headers.get("content-security-policy"), "default-src 'none'; frame-ancestors 'self'");
+  assert.equal(res.headers.get("content-security-policy"), "default-src 'none'; frame-ancestors 'self' https://analytics.flisk.si");
   const keep = withSecurityHeaders(new Response("x", { headers: { "content-security-policy": "frame-ancestors https://a.example" } }));
   assert.equal(keep.headers.get("content-security-policy"), "frame-ancestors https://a.example");
 });

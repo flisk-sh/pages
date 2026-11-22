@@ -21,14 +21,14 @@ describe("security headers on publish.flisk.si", () => {
 				if (k === "referrer-policy" && path.startsWith("/manage/")) expect(res.headers.get(k)).toBe("no-referrer");
 				else expect(res.headers.get(k)).toBe(v);
 			}
-			expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'self'");
+			expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'self' https://analytics.flisk.si");
 		}
 	});
 
 	it("the manage page keeps its CSP and gains only frame-ancestors", async () => {
 		const csp = (await call("/manage/abcdefghij")).headers.get("content-security-policy");
 		expect(csp).toStartWith("default-src 'none'; script-src 'unsafe-inline'");
-		expect(csp).toEndWith("; frame-ancestors 'self'");
+		expect(csp).toEndWith("; frame-ancestors 'self' https://analytics.flisk.si");
 		expect(csp.match(/frame-ancestors/g)).toHaveLength(1);
 	});
 
