@@ -27,7 +27,7 @@
 // PAGES_DRY_RUN=1, EVAL_PAGES_DRY_RUN=1) checks and prints what it would do, and sends nothing; with PAGES_LOGIN set
 // it does not ask GitHub who you are either.
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -304,7 +304,7 @@ async function remove(arg, oidc) {
 			die(`✗ ${e.message}`);
 		}
 	}
-	const saved = existsSync(arg) ? savedSpace(arg) : undefined;
+	const saved = savedSpace(arg);
 	if (saved) {
 		if (DRY) return console.log(`Dry run, nothing sent. Would take down ${saved.url}`);
 		try {
