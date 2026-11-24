@@ -6,6 +6,7 @@ import {
 	mkdtempSync,
 	readdirSync,
 	readFileSync,
+	renameSync,
 	statSync,
 	writeFileSync,
 } from "node:fs";
@@ -295,6 +296,24 @@ describe("pages publish, end to end", () => {
 		expect(r.code).toBe(1);
 		expect(r.out).toContain("gh auth login");
 		expect(seen.length).toBe(before);
+	});
+
+	it("removes an anonymous space after its source file has moved", async () => {
+		const dir = tmp();
+		const file = write(dir, "notes.md", "# Notes\n\nHello.");
+		expect((await cli("publish", file)).code).toBe(0);
+		renameSync(file, join(dir, "moved.md"));
+
+		const gone = await cli("remove", file);
+		expect(gone.code).toBe(0);
+		expect(seen.at(-1)).toMatchObject({
+			method: "DELETE",
+			path: "/v1/spaces/abcdefghjk",
+			auth: "Bearer tok",
+		});
+		expect(
+			JSON.parse(readFileSync(join(config, "pages", "anon.json"), "utf8")),
+		).toEqual({});
 	});
 
 	it("a dry run of a single HTML file names the space after the file", () => {
