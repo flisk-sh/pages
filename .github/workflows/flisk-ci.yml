@@ -26,4 +26,4 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    uses: flisk-sh/.github/.github/workflows/codeql.yml@b5eeea945364038cd2143e9676b77fc9af293dfa # v1.4.0
+    uses: flisk-sh/.github/.github/workflows/codeql.yml@f4a7cf54a888162729b0710bfbc54e92b0128c80 # v1.5.0
