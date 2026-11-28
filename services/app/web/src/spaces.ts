@@ -118,15 +118,15 @@ function describe(dir: string, kind: Space["kind"], slug: string) {
 		return { title, description: body.split(/\n\s*\n/)[0] ?? "" };
 	}
 	const html = readFileSync(join(dir, "index.html"), "utf8");
-	// A bundled report can carry a <title> inside a script or comment; only the document's own counts.
+	// A bundled report can carry metadata inside a script or comment; only the document's own counts.
 	const own = html
 		.replace(/<script\b[\s\S]*?<\/script>/gi, "")
 		.replace(/<!--[\s\S]*?-->/g, "");
 	const title = decode(
 		own.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() || slug,
 	);
-	const meta = tags(html, "meta").find((m) => m.name === "description");
-	return { title, description: decode(meta?.content ?? "") };
+	const meta = tags(own, "meta").find((m) => m.name === "description");
+	return { title, description: meta?.content ?? "" };
 }
 
 /**

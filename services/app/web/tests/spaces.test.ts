@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createApp } from "../src/app";
 import { SHOWCASE_MAX, showcase } from "../src/pages";
@@ -47,6 +54,36 @@ describe("readSpaces", () => {
 			"What we learned shipping Pages in a week.",
 		);
 	});
+
+	it.each([
+		[
+			'<!-- <meta name="description" content="Old description"> -->',
+			"Current description",
+			"Current description",
+		],
+		[
+			`<script>const example = '<meta name="description" content="Example">';</script>`,
+			"Actual description",
+			"Actual description",
+		],
+		["", "A literal &amp;lt; marker", "A literal &lt; marker"],
+	])(
+		"reads only the real description and decodes it once (%#)",
+		(prefix, content, expected) => {
+			const root = mkdtempSync(join(tmpdir(), "pages-description-"));
+			try {
+				const dir = join(root, "sam", "notes");
+				mkdirSync(dir, { recursive: true });
+				writeFileSync(
+					join(dir, "index.html"),
+					`<!doctype html><html><head><title>Notes</title>${prefix}<meta name="description" content="${content}"></head><body>Notes</body></html>`,
+				);
+				expect(readSpaces(root)[0]?.description).toBe(expected);
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
+		},
+	);
 
 	it("leaves out a space that fails the check, and says why", () => {
 		expect(spaces.some((s) => s.handle === "eve")).toBe(false);
